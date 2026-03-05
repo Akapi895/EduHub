@@ -12,6 +12,8 @@ class UserBase(BaseModel):
 class UserPublic(UserBase):
     id: str
     avatar_url: str | None = None
+    phone: str | None = None
+    bio: str | None = None
     is_active: bool
     created_at: datetime
 
@@ -21,3 +23,5 @@ class UserPublic(UserBase):
 class UserUpdate(BaseModel):
     full_name: str | None = None
     avatar_url: str | None = None
+    phone: str | None = None
+    bio: str | None = None

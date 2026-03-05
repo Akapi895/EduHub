@@ -18,6 +18,10 @@ export const classService = {
   getMaterials: (classId: string) => api.get(`/classes/${classId}/materials`),
   addMaterial: (classId: string, data: { material_id: string; chapter_id: string }) =>
     api.post(`/classes/${classId}/materials`, data),
+  removeMaterial: (classId: string, classMaterialId: string) =>
+    api.delete(`/classes/${classId}/materials/${classMaterialId}`),
+  deleteChapter: (classId: string, chapterId: string) =>
+    api.delete(`/classes/${classId}/chapters/${chapterId}`),
   getExams: (classId: string) => api.get(`/classes/${classId}/exams`),
   createExam: (classId: string, data: Record<string, unknown>) =>
     api.post(`/classes/${classId}/exams`, data),

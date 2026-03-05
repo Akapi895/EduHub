@@ -43,11 +43,13 @@ class QuestionCreate(BaseModel):
 
 
 class QuestionUpdate(BaseModel):
+    type: str | None = None
     content: str | None = None
     instruction: str | None = None
     points: int | None = None
     required: bool | None = None
     order_index: int | None = None
+    options: list[OptionCreate] | None = None
 
 
 class QuestionOut(BaseModel):

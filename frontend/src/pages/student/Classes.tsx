@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, LogIn, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import ClassCard from '@/components/classes/ClassCard';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
@@ -9,6 +10,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import type { Class } from '@/types';
 
 export default function StudentClasses() {
+  const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -85,7 +87,7 @@ export default function StudentClasses() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((cls) => (
-            <ClassCard key={cls.id} classData={cls} />
+            <ClassCard key={cls.id} classData={cls} onClick={() => navigate(`/student/classes/${cls.id}`)} />
           ))}
         </div>
       )}

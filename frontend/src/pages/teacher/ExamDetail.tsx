@@ -95,17 +95,19 @@ export default function TeacherExamDetail() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save each question that was modified
       for (const q of questions) {
         await examService.updateQuestion(q.id, {
+          type: q.type,
           content: q.content,
           instruction: q.instruction,
           points: q.points,
           required: q.required,
           order_index: q.order_index,
+          options: q.options.map((o) => ({ content: o.content, is_correct: o.is_correct })),
         });
       }
       alert('Đã lưu thành công!');
+      fetchExamData();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lưu thất bại');
     } finally {

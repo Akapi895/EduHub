@@ -10,14 +10,19 @@ from app.schemas.user import UserPublic
 from app.crud import class_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
-from app.models.class_model import Chapter, ClassStudent
+from app.models.class_model import Chapter, ClassStudent, ClassMaterial
+from app.models.exam import Exam
 from app.utils.responses import ok
 
 
 def _class_with_count(db: Session, class_: object) -> dict:
-    """Serialize a class and add student_count."""
+    """Serialize a class and add student_count, material_count, exam_count, teacher_name."""
     data = ClassOut.model_validate(class_).model_dump()
     data["student_count"] = db.query(ClassStudent).filter(ClassStudent.class_id == class_.id).count()
+    data["material_count"] = db.query(ClassMaterial).filter(ClassMaterial.class_id == class_.id).count()
+    data["exam_count"] = db.query(Exam).filter(Exam.class_id == class_.id).count()
+    if class_.teacher:
+        data["teacher_name"] = class_.teacher.full_name
     return data
 
 
@@ -127,6 +132,33 @@ def remove_student(
 
 # Chapters -----------
 
+@router.get("/{class_id}/chapters")
+def list_chapters(
+    class_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    class_ = class_crud.get_class(db, class_id)
+    if not class_:
+        raise HTTPException(status_code=404, detail="Class not found")
+    chapters = class_crud.get_chapters(db, class_id)
+    result = []
+    for ch in chapters:
+        ch_data = ChapterOut.model_validate(ch).model_dump()
+        # Include materials for this chapter
+        from app.models.material import Material as MaterialModel
+        mats = []
+        for cm in ch.class_materials:
+            mat = db.query(MaterialModel).filter(MaterialModel.id == cm.material_id).first()
+            if mat:
+                from app.schemas.material import MaterialOut
+                mats.append(MaterialOut.model_validate(mat).model_dump())
+        ch_data["materials"] = mats
+        ch_data["class_material_ids"] = {cm.material_id: cm.id for cm in ch.class_materials}
+        result.append(ch_data)
+    return ok(data=result)
+
+
 @router.post("/{class_id}/chapters", status_code=201)
 def create_chapter(
     class_id: str,
@@ -153,8 +185,42 @@ def add_material(
     class_ = class_crud.get_class(db, class_id)
     if not class_ or class_.teacher_id != teacher.id:
         raise HTTPException(status_code=404, detail="Class not found")
+    if data.chapter_id and class_crud.is_material_in_chapter(db, chapter_id=data.chapter_id, material_id=data.material_id):
+        raise HTTPException(status_code=400, detail="Tai lieu da ton tai trong chuong nay")
     cm = class_crud.add_material_to_class(db, class_id=class_id, material_id=data.material_id, chapter_id=data.chapter_id)
     return ok(data={"id": cm.id, "class_id": cm.class_id, "material_id": cm.material_id, "chapter_id": cm.chapter_id}, status_code=201)
+
+
+@router.delete("/{class_id}/materials/{class_material_id}")
+def remove_material(
+    class_id: str,
+    class_material_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    class_ = class_crud.get_class(db, class_id)
+    if not class_ or class_.teacher_id != teacher.id:
+        raise HTTPException(status_code=404, detail="Class not found")
+    if not class_crud.remove_material_from_class(db, class_material_id=class_material_id):
+        raise HTTPException(status_code=404, detail="Material not found in class")
+    return ok(message="Da go tai lieu khoi lop")
+
+
+@router.delete("/{class_id}/chapters/{chapter_id}")
+def delete_chapter(
+    class_id: str,
+    chapter_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    class_ = class_crud.get_class(db, class_id)
+    if not class_ or class_.teacher_id != teacher.id:
+        raise HTTPException(status_code=404, detail="Class not found")
+    chapter = db.query(Chapter).filter(Chapter.id == chapter_id, Chapter.class_id == class_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    class_crud.delete_chapter(db, chapter=chapter)
+    return ok(message="Da xoa chuong")
 
 
 @router.get("/{class_id}/materials")

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import { ImagePlus, X } from 'lucide-react';
 import Modal from '@/components/common/Modal';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { SUBJECTS, GRADES } from '@/utils/constants';
+import api from '@/services/api';
 
 interface UploadMaterialModalProps {
   isOpen: boolean;
@@ -13,6 +15,8 @@ interface UploadMaterialModalProps {
     material_type: string;
     subject: string;
     grade: string;
+    thumbnail_url?: string;
+    file_url?: string;
   }) => void;
 }
 
@@ -26,13 +30,70 @@ export default function UploadMaterialModal({
   const [materialType, setMaterialType] = useState('document');
   const [subject, setSubject] = useState<string>(SUBJECTS[0]);
   const [grade, setGrade] = useState<string>(GRADES[0]);
+  const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
+  const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setThumbnailFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setThumbnailPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const removeThumbnail = () => {
+    setThumbnailFile(null);
+    setThumbnailPreview(null);
+    if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+  };
+
+  const uploadFile = async (file: File, subDir: string): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await api.post(`/upload?sub_dir=${subDir}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data.data.url;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit({ title, description, material_type: materialType, subject, grade });
-    setTitle('');
-    setDescription('');
-    onClose();
+    setUploading(true);
+    try {
+      let thumbnail_url: string | undefined;
+      let file_url: string | undefined;
+
+      if (thumbnailFile) {
+        thumbnail_url = await uploadFile(thumbnailFile, 'thumbnails');
+      }
+      if (docFile) {
+        file_url = await uploadFile(docFile, 'materials');
+      }
+
+      await onSubmit({
+        title,
+        description,
+        material_type: materialType,
+        subject,
+        grade,
+        thumbnail_url,
+        file_url,
+      });
+
+      // Reset form
+      setTitle('');
+      setDescription('');
+      removeThumbnail();
+      setDocFile(null);
+    } catch {
+      // error handled by parent
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -99,17 +160,58 @@ export default function UploadMaterialModal({
           </select>
         </div>
 
+        {/* Thumbnail */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Chọn file</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh thumbnail</label>
+          {thumbnailPreview ? (
+            <div className="relative w-full h-40 rounded-xl overflow-hidden border border-border">
+              <img
+                src={thumbnailPreview}
+                alt="Thumbnail preview"
+                className="w-full h-full object-cover"
+              />
+              <button
+                type="button"
+                onClick={removeThumbnail}
+                className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white"
+              >
+                <X className="w-4 h-4 text-gray-600" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => thumbnailInputRef.current?.click()}
+              className="w-full h-32 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-primary hover:text-primary transition-colors"
+            >
+              <ImagePlus className="w-8 h-8" />
+              <span className="text-sm">Chọn ảnh thumbnail</span>
+            </button>
+          )}
+          <input
+            ref={thumbnailInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleThumbnailChange}
+            className="hidden"
+          />
+        </div>
+
+        {/* Document file */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Chọn file tài liệu</label>
           <input
             type="file"
+            onChange={(e) => setDocFile(e.target.files?.[0] || null)}
             className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-primary-lighter file:text-primary hover:file:bg-primary-light"
           />
         </div>
 
         <div className="flex justify-end gap-3 pt-2">
           <Button variant="secondary" type="button" onClick={onClose}>Hủy</Button>
-          <Button type="submit">Upload</Button>
+          <Button type="submit" disabled={uploading || !title}>
+            {uploading ? 'Đang upload...' : 'Upload'}
+          </Button>
         </div>
       </form>
     </Modal>

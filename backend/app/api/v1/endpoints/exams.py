@@ -21,7 +21,12 @@ def list_exams(
     current_user: User = Depends(get_current_user),
 ):
     exams = exam_crud.get_exams_for_class(db, class_id)
-    return ok(data=[ExamOut.model_validate(e).model_dump() for e in exams])
+    result = []
+    for e in exams:
+        d = ExamOut.model_validate(e).model_dump()
+        d["question_count"] = len(e.questions)
+        result.append(d)
+    return ok(data=result)
 
 
 @router.post("/classes/{class_id}/exams", status_code=201)
@@ -47,7 +52,9 @@ def get_exam(
     exam = exam_crud.get_exam(db, exam_id)
     if not exam:
         raise HTTPException(status_code=404, detail="Exam not found")
-    return ok(data=ExamOut.model_validate(exam).model_dump())
+    data = ExamOut.model_validate(exam).model_dump()
+    data["question_count"] = len(exam.questions)
+    return ok(data=data)
 
 
 @router.put("/exams/{exam_id}")

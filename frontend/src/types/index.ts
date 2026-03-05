@@ -23,6 +23,8 @@ export interface Class {
   subject?: string;
   grade?: string;
   student_count?: number;
+  material_count?: number;
+  exam_count?: number;
   created_at: string;
 }
 
@@ -42,6 +44,7 @@ export interface Chapter {
   name: string;
   order_index: number;
   materials: Material[];
+  class_material_ids?: Record<string, string>;
 }
 
 // ====== Material ======

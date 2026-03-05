@@ -29,14 +29,16 @@ export default function TeacherClassDetail() {
     if (!id) return;
     setLoading(true);
     try {
-      const [classRes, studentsRes, examsRes] = await Promise.all([
+      const [classRes, studentsRes, examsRes, chaptersRes] = await Promise.all([
         classService.getClass(id),
         classService.getStudents(id),
         classService.getExams(id),
+        classService.getChapters(id),
       ]);
       setClassItem(classRes.data.data);
       setStudents(studentsRes.data.data || []);
       setExams(examsRes.data.data || []);
+      setChapters(chaptersRes.data.data || []);
     } catch {
       setClassItem(null);
     } finally {
@@ -144,7 +146,19 @@ export default function TeacherClassDetail() {
               </div>
               {chapters.length > 0 ? (
                 chapters.map((chapter) => (
-                  <ChapterSection key={chapter.id} chapter={chapter} />
+                  <ChapterSection
+                    key={chapter.id}
+                    chapter={chapter}
+                    classId={id!}
+                    onMaterialAdded={async () => {
+                      const res = await classService.getChapters(id!);
+                      setChapters(res.data.data || []);
+                    }}
+                    onChapterDeleted={async () => {
+                      const res = await classService.getChapters(id!);
+                      setChapters(res.data.data || []);
+                    }}
+                  />
                 ))
               ) : (
                 <p className="text-center text-gray-400 py-8">Chưa có chương nào</p>
@@ -155,7 +169,7 @@ export default function TeacherClassDetail() {
           {activeTab === 'exams' && (
             <div className="space-y-4">
               <div className="flex justify-end">
-                <Button size="sm">
+                <Button size="sm" onClick={() => navigate(`/teacher/classes/${id}/exams/create`)}>
                   <Plus className="w-4 h-4 mr-1" /> Tạo bài kiểm tra
                 </Button>
               </div>
@@ -213,7 +227,9 @@ export default function TeacherClassDetail() {
                 await classService.createChapter(id!, { name: newChapter });
                 setShowAddChapter(false);
                 setNewChapter('');
-                fetchClassData();
+                // Refetch just chapters for instant display
+                const res = await classService.getChapters(id!);
+                setChapters(res.data.data || []);
               } catch (err: any) {
                 alert(err.response?.data?.message || 'Thêm chương thất bại');
               }

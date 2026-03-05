@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
+import { useState } from 'react';
 import {
   Home,
   BookOpen,
@@ -8,19 +9,38 @@ import {
   ClipboardList,
   Bot,
   GraduationCap,
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  FolderOpen,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { cn } from '@/utils/helpers';
 
-const teacherMenu = [
+interface MenuItem {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  path: string;
+  children?: { label: string; icon: React.ComponentType<{ className?: string }>; path: string }[];
+}
+
+const teacherMenu: MenuItem[] = [
   { label: 'Trang chủ', icon: Home, path: '/teacher/dashboard' },
-  { label: 'Thư viện', icon: BookOpen, path: '/teacher/library' },
+  {
+    label: 'Thư viện',
+    icon: BookOpen,
+    path: '/teacher/library',
+    children: [
+      { label: 'Tài liệu hệ thống', icon: Globe, path: '/teacher/library/system' },
+      { label: 'Tài liệu cá nhân', icon: FolderOpen, path: '/teacher/library/personal' },
+    ],
+  },
   { label: 'Lớp học', icon: GraduationCap, path: '/teacher/classes' },
   { label: 'Hộp thư', icon: Mail, path: '/teacher/inbox' },
   { label: 'Cài đặt', icon: Settings, path: '/teacher/settings' },
 ];
 
-const studentMenu = [
+const studentMenu: MenuItem[] = [
   { label: 'Trang chủ', icon: Home, path: '/student/dashboard' },
   { label: 'Lớp học', icon: GraduationCap, path: '/student/classes' },
   { label: 'Bài thi', icon: ClipboardList, path: '/student/exams' },
@@ -36,6 +56,23 @@ interface SidebarProps {
 export default function Sidebar({ collapsed = false }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const menu = user?.role === 'teacher' ? teacherMenu : studentMenu;
+  const location = useLocation();
+  const [expandedItems, setExpandedItems] = useState<string[]>(() => {
+    // Auto-expand if currently on a child route
+    const expanded: string[] = [];
+    for (const item of (user?.role === 'teacher' ? teacherMenu : studentMenu)) {
+      if (item.children?.some((c) => location.pathname.startsWith(c.path))) {
+        expanded.push(item.path);
+      }
+    }
+    return expanded;
+  });
+
+  const toggleExpand = (path: string) => {
+    setExpandedItems((prev) =>
+      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
+    );
+  };
 
   return (
     <aside
@@ -56,23 +93,73 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {menu.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
-                isActive
-                  ? 'bg-primary text-white shadow-md'
-                  : 'text-gray-600 hover:bg-primary-lighter hover:text-primary'
-              )
-            }
-          >
-            <item.icon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>{item.label}</span>}
-          </NavLink>
-        ))}
+        {menu.map((item) => {
+          if (item.children && !collapsed) {
+            const isExpanded = expandedItems.includes(item.path);
+            const isChildActive = item.children.some((c) => location.pathname.startsWith(c.path));
+
+            return (
+              <div key={item.path}>
+                <button
+                  onClick={() => toggleExpand(item.path)}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
+                    isChildActive
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-gray-600 hover:bg-primary-lighter hover:text-primary'
+                  )}
+                >
+                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {isExpanded ? (
+                    <ChevronDown className="w-4 h-4" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4" />
+                  )}
+                </button>
+                {isExpanded && (
+                  <div className="ml-4 mt-1 space-y-0.5">
+                    {item.children.map((child) => (
+                      <NavLink
+                        key={child.path}
+                        to={child.path}
+                        className={({ isActive }) =>
+                          cn(
+                            'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-200',
+                            isActive
+                              ? 'bg-primary text-white shadow-sm'
+                              : 'text-gray-500 hover:bg-primary-lighter hover:text-primary'
+                          )
+                        }
+                      >
+                        <child.icon className="w-4 h-4 flex-shrink-0" />
+                        <span>{child.label}</span>
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
+                  isActive
+                    ? 'bg-primary text-white shadow-md'
+                    : 'text-gray-600 hover:bg-primary-lighter hover:text-primary'
+                )
+              }
+            >
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              {!collapsed && <span>{item.label}</span>}
+            </NavLink>
+          );
+        })}
       </nav>
 
       {/* User info at bottom */}

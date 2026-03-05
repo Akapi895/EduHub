@@ -11,12 +11,15 @@ import TeacherLibrary from '@/pages/teacher/Library';
 import TeacherClasses from '@/pages/teacher/Classes';
 import TeacherClassDetail from '@/pages/teacher/ClassDetail';
 import TeacherExamDetail from '@/pages/teacher/ExamDetail';
+import CreateExam from '@/pages/teacher/CreateExam';
 import TeacherInbox from '@/pages/teacher/Inbox';
 import TeacherSettings from '@/pages/teacher/Settings';
+import MaterialDetail from '@/pages/teacher/MaterialDetail';
 
 // Student pages
 import StudentDashboard from '@/pages/student/Dashboard';
 import StudentClasses from '@/pages/student/Classes';
+import StudentClassDetail from '@/pages/student/ClassDetail';
 import StudentExam from '@/pages/student/Exam';
 import StudentInbox from '@/pages/student/Inbox';
 import StudentChatbot from '@/pages/student/Chatbot';
@@ -33,9 +36,13 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="dashboard" replace /> },
       { path: 'dashboard', element: <TeacherDashboard /> },
-      { path: 'library', element: <TeacherLibrary /> },
+      { path: 'library', element: <Navigate to="/teacher/library/personal" replace /> },
+      { path: 'library/system', element: <TeacherLibrary mode="system" /> },
+      { path: 'library/personal', element: <TeacherLibrary mode="personal" /> },
+      { path: 'library/:id', element: <MaterialDetail /> },
       { path: 'classes', element: <TeacherClasses /> },
       { path: 'classes/:id', element: <TeacherClassDetail /> },
+      { path: 'classes/:classId/exams/create', element: <CreateExam /> },
       { path: 'exams/:id', element: <TeacherExamDetail /> },
       { path: 'inbox', element: <TeacherInbox /> },
       { path: 'settings', element: <TeacherSettings /> },
@@ -48,8 +55,9 @@ export const routes: RouteObject[] = [
       { index: true, element: <Navigate to="dashboard" replace /> },
       { path: 'dashboard', element: <StudentDashboard /> },
       { path: 'classes', element: <StudentClasses /> },
+      { path: 'classes/:id', element: <StudentClassDetail /> },
       { path: 'exam/:id', element: <StudentExam /> },
-      { path: 'exams', element: <StudentClasses /> },
+      { path: 'exams', element: <Navigate to="/student/classes" replace /> },
       { path: 'inbox', element: <StudentInbox /> },
       { path: 'chatbot', element: <StudentChatbot /> },
       { path: 'settings', element: <StudentSettings /> },

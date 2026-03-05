@@ -78,8 +78,17 @@ def create_question(db: Session, *, exam_id: str, data: QuestionCreate) -> Quest
 
 
 def update_question(db: Session, *, question: Question, data: QuestionUpdate) -> Question:
-    for field, value in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    options_data = update_data.pop("options", None)
+    for field, value in update_data.items():
         setattr(question, field, value)
+    if options_data is not None:
+        # Replace all options
+        for opt in question.options:
+            db.delete(opt)
+        db.flush()
+        for opt in options_data:
+            db.add(QuestionOption(question_id=question.id, **opt))
     db.commit()
     db.refresh(question)
     return question

@@ -1,18 +1,21 @@
-import { useState } from 'react';
-import { Camera, Save } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Camera, Save, Loader2 } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { useAuthStore } from '@/store/auth.store';
 import { userService } from '@/services/user.service';
+import api from '@/services/api';
 
 export default function StudentSettings() {
   const { user, updateUser } = useAuthStore();
   const [saving, setSaving] = useState(false);
   const [changingPw, setChangingPw] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const [profile, setProfile] = useState({
     full_name: user?.full_name || '',
     email: user?.email || '',
-    phone: '',
+    phone: user?.phone || '',
   });
   const [password, setPassword] = useState({
     current: '',
@@ -20,10 +23,33 @@ export default function StudentSettings() {
     confirm: '',
   });
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const uploadRes = await api.post('/upload?sub_dir=avatars', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const avatar_url = uploadRes.data.data.url;
+      const res = await userService.updateProfile({ avatar_url });
+      updateUser(res.data.data);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Upload avatar thất bại');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const res = await userService.updateProfile({ full_name: profile.full_name });
+      const res = await userService.updateProfile({
+        full_name: profile.full_name,
+        phone: profile.phone || undefined,
+      });
       updateUser(res.data.data);
       alert('Cập nhật thành công!');
     } catch (err: any) {
@@ -65,14 +91,29 @@ export default function StudentSettings() {
         <h2 className="text-lg font-semibold mb-4">Ảnh đại diện</h2>
         <div className="flex items-center gap-6">
           <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="text-3xl font-bold text-primary">
-                {user?.full_name?.charAt(0) || 'U'}
-              </span>
+            <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+              {user?.avatar_url ? (
+                <img src={user.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+              ) : (
+                <span className="text-3xl font-bold text-primary">
+                  {user?.full_name?.charAt(0) || 'U'}
+                </span>
+              )}
             </div>
-            <button className="absolute bottom-0 right-0 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-md hover:bg-primary-hover">
-              <Camera className="w-4 h-4" />
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute bottom-0 right-0 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-md hover:bg-primary-hover"
+            >
+              {uploadingAvatar ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
             </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
           </div>
           <div>
             <p className="font-medium">{user?.full_name || 'Học sinh'}</p>
@@ -94,7 +135,7 @@ export default function StudentSettings() {
             label="Email"
             type="email"
             value={profile.email}
-            onChange={(e) => setProfile({ ...profile, email: e.target.value })}
+            disabled
           />
           <Input
             label="Số điện thoại"

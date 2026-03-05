@@ -114,5 +114,21 @@ def add_material_to_class(db: Session, *, class_id: str, material_id: str, chapt
     return cm
 
 
+def is_material_in_chapter(db: Session, *, chapter_id: str, material_id: str) -> bool:
+    return db.query(ClassMaterial).filter(
+        ClassMaterial.chapter_id == chapter_id,
+        ClassMaterial.material_id == material_id,
+    ).first() is not None
+
+
+def remove_material_from_class(db: Session, *, class_material_id: str) -> bool:
+    cm = db.query(ClassMaterial).filter(ClassMaterial.id == class_material_id).first()
+    if not cm:
+        return False
+    db.delete(cm)
+    db.commit()
+    return True
+
+
 def get_class_materials(db: Session, class_id: str) -> list[ClassMaterial]:
     return db.query(ClassMaterial).filter(ClassMaterial.class_id == class_id).all()

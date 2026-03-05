@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Search, Upload, Filter, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import MaterialCard from '@/components/library/MaterialCard';
 import UploadMaterialModal from '@/components/library/UploadMaterialModal';
 import Button from '@/components/common/Button';
@@ -17,7 +18,11 @@ const TYPES = [
   { value: 'document', label: 'Tài liệu' },
 ];
 
-export default function TeacherLibrary() {
+interface Props {
+  mode?: 'system' | 'personal';
+}
+
+export default function TeacherLibrary({ mode = 'personal' }: Props) {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -25,6 +30,7 @@ export default function TeacherLibrary() {
   const [subjectFilter, setSubjectFilter] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const debouncedSearch = useDebounce(search);
+  const navigate = useNavigate();
 
   const fetchMaterials = useCallback(async () => {
     setLoading(true);
@@ -33,6 +39,8 @@ export default function TeacherLibrary() {
       if (debouncedSearch) params.search = debouncedSearch;
       if (typeFilter) params.type = typeFilter;
       if (subjectFilter) params.subject = subjectFilter;
+      if (mode === 'system') params.is_system = 'true';
+      else params.is_system = 'false';
       const res = await libraryService.getMaterials(params);
       setMaterials(res.data.data || []);
     } catch {
@@ -40,22 +48,30 @@ export default function TeacherLibrary() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, typeFilter, subjectFilter]);
+  }, [debouncedSearch, typeFilter, subjectFilter, mode]);
 
   useEffect(() => {
     fetchMaterials();
   }, [fetchMaterials]);
 
+  const isSystem = mode === 'system';
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Thư viện</h1>
-          <p className="text-gray-500 mt-1">Quản lý tài liệu giảng dạy</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            {isSystem ? 'Tài liệu hệ thống' : 'Tài liệu cá nhân'}
+          </h1>
+          <p className="text-gray-500 mt-1">
+            {isSystem ? 'Tài liệu chung dùng cho tất cả' : 'Quản lý tài liệu giảng dạy của bạn'}
+          </p>
         </div>
-        <Button onClick={() => setShowUpload(true)}>
-          <Upload className="w-4 h-4 mr-2" /> Upload tài liệu
-        </Button>
+        {!isSystem && (
+          <Button onClick={() => setShowUpload(true)}>
+            <Upload className="w-4 h-4 mr-2" /> Upload tài liệu
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -106,7 +122,11 @@ export default function TeacherLibrary() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {materials.map((material) => (
-            <MaterialCard key={material.id} material={material} />
+            <MaterialCard
+              key={material.id}
+              material={material}
+              onClick={() => navigate(`/teacher/library/${material.id}`)}
+            />
           ))}
         </div>
       )}
@@ -118,19 +138,21 @@ export default function TeacherLibrary() {
         </div>
       )}
 
-      <UploadMaterialModal
-        isOpen={showUpload}
-        onClose={() => setShowUpload(false)}
-        onSubmit={async (data) => {
-          try {
-            await libraryService.createMaterial(data);
-            setShowUpload(false);
-            fetchMaterials();
-          } catch (err: any) {
-            alert(err.response?.data?.message || 'Thêm tài liệu thất bại');
-          }
-        }}
-      />
+      {!isSystem && (
+        <UploadMaterialModal
+          isOpen={showUpload}
+          onClose={() => setShowUpload(false)}
+          onSubmit={async (data) => {
+            try {
+              await libraryService.createMaterial(data);
+              setShowUpload(false);
+              fetchMaterials();
+            } catch (err: any) {
+              alert(err.response?.data?.message || 'Thêm tài liệu thất bại');
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
