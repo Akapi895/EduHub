@@ -1,19 +1,55 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Send, AlertTriangle } from 'lucide-react';
+import { Send, AlertTriangle, Loader2 } from 'lucide-react';
 import ExamTimer from '@/components/exam/ExamTimer';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
-import { mockExams, mockQuestions } from '@/services/mockData';
+import { examService } from '@/services/exam.service';
+import type { Exam, Question, Answer } from '@/types';
 
 export default function StudentExam() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const exam = mockExams.find((e) => e.id === id);
+  const [exam, setExam] = useState<Exam | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [currentIdx, setCurrentIdx] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [score, setScore] = useState<number | null>(null);
+
+  useEffect(() => {
+    const startExam = async () => {
+      if (!id) return;
+      try {
+        // Start/resume exam attempt
+        await examService.startExam(id);
+        // Fetch exam details and questions
+        const [examRes, questionsRes] = await Promise.all([
+          examService.getExam(id),
+          examService.getQuestions(id),
+        ]);
+        setExam(examRes.data.data);
+        setQuestions(questionsRes.data.data || []);
+      } catch (err: any) {
+        alert(err.response?.data?.message || 'Không thể bắt đầu bài thi');
+        navigate('/student/classes');
+      } finally {
+        setLoading(false);
+      }
+    };
+    startExam();
+  }, [id, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!exam) {
     return (
@@ -24,7 +60,6 @@ export default function StudentExam() {
     );
   }
 
-  const questions = mockQuestions;
   const currentQ = questions[currentIdx];
 
   const handleAnswer = (qId: string, value: string) => {
@@ -37,11 +72,30 @@ export default function StudentExam() {
     }
   };
 
-  const handleSubmit = useCallback(() => {
-    console.log('Submit answers:', answers);
-    setSubmitted(true);
-    setShowConfirm(false);
-  }, [answers]);
+  const handleSubmit = useCallback(async () => {
+    if (!id) return;
+    setSubmitting(true);
+    try {
+      const formattedAnswers: Answer[] = questions.map((q) => {
+        const ans = answers[q.id];
+        if (q.type === 'single_choice') {
+          return { question_id: q.id, selected_option_ids: ans ? [ans as string] : [] };
+        } else if (q.type === 'multi_choice') {
+          return { question_id: q.id, selected_option_ids: (ans as string[]) || [] };
+        } else {
+          return { question_id: q.id, text_answer: (ans as string) || '' };
+        }
+      });
+      const res = await examService.submitExam(id, formattedAnswers);
+      setScore(res.data.data?.total_score ?? null);
+      setSubmitted(true);
+      setShowConfirm(false);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Nộp bài thất bại');
+    } finally {
+      setSubmitting(false);
+    }
+  }, [id, answers, questions]);
 
   const answeredCount = Object.keys(answers).length;
 
@@ -53,6 +107,7 @@ export default function StudentExam() {
         </div>
         <h1 className="text-2xl font-bold text-gray-800 mb-2">Đã nộp bài!</h1>
         <p className="text-gray-500 mb-6">Bài làm của bạn đã được gửi thành công</p>
+        {score !== null && <p className="text-3xl font-bold text-primary mb-2">{score} điểm</p>}
         <p className="text-sm text-gray-400 mb-6">Đã trả lời {answeredCount}/{questions.length} câu</p>
         <Button onClick={() => navigate('/student/classes')}>Quay lại lớp học</Button>
       </div>
@@ -187,7 +242,7 @@ export default function StudentExam() {
           <p className="text-sm text-gray-600">Bạn có chắc muốn nộp bài? Sau khi nộp sẽ không thể sửa được.</p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setShowConfirm(false)}>Tiếp tục làm</Button>
-            <Button onClick={handleSubmit}>Nộp bài</Button>
+            <Button onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang nộp...' : 'Nộp bài'}</Button>
           </div>
         </div>
       </Modal>

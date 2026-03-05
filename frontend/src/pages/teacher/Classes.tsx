@@ -1,34 +1,64 @@
-import { useState, useMemo } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Search, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ClassCard from '@/components/classes/ClassCard';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
-import { mockClasses } from '@/services/mockData';
+import { classService } from '@/services/class.service';
 import { useDebounce } from '@/hooks/useDebounce';
 import { SUBJECTS, GRADES } from '@/utils/constants';
+import type { Class } from '@/types';
 
 export default function TeacherClasses() {
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: '', subject: '', grade: '', description: '' });
   const debouncedSearch = useDebounce(search);
   const navigate = useNavigate();
 
-  const filtered = useMemo(() => {
-    if (!debouncedSearch) return mockClasses;
-    return mockClasses.filter(
-      (c) =>
-        c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        (c.description || '').toLowerCase().includes(debouncedSearch.toLowerCase()),
-    );
-  }, [debouncedSearch]);
+  const fetchClasses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await classService.getClasses();
+      setClasses(res.data.data || []);
+    } catch {
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const handleCreate = () => {
-    console.log('Create class:', form);
-    setShowCreate(false);
-    setForm({ name: '', subject: '', grade: '', description: '' });
+  useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  const filtered = debouncedSearch
+    ? classes.filter(
+        (c) =>
+          c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          (c.description || '').toLowerCase().includes(debouncedSearch.toLowerCase()),
+      )
+    : classes;
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      await classService.createClass({
+        name: form.name,
+        description: form.description,
+      });
+      setShowCreate(false);
+      setForm({ name: '', subject: '', grade: '', description: '' });
+      fetchClasses();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Tạo lớp thất bại');
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -54,11 +84,17 @@ export default function TeacherClasses() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((cls) => (
-          <ClassCard key={cls.id} classData={cls} onClick={() => navigate(`/teacher/classes/${cls.id}`)} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filtered.map((cls) => (
+            <ClassCard key={cls.id} classData={cls} onClick={() => navigate(`/teacher/classes/${cls.id}`)} />
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 && (
         <div className="text-center py-12 text-gray-400">
@@ -114,7 +150,9 @@ export default function TeacherClasses() {
           </div>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setShowCreate(false)}>Hủy</Button>
-            <Button onClick={handleCreate} disabled={!form.name || !form.subject}>Tạo lớp</Button>
+            <Button onClick={handleCreate} disabled={!form.name || creating}>
+              {creating ? 'Đang tạo...' : 'Tạo lớp'}
+            </Button>
           </div>
         </div>
       </Modal>

@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import { authService } from '@/services/auth.service';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const login = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -19,16 +21,18 @@ export default function Login() {
       return;
     }
 
-    // Mock login
-    const isTeacher = email.includes('teacher') || email.includes('gv');
-    const mockUser = {
-      id: '1',
-      full_name: isTeacher ? 'Nguyễn Văn A' : 'Trần Văn B',
-      email,
-      role: (isTeacher ? 'teacher' : 'student') as 'teacher' | 'student',
-    };
-    login(mockUser, 'mock-jwt-token');
-    navigate(isTeacher ? '/teacher/dashboard' : '/student/dashboard');
+    setLoading(true);
+    try {
+      const res = await authService.login(email, password);
+      const { access_token, user } = res.data.data;
+      login(user, access_token);
+      navigate(user.role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Đăng nhập thất bại. Vui lòng thử lại.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -71,8 +75,8 @@ export default function Login() {
             />
           </div>
 
-          <button type="submit" className="btn-primary w-full py-3">
-            Đăng nhập
+          <button type="submit" className="btn-primary w-full py-3" disabled={loading}>
+            {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
           </button>
 
           <p className="text-center text-sm text-gray-500">

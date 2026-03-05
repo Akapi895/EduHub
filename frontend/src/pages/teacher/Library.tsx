@@ -1,11 +1,12 @@
-import { useState, useMemo } from 'react';
-import { Search, Upload, Filter } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Search, Upload, Filter, Loader2 } from 'lucide-react';
 import MaterialCard from '@/components/library/MaterialCard';
 import UploadMaterialModal from '@/components/library/UploadMaterialModal';
 import Button from '@/components/common/Button';
-import { mockMaterials } from '@/services/mockData';
+import { libraryService } from '@/services/library.service';
 import { useDebounce } from '@/hooks/useDebounce';
 import { SUBJECTS } from '@/utils/constants';
+import type { Material } from '@/types';
 
 const TYPES = [
   { value: '', label: 'Tất cả' },
@@ -17,23 +18,33 @@ const TYPES = [
 ];
 
 export default function TeacherLibrary() {
+  const [materials, setMaterials] = useState<Material[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const debouncedSearch = useDebounce(search);
 
-  const filteredMaterials = useMemo(() => {
-    return mockMaterials.filter((m) => {
-      const matchSearch =
-        !debouncedSearch ||
-        m.title.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        m.description.toLowerCase().includes(debouncedSearch.toLowerCase());
-      const matchType = !typeFilter || m.material_type === typeFilter;
-      const matchSubject = !subjectFilter || m.subject === subjectFilter;
-      return matchSearch && matchType && matchSubject;
-    });
+  const fetchMaterials = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: Record<string, string> = {};
+      if (debouncedSearch) params.search = debouncedSearch;
+      if (typeFilter) params.type = typeFilter;
+      if (subjectFilter) params.subject = subjectFilter;
+      const res = await libraryService.getMaterials(params);
+      setMaterials(res.data.data || []);
+    } catch {
+      setMaterials([]);
+    } finally {
+      setLoading(false);
+    }
   }, [debouncedSearch, typeFilter, subjectFilter]);
+
+  useEffect(() => {
+    fetchMaterials();
+  }, [fetchMaterials]);
 
   return (
     <div className="space-y-6">
@@ -88,13 +99,19 @@ export default function TeacherLibrary() {
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredMaterials.map((material) => (
-          <MaterialCard key={material.id} material={material} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {materials.map((material) => (
+            <MaterialCard key={material.id} material={material} />
+          ))}
+        </div>
+      )}
 
-      {filteredMaterials.length === 0 && (
+      {!loading && materials.length === 0 && (
         <div className="text-center py-12 text-gray-400">
           <p className="text-lg">Không tìm thấy tài liệu nào</p>
           <p className="text-sm mt-1">Thử thay đổi bộ lọc hoặc tìm kiếm khác</p>
@@ -104,9 +121,14 @@ export default function TeacherLibrary() {
       <UploadMaterialModal
         isOpen={showUpload}
         onClose={() => setShowUpload(false)}
-        onSubmit={(data) => {
-          console.log('Upload:', data);
-          setShowUpload(false);
+        onSubmit={async (data) => {
+          try {
+            await libraryService.createMaterial(data);
+            setShowUpload(false);
+            fetchMaterials();
+          } catch (err: any) {
+            alert(err.response?.data?.message || 'Thêm tài liệu thất bại');
+          }
         }}
       />
     </div>

@@ -1,13 +1,57 @@
-import { Users, BookOpen, ClipboardList, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, BookOpen, ClipboardList, Plus, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { dashboardService } from '@/services/dashboard.service';
 
-const stats = [
-  { label: 'Lớp học', value: 5, icon: Users, color: 'bg-blue-100 text-blue-600' },
-  { label: 'Tài liệu', value: 24, icon: BookOpen, color: 'bg-purple-100 text-purple-600' },
-  { label: 'Đề thi', value: 12, icon: ClipboardList, color: 'bg-mint text-green-700' },
-];
+interface DashboardData {
+  total_classes: number;
+  total_students: number;
+  total_exams: number;
+  upcoming_exams: number;
+  classes: { id: string; name: string; student_count: number }[];
+}
 
 export default function TeacherDashboard() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        const res = await dashboardService.getTeacherDashboard();
+        setData(res.data.data);
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Không thể tải dữ liệu');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboard();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-red-500">{error}</p>
+      </div>
+    );
+  }
+
+  const stats = [
+    { label: 'Lớp học', value: data?.total_classes ?? 0, icon: Users, color: 'bg-blue-100 text-blue-600' },
+    { label: 'Học sinh', value: data?.total_students ?? 0, icon: BookOpen, color: 'bg-purple-100 text-purple-600' },
+    { label: 'Đề thi', value: data?.total_exams ?? 0, icon: ClipboardList, color: 'bg-mint text-green-700' },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -33,42 +77,37 @@ export default function TeacherDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-card p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Đề thi sắp mở</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Bài thi sắp tới</h2>
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-primary-lighter rounded-xl">
-              <div>
-                <p className="font-medium text-gray-800">Kiểm tra Toán giữa kỳ</p>
-                <p className="text-sm text-gray-500">Lớp 6A • 10/03/2026</p>
+            {(data?.upcoming_exams ?? 0) > 0 ? (
+              <div className="flex items-center justify-between p-3 bg-primary-lighter rounded-xl">
+                <div>
+                  <p className="font-medium text-gray-800">{data?.upcoming_exams} bài thi sắp mở</p>
+                </div>
+                <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-medium">Sắp mở</span>
               </div>
-              <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-medium">Sắp mở</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-primary-lighter rounded-xl">
-              <div>
-                <p className="font-medium text-gray-800">Kiểm tra Văn 15 phút</p>
-                <p className="text-sm text-gray-500">Lớp 6B • 12/03/2026</p>
-              </div>
-              <span className="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full font-medium">Sắp mở</span>
-            </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-4">Chưa có bài thi sắp tới</p>
+            )}
           </div>
         </div>
 
         <div className="bg-white rounded-card p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Hoạt động gần đây</h2>
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Các lớp học</h2>
           <div className="space-y-3">
-            <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50">
-              <div className="w-8 h-8 rounded-full bg-accent-mint flex items-center justify-center text-sm">TB</div>
-              <div>
-                <p className="text-sm text-gray-800">Trần Văn B đã nộp bài thi</p>
-                <p className="text-xs text-gray-400">2 phút trước</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50">
-              <div className="w-8 h-8 rounded-full bg-accent-pink flex items-center justify-center text-sm">LC</div>
-              <div>
-                <p className="text-sm text-gray-800">Lê Thị C đã tham gia lớp 6A</p>
-                <p className="text-xs text-gray-400">15 phút trước</p>
-              </div>
-            </div>
+            {data?.classes?.map((cls) => (
+              <Link
+                key={cls.id}
+                to={`/teacher/classes/${cls.id}`}
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50"
+              >
+                <p className="text-sm font-medium text-gray-800">{cls.name}</p>
+                <span className="text-xs text-gray-500">{cls.student_count} học sinh</span>
+              </Link>
+            ))}
+            {(!data?.classes || data.classes.length === 0) && (
+              <p className="text-sm text-gray-400 text-center py-4">Chưa có lớp học nào</p>
+            )}
           </div>
         </div>
       </div>

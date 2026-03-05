@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Send, Bot, Sparkles } from 'lucide-react';
 import MessageItem from '@/components/chat/MessageItem';
+import { chatService } from '@/services/chat.service';
 import type { Message } from '@/types';
 
 const SUGGESTIONS = [
@@ -20,13 +21,13 @@ export default function StudentChatbot() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const sendMessage = (content: string) => {
+  const sendMessage = async (content: string) => {
     if (!content.trim()) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       conversation_id: 'chatbot',
-      sender_id: 'student-1',
+      sender_id: 'student',
       content: content.trim(),
       created_at: new Date().toISOString(),
     };
@@ -34,18 +35,29 @@ export default function StudentChatbot() {
     setInput('');
     setIsTyping(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      const res = await chatService.askChatbot(content.trim());
+      const answer = res.data.data?.answer || res.data.data?.content || 'Không có phản hồi';
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         conversation_id: 'chatbot',
         sender_id: 'ai-bot',
-        content: `Cảm ơn bạn đã hỏi! Đây là câu trả lời cho: "${content.trim()}"\n\nĐây là một câu trả lời mẫu. Trong phiên bản đầy đủ, AI sẽ phân tích và trả lời chi tiết hơn dựa trên tài liệu môn học của bạn.`,
+        content: answer,
         created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, botMsg]);
+    } catch (err: any) {
+      const botMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        conversation_id: 'chatbot',
+        sender_id: 'ai-bot',
+        content: err.response?.data?.message || 'Xin lỗi, có lỗi xảy ra. Vui lòng thử lại.',
+        created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, botMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   return (
@@ -83,7 +95,7 @@ export default function StudentChatbot() {
           ) : (
             <div className="space-y-4">
               {messages.map((msg) => (
-                <MessageItem key={msg.id} message={msg} isOwn={msg.sender_id === 'student-1'} />
+                <MessageItem key={msg.id} message={msg} isOwn={msg.sender_id === 'student'} />
               ))}
               {isTyping && (
                 <div className="flex items-center gap-2 text-gray-400">

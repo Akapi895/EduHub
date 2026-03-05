@@ -32,7 +32,7 @@ export default function ClassCard({ classData, onClick }: ClassCardProps) {
         <p className="text-sm text-gray-500 mb-3">{classData.teacher_name}</p>
         <div className="flex items-center gap-2 text-sm text-gray-400">
           <Users className="w-4 h-4" />
-          <span>{classData.student_count} học sinh</span>
+          <span>{classData.student_count ?? 0} học sinh</span>
         </div>
       </div>
     </div>

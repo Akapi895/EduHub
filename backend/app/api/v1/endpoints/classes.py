@@ -10,8 +10,16 @@ from app.schemas.user import UserPublic
 from app.crud import class_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
-from app.models.class_model import Chapter
+from app.models.class_model import Chapter, ClassStudent
 from app.utils.responses import ok
+
+
+def _class_with_count(db: Session, class_: object) -> dict:
+    """Serialize a class and add student_count."""
+    data = ClassOut.model_validate(class_).model_dump()
+    data["student_count"] = db.query(ClassStudent).filter(ClassStudent.class_id == class_.id).count()
+    return data
+
 
 router = APIRouter(prefix="/classes", tags=["Classes"])
 chapters_router = APIRouter(prefix="/chapters", tags=["Chapters"])
@@ -20,7 +28,7 @@ chapters_router = APIRouter(prefix="/chapters", tags=["Chapters"])
 @router.get("")
 def list_classes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     classes = class_crud.get_classes_for_user(db, current_user.id, current_user.role)
-    return ok(data=[ClassOut.model_validate(c).model_dump() for c in classes])
+    return ok(data=[_class_with_count(db, c) for c in classes])
 
 
 @router.post("", status_code=201)
@@ -30,7 +38,7 @@ def create_class(
     teacher: User = Depends(require_teacher),
 ):
     class_ = class_crud.create_class(db, teacher_id=teacher.id, data=data)
-    return ok(data=ClassOut.model_validate(class_).model_dump(), status_code=201)
+    return ok(data=_class_with_count(db, class_), status_code=201)
 
 
 @router.get("/{class_id}")
@@ -42,7 +50,7 @@ def get_class(
     class_ = class_crud.get_class(db, class_id)
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
-    return ok(data=ClassOut.model_validate(class_).model_dump())
+    return ok(data=_class_with_count(db, class_))
 
 
 @router.put("/{class_id}")
@@ -56,7 +64,7 @@ def update_class(
     if not class_ or class_.teacher_id != teacher.id:
         raise HTTPException(status_code=404, detail="Class not found")
     updated = class_crud.update_class(db, class_=class_, data=data)
-    return ok(data=ClassOut.model_validate(updated).model_dump())
+    return ok(data=_class_with_count(db, updated))
 
 
 @router.delete("/{class_id}")
@@ -86,7 +94,7 @@ def join_class(
     if class_crud.is_member(db, class_id=class_.id, user_id=current_user.id):
         raise HTTPException(status_code=400, detail="Ban da tham gia lop nay")
     class_crud.join_class(db, class_id=class_.id, student_id=current_user.id)
-    return ok(data=ClassOut.model_validate(class_).model_dump(), message="Tham gia lop thanh cong")
+    return ok(data=_class_with_count(db, class_), message="Tham gia lop thanh cong")
 
 
 @router.get("/{class_id}/students")

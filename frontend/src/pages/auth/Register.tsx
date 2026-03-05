@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import { authService } from '@/services/auth.service';
 import type { Role } from '@/utils/constants';
 
 export default function Register() {
@@ -10,10 +11,11 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('student');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const loginAction = useAuthStore((s) => s.login);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -22,10 +24,21 @@ export default function Register() {
       return;
     }
 
-    // Mock register
-    const mockUser = { id: '1', full_name: fullName, email, role };
-    loginAction(mockUser, 'mock-jwt-token');
-    navigate(role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+    setLoading(true);
+    try {
+      // Register
+      await authService.register({ full_name: fullName, email, password, role });
+      // Auto-login after registration
+      const loginRes = await authService.login(email, password);
+      const { access_token, user } = loginRes.data.data;
+      loginAction(user, access_token);
+      navigate(user.role === 'teacher' ? '/teacher/dashboard' : '/student/dashboard');
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -105,8 +118,8 @@ export default function Register() {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary w-full py-3">
-            Đăng ký
+          <button type="submit" className="btn-primary w-full py-3" disabled={loading}>
+            {loading ? 'Đang đăng ký...' : 'Đăng ký'}
           </button>
 
           <p className="text-center text-sm text-gray-500">

@@ -16,13 +16,13 @@ export interface Class {
   id: string;
   name: string;
   description: string;
-  thumbnail_url: string;
+  thumbnail_url?: string;
   teacher_id: string;
-  teacher_name: string;
+  teacher_name?: string;
   join_code: string;
   subject?: string;
   grade?: string;
-  student_count: number;
+  student_count?: number;
   created_at: string;
 }
 

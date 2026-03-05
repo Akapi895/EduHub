@@ -1,28 +1,51 @@
-import { useState } from 'react';
-import { MessageCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { MessageCircle, Loader2 } from 'lucide-react';
 import ChatWindow from '@/components/chat/ChatWindow';
-import { mockConversations, mockMessages } from '@/services/mockData';
-import { formatDateTime } from '@/utils/helpers';
+import { chatService } from '@/services/chat.service';
 import type { Conversation, Message } from '@/types';
+import { useAuthStore } from '@/store/auth.store';
 
 export default function TeacherInbox() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const user = useAuthStore((s) => s.user);
 
-  const handleSend = (content: string) => {
-    const msg: Message = {
-      id: Date.now().toString(),
-      conversation_id: selected?.id || '',
-      sender_id: 'teacher-1',
-      content,
-      created_at: new Date().toISOString(),
-    };
-    setMessages([...messages, msg]);
+  const fetchConversations = useCallback(async () => {
+    try {
+      const res = await chatService.getConversations();
+      setConversations(res.data.data || []);
+    } catch {
+      setConversations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
+
+  const handleSelectConversation = async (conv: Conversation) => {
+    setSelected(conv);
+    try {
+      const res = await chatService.getMessages(conv.id);
+      setMessages(res.data.data || []);
+    } catch {
+      setMessages([]);
+    }
   };
 
-  const filteredMessages = selected
-    ? messages.filter((m) => m.conversation_id === selected.id)
-    : [];
+  const handleSend = async (content: string) => {
+    if (!selected) return;
+    try {
+      const res = await chatService.sendMessage(selected.id, { content });
+      setMessages([...messages, res.data.data]);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Gửi tin nhắn thất bại');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -42,10 +65,14 @@ export default function TeacherInbox() {
             />
           </div>
           <div className="flex-1 overflow-y-auto">
-            {mockConversations.map((conv) => (
+            {loading ? (
+              <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+            ) : conversations.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Chưa có cuộc trò chuyện nào</p>
+            ) : conversations.map((conv) => (
               <button
                 key={conv.id}
-                onClick={() => setSelected(conv)}
+                onClick={() => handleSelectConversation(conv)}
                 className={`w-full p-4 text-left hover:bg-gray-50 transition-colors border-b border-border/50 ${
                   selected?.id === conv.id ? 'bg-blue-50' : ''
                 }`}
@@ -76,9 +103,9 @@ export default function TeacherInbox() {
           {selected ? (
             <ChatWindow
               participantName={selected.participant.full_name}
-              messages={filteredMessages}
+              messages={messages}
               onSend={handleSend}
-              currentUserId="teacher-1"
+              currentUserId={user?.id || ''}
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-gray-400">

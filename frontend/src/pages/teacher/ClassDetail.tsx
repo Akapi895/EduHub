@@ -1,24 +1,60 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, BookOpen, FileText, Plus, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Users, BookOpen, FileText, Plus, Copy, Check, Loader2 } from 'lucide-react';
 import ChapterSection from '@/components/classes/ChapterSection';
 import StudentTable from '@/components/classes/StudentTable';
 import ExamCard from '@/components/exam/ExamCard';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
-import { mockClasses, mockChapters, mockStudents, mockExams } from '@/services/mockData';
+import { classService } from '@/services/class.service';
+import type { Class, Chapter, Exam, User } from '@/types';
 
 type Tab = 'materials' | 'exams' | 'students';
 
 export default function TeacherClassDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const classItem = mockClasses.find((c) => c.id === id);
+  const [classItem, setClassItem] = useState<Class | null>(null);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [students, setStudents] = useState<User[]>([]);
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('materials');
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [newChapter, setNewChapter] = useState('');
   const [copied, setCopied] = useState(false);
+
+  const fetchClassData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const [classRes, studentsRes, examsRes] = await Promise.all([
+        classService.getClass(id),
+        classService.getStudents(id),
+        classService.getExams(id),
+      ]);
+      setClassItem(classRes.data.data);
+      setStudents(studentsRes.data.data || []);
+      setExams(examsRes.data.data || []);
+    } catch {
+      setClassItem(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchClassData();
+  }, [fetchClassData]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!classItem) {
     return (
@@ -66,15 +102,15 @@ export default function TeacherClassDetail() {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-card p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-primary">{classItem.student_count}</p>
+          <p className="text-2xl font-bold text-primary">{students.length}</p>
           <p className="text-sm text-gray-500">Học sinh</p>
         </div>
         <div className="bg-white rounded-card p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-accent-purple">{mockChapters.length}</p>
+          <p className="text-2xl font-bold text-accent-purple">{chapters.length}</p>
           <p className="text-sm text-gray-500">Chương</p>
         </div>
         <div className="bg-white rounded-card p-4 shadow-sm text-center">
-          <p className="text-2xl font-bold text-accent-pink">{mockExams.length}</p>
+          <p className="text-2xl font-bold text-accent-pink">{exams.length}</p>
           <p className="text-sm text-gray-500">Bài kiểm tra</p>
         </div>
       </div>
@@ -106,8 +142,8 @@ export default function TeacherClassDetail() {
                   <Plus className="w-4 h-4 mr-1" /> Thêm chương
                 </Button>
               </div>
-              {mockChapters.length > 0 ? (
-                mockChapters.map((chapter) => (
+              {chapters.length > 0 ? (
+                chapters.map((chapter) => (
                   <ChapterSection key={chapter.id} chapter={chapter} />
                 ))
               ) : (
@@ -124,9 +160,12 @@ export default function TeacherClassDetail() {
                 </Button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {mockExams.map((exam) => (
+                {exams.map((exam) => (
                   <ExamCard key={exam.id} exam={exam} onClick={() => navigate(`/teacher/exams/${exam.id}`)} />
                 ))}
+                {exams.length === 0 && (
+                  <p className="text-center text-gray-400 py-8 col-span-2">Chưa có bài kiểm tra nào</p>
+                )}
               </div>
             </div>
           )}
@@ -134,11 +173,25 @@ export default function TeacherClassDetail() {
           {activeTab === 'students' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-500">{mockStudents.length} học sinh</p>
+                <p className="text-sm text-gray-500">{students.length} học sinh</p>
               </div>
               <StudentTable
-                students={mockStudents}
-                onRemove={(id) => console.log('Remove student:', id)}
+                students={students.map((s) => ({
+                  id: s.id,
+                  student_id: s.id,
+                  full_name: s.full_name,
+                  email: s.email,
+                  avatar_url: s.avatar_url,
+                  joined_at: s.created_at,
+                }))}
+                onRemove={async (studentId) => {
+                  try {
+                    await classService.removeStudent(id!, studentId);
+                    fetchClassData();
+                  } catch (err: any) {
+                    alert(err.response?.data?.message || 'Xóa học sinh thất bại');
+                  }
+                }}
               />
             </div>
           )}
@@ -155,7 +208,16 @@ export default function TeacherClassDetail() {
           />
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setShowAddChapter(false)}>Hủy</Button>
-            <Button onClick={() => { console.log('Add chapter:', newChapter); setShowAddChapter(false); setNewChapter(''); }} disabled={!newChapter}>
+            <Button onClick={async () => {
+              try {
+                await classService.createChapter(id!, { name: newChapter });
+                setShowAddChapter(false);
+                setNewChapter('');
+                fetchClassData();
+              } catch (err: any) {
+                alert(err.response?.data?.message || 'Thêm chương thất bại');
+              }
+            }} disabled={!newChapter}>
               Thêm
             </Button>
           </div>

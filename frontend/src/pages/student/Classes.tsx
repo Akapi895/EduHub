@@ -1,31 +1,58 @@
-import { useState, useMemo } from 'react';
-import { Search, LogIn } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Search, LogIn, Loader2 } from 'lucide-react';
 import ClassCard from '@/components/classes/ClassCard';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
-import { mockClasses } from '@/services/mockData';
+import { classService } from '@/services/class.service';
 import { useDebounce } from '@/hooks/useDebounce';
+import type { Class } from '@/types';
 
 export default function StudentClasses() {
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showJoin, setShowJoin] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [classCode, setClassCode] = useState('');
   const debouncedSearch = useDebounce(search);
 
-  const filtered = useMemo(() => {
-    if (!debouncedSearch) return mockClasses;
-    return mockClasses.filter(
-      (c) =>
-        c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-        (c.description || '').toLowerCase().includes(debouncedSearch.toLowerCase()),
-    );
-  }, [debouncedSearch]);
+  const fetchClasses = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await classService.getClasses();
+      setClasses(res.data.data || []);
+    } catch {
+      setClasses([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const handleJoin = () => {
-    console.log('Join class:', classCode);
-    setShowJoin(false);
-    setClassCode('');
+  useEffect(() => {
+    fetchClasses();
+  }, [fetchClasses]);
+
+  const filtered = debouncedSearch
+    ? classes.filter(
+        (c) =>
+          c.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+          (c.description || '').toLowerCase().includes(debouncedSearch.toLowerCase()),
+      )
+    : classes;
+
+  const handleJoin = async () => {
+    setJoining(true);
+    try {
+      await classService.joinClass(classCode);
+      setShowJoin(false);
+      setClassCode('');
+      fetchClasses();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Tham gia lớp thất bại');
+    } finally {
+      setJoining(false);
+    }
   };
 
   return (
@@ -51,11 +78,17 @@ export default function StudentClasses() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filtered.map((cls) => (
-          <ClassCard key={cls.id} classData={cls} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filtered.map((cls) => (
+            <ClassCard key={cls.id} classData={cls} />
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 && (
         <div className="text-center py-12 text-gray-400">
@@ -75,7 +108,9 @@ export default function StudentClasses() {
           <p className="text-xs text-gray-500">Nhập mã lớp được giáo viên cung cấp để tham gia lớp học</p>
           <div className="flex justify-end gap-3">
             <Button variant="secondary" onClick={() => setShowJoin(false)}>Hủy</Button>
-            <Button onClick={handleJoin} disabled={!classCode}>Tham gia</Button>
+            <Button onClick={handleJoin} disabled={!classCode || joining}>
+              {joining ? 'Đang tham gia...' : 'Tham gia'}
+            </Button>
           </div>
         </div>
       </Modal>

@@ -3,9 +3,12 @@ import { Camera, Save } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { useAuthStore } from '@/store/auth.store';
+import { userService } from '@/services/user.service';
 
 export default function StudentSettings() {
-  const { user } = useAuthStore();
+  const { user, updateUser } = useAuthStore();
+  const [saving, setSaving] = useState(false);
+  const [changingPw, setChangingPw] = useState(false);
   const [profile, setProfile] = useState({
     full_name: user?.full_name || '',
     email: user?.email || '',
@@ -16,6 +19,39 @@ export default function StudentSettings() {
     new_password: '',
     confirm: '',
   });
+
+  const handleSaveProfile = async () => {
+    setSaving(true);
+    try {
+      const res = await userService.updateProfile({ full_name: profile.full_name });
+      updateUser(res.data.data);
+      alert('Cập nhật thành công!');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Cập nhật thất bại');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (password.new_password !== password.confirm) {
+      alert('Mật khẩu xác nhận không khớp');
+      return;
+    }
+    setChangingPw(true);
+    try {
+      await userService.changePassword({
+        current_password: password.current,
+        new_password: password.new_password,
+      });
+      alert('Đổi mật khẩu thành công!');
+      setPassword({ current: '', new_password: '', confirm: '' });
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Đổi mật khẩu thất bại');
+    } finally {
+      setChangingPw(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -66,8 +102,8 @@ export default function StudentSettings() {
             onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
             placeholder="0912345678"
           />
-          <Button onClick={() => console.log('Save:', profile)}>
-            <Save className="w-4 h-4 mr-2" /> Lưu thay đổi
+          <Button onClick={handleSaveProfile} disabled={saving}>
+            <Save className="w-4 h-4 mr-2" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
           </Button>
         </div>
       </div>
@@ -95,17 +131,10 @@ export default function StudentSettings() {
             onChange={(e) => setPassword({ ...password, confirm: e.target.value })}
           />
           <Button
-            onClick={() => {
-              if (password.new_password !== password.confirm) {
-                alert('Mật khẩu không khớp');
-                return;
-              }
-              console.log('Change password');
-              setPassword({ current: '', new_password: '', confirm: '' });
-            }}
-            disabled={!password.current || !password.new_password}
+            onClick={handleChangePassword}
+            disabled={!password.current || !password.new_password || changingPw}
           >
-            Đổi mật khẩu
+            {changingPw ? 'Đang xử lý...' : 'Đổi mật khẩu'}
           </Button>
         </div>
       </div>

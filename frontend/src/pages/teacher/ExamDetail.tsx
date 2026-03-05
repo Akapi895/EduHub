@@ -1,19 +1,50 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2 } from 'lucide-react';
 import QuestionEditor from '@/components/exam/QuestionEditor';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
-import { mockExams, mockQuestions } from '@/services/mockData';
+import { examService } from '@/services/exam.service';
 import { formatDate } from '@/utils/helpers';
-import type { Question } from '@/types';
+import type { Question, Exam } from '@/types';
 import { generateId } from '@/utils/helpers';
 
 export default function TeacherExamDetail() {
   const { id } = useParams();
-  const exam = mockExams.find((e) => e.id === id);
-  const [questions, setQuestions] = useState<Question[]>(mockQuestions);
+  const [exam, setExam] = useState<Exam | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'questions' | 'settings' | 'results'>('questions');
+
+  const fetchExamData = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const [examRes, questionsRes] = await Promise.all([
+        examService.getExam(id),
+        examService.getQuestions(id),
+      ]);
+      setExam(examRes.data.data);
+      setQuestions(questionsRes.data.data || []);
+    } catch {
+      setExam(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchExamData();
+  }, [fetchExamData]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   if (!exam) {
     return (
@@ -29,29 +60,57 @@ export default function TeacherExamDetail() {
   const statusColor = exam.status === 'open' ? 'mint' : exam.status === 'upcoming' ? 'yellow' : 'gray';
   const statusLabel = exam.status === 'open' ? 'Đang mở' : exam.status === 'upcoming' ? 'Sắp tới' : 'Đã đóng';
 
-  const handleAddQuestion = () => {
-    const newQ: Question = {
-      id: generateId(),
-      exam_id: exam.id,
-      content: '',
-      type: 'single_choice',
-      points: 1,
-      required: true,
-      order_index: questions.length + 1,
-      options: [
-        { id: generateId(), content: '', is_correct: false },
-        { id: generateId(), content: '', is_correct: false },
-      ],
-    };
-    setQuestions([...questions, newQ]);
+  const handleAddQuestion = async () => {
+    try {
+      const res = await examService.createQuestion(exam.id, {
+        type: 'single_choice',
+        content: 'Câu hỏi mới',
+        points: 1,
+        required: true,
+        order_index: questions.length,
+        options: [
+          { content: 'Đáp án A', is_correct: false },
+          { content: 'Đáp án B', is_correct: false },
+        ],
+      });
+      setQuestions([...questions, res.data.data]);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Thêm câu hỏi thất bại');
+    }
   };
 
-  const handleChangeQuestion = (updated: Question) => {
+  const handleChangeQuestion = async (updated: Question) => {
     setQuestions(questions.map((q) => (q.id === updated.id ? updated : q)));
   };
 
-  const handleDeleteQuestion = (qId: string) => {
-    setQuestions(questions.filter((q) => q.id !== qId));
+  const handleDeleteQuestion = async (qId: string) => {
+    try {
+      await examService.deleteQuestion(qId);
+      setQuestions(questions.filter((q) => q.id !== qId));
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Xóa câu hỏi thất bại');
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // Save each question that was modified
+      for (const q of questions) {
+        await examService.updateQuestion(q.id, {
+          content: q.content,
+          instruction: q.instruction,
+          points: q.points,
+          required: q.required,
+          order_index: q.order_index,
+        });
+      }
+      alert('Đã lưu thành công!');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lưu thất bại');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
@@ -70,8 +129,8 @@ export default function TeacherExamDetail() {
           </div>
           <p className="text-gray-500 mt-1">{exam.description}</p>
         </div>
-        <Button>
-          <Save className="w-4 h-4 mr-2" /> Lưu thay đổi
+        <Button onClick={handleSave} disabled={saving}>
+          <Save className="w-4 h-4 mr-2" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
         </Button>
       </div>
 
