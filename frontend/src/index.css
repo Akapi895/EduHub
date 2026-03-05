@@ -1,3 +1,44 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-background font-sans text-gray-800 antialiased;
+    line-height: 1.6;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-primary text-white rounded-button px-4 py-2 font-medium
+      hover:bg-primary-hover active:scale-[0.98] transition-all duration-200;
+  }
+  .btn-secondary {
+    @apply bg-white text-primary border border-primary rounded-button px-4 py-2 font-medium
+      hover:bg-primary-lighter transition-all duration-200;
+  }
+  .btn-danger {
+    @apply bg-red-500 text-white rounded-button px-4 py-2 font-medium
+      hover:bg-red-600 active:scale-[0.98] transition-all duration-200;
+  }
+  .card-base {
+    @apply bg-card rounded-card shadow-md hover:shadow-lg hover:scale-[1.02]
+      transition-all duration-200;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.2s ease-out;
+}
