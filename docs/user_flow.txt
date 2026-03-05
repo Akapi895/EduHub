@@ -1,0 +1,269 @@
+USER FLOW – THẾ GIỚI CỔ TÍCH
+============================================================
+I. GLOBAL FLOW (CHUNG)
+
+Truy cập website
+→ Landing page
+→ Đăng nhập
+→ Đăng ký
+→ Quên mật khẩu
+
+Đăng nhập thành công
+→ Hệ thống kiểm tra role
+→ Teacher → Điều hướng Teacher Dashboard
+→ Student → Điều hướng Student Dashboard
+
+============================================================
+II. TEACHER FLOW
+
+A. DASHBOARD FLOW
+
+Teacher Dashboard
+→ Xem thống kê tổng quan
+→ Click vào:
+- Lớp học
+- Đề thi sắp mở
+- Thông báo
+- Tạo mới (Quick Action)
+
+B. LIBRARY FLOW
+
+Vào Library
+→ Chọn:
+a) Thư viện chung
+b) Tài liệu của tôi
+
+B1. Thư viện chung
+
+Thư viện chung
+→ Search tài liệu
+→ Filter (Loại / Môn / Lớp)
+→ Click vào tài liệu
+→ Xem chi tiết
+→ Add vào lớp
+→ Chọn lớp
+→ Chọn chương
+→ Xác nhận
+
+B2. Tài liệu của tôi
+
+Tài liệu của tôi
+→ Click "Upload tài liệu"
+→ Nhập thông tin:
+- Tên
+- Mô tả
+- Thumbnail
+- File
+- Loại
+- Chọn lớp
+- Chọn chương
+→ Lưu
+→ Xem danh sách tài liệu
+→ Sửa
+→ Xóa
+→ Thêm vào lớp khác
+
+C. CLASS MANAGEMENT FLOW
+
+Danh sách lớp
+→ Click vào 1 lớp
+
+C1. Tổng quan lớp
+
+Class Overview
+→ Xem:
+- Mã lớp
+- Sĩ số
+- Thông báo
+→ Copy mã lớp
+→ Chỉnh sửa lớp
+→ Xóa lớp
+
+C2. Quản lý tài liệu lớp
+
+Class → Tab Tài liệu
+→ Xem theo chương
+→ Thêm chương mới
+→ Add tài liệu vào chương
+→ Xóa tài liệu khỏi lớp
+
+C3. Quản lý đề thi
+
+Class → Tab Đề thi
+→ Click "Tạo đề thi"
+→ Nhập:
+- Tên
+- Thumbnail
+- Mô tả
+- Start time
+- End time
+→ Lưu
+→ Vào trang chỉnh sửa đề
+
+C4. Tạo / Chỉnh sửa câu hỏi
+
+Exam Detail
+→ Click "Thêm câu hỏi"
+→ Chọn loại:
+- Single choice
+- Multi choice
+- Text
+- Upload ảnh
+- Matching
+→ Nhập nội dung
+→ Thêm hướng dẫn (optional)
+→ Nhập điểm
+→ Thêm đáp án
+→ Lưu
+
+→ Sắp xếp câu hỏi
+→ Xóa câu hỏi
+→ Publish đề thi
+
+C5. Xem kết quả thi
+
+Exam → Xem submissions
+→ Xem danh sách học sinh
+→ Click từng học sinh
+→ Xem bài làm
+→ Chấm điểm (nếu cần)
+→ Gửi phản hồi
+
+C6. Quản lý học sinh
+
+Class → Tab Học sinh
+→ Xem danh sách
+→ Thêm học sinh thủ công
+→ Xóa khỏi lớp
+→ Xem chi tiết học sinh
+→ Xem điểm
+→ Xem lịch sử bài làm
+
+D. INBOX FLOW
+
+Inbox
+→ Xem danh sách hội thoại
+→ Search người dùng
+→ Click vào hội thoại
+→ Gửi tin nhắn
+→ Gửi file
+→ Nhận thông báo realtime
+
+E. SETTINGS FLOW
+
+Settings
+→ Cập nhật thông tin cá nhân
+→ Đổi mật khẩu
+→ Cập nhật avatar
+→ Bật/tắt thông báo
+→ Xóa tài khoản
+
+============================================================
+III. STUDENT FLOW
+
+A. DASHBOARD FLOW
+
+Student Dashboard
+→ Xem:
+- Lớp đang tham gia
+- Đề thi sắp mở
+- Bài chưa hoàn thành
+- Thông báo mới
+→ Click vào lớp
+→ Click vào đề thi
+
+B. JOIN CLASS FLOW
+
+Student → Classes
+→ Click "Tham gia lớp"
+→ Nhập mã lớp
+→ Xác nhận
+→ Thành công → Lớp xuất hiện trong danh sách
+
+C. CLASS DETAIL FLOW
+
+Vào 1 lớp
+→ Tab:
+- Tài liệu
+- Đề thi
+- Thành viên
+
+C1. Xem tài liệu
+
+Class → Tài liệu
+→ Xem theo chương
+→ Click tài liệu
+→ Xem / Download
+
+C2. Làm đề thi
+
+Class → Đề thi
+→ Click đề đang mở
+→ Xem thông tin
+→ Click "Bắt đầu"
+→ Confirm
+→ Vào giao diện làm bài
+
+C3. Giao diện làm bài
+
+Exam Page
+→ Hiển thị:
+- Countdown timer
+- Danh sách câu hỏi
+→ Trả lời từng câu
+→ Lưu tạm
+→ Nộp bài
+→ Confirm
+→ Kết thúc
+
+C4. Sau khi nộp
+
+Nếu cho xem điểm ngay:
+→ Hiển thị điểm
+→ Xem đáp án
+
+Nếu chấm tay:
+→ Trạng thái: Chờ chấm
+→ Khi giáo viên chấm xong → Nhận thông báo
+
+D. INBOX FLOW
+
+Inbox
+→ Chat với giáo viên
+→ Chat với bạn cùng lớp
+
+E. CHATBOT FLOW
+
+Chatbot
+→ Nhập câu hỏi
+→ Bot:
+- Giải thích bài
+- Gợi ý tài liệu
+- Nhắc lịch thi
+→ Xem lịch sử chat
+
+F. SETTINGS FLOW
+
+Settings
+→ Cập nhật thông tin
+→ Đổi mật khẩu
+→ Bật/tắt thông báo
+
+============================================================
+IV. EXCEPTION FLOW
+
+Hết thời gian làm bài
+→ Auto submit
+
+Truy cập đề ngoài thời gian
+→ Hiển thị: "Đề thi chưa mở / đã đóng"
+
+Mất kết nối khi làm bài
+→ Tự động lưu local
+→ Khi reconnect → Sync lại
+
+Sai mã lớp
+→ Hiển thị lỗi
+
+============================================================
+END USER FLOW

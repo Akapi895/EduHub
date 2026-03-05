@@ -1,0 +1,355 @@
+FRONTEND UI/UX SPEC
+
+Project: Thế giới cổ tích
+Target User: Học sinh lớp 6 + Giáo viên
+Style Direction: Dễ thương – thân thiện – cổ tích – hiện đại
+
+============================================================
+I. BRAND & VISUAL IDENTITY
+1. Màu chủ đạo
+
+Primary: Blue – White
+Secondary: Pastel Accent
+
+🎨 Color Palette
+
+Primary Blue:
+
+#3B82F6 (main button, link)
+
+#2563EB (hover state)
+
+Light Blue:
+
+#DBEAFE (background section)
+
+#EFF6FF (card background)
+
+White:
+
+#FFFFFF (card, modal)
+
+Soft Gray:
+
+#F3F4F6 (background)
+
+#E5E7EB (border)
+
+Accent (Pastel):
+
+Pink pastel: #FBCFE8
+
+Purple pastel: #DDD6FE
+
+Mint pastel: #BBF7D0
+
+Yellow pastel: #FEF9C3
+
+👉 Không dùng màu quá đậm hoặc quá gắt
+👉 Không dùng đỏ đậm (chỉ dùng đỏ cho error)
+
+2. Typography
+
+Font đề xuất:
+
+Primary: "Be Vietnam Pro" hoặc "Nunito"
+
+Backup: sans-serif
+
+Heading:
+
+H1: 28–32px, semi-bold
+
+H2: 22–24px
+
+H3: 18–20px
+
+Body text:
+
+14–16px
+
+Yêu cầu:
+
+Chữ tròn, mềm
+
+Không dùng font góc cạnh
+
+Line-height thoáng (1.6)
+
+3. Border Radius (Phong cách cute)
+
+Toàn bộ hệ thống phải:
+
+Button: rounded-xl (12px)
+
+Card: rounded-2xl (16px–20px)
+
+Modal: rounded-2xl
+
+Input: rounded-xl
+
+Avatar: rounded-full
+
+KHÔNG dùng góc vuông sắc cạnh.
+
+============================================================
+II. LAYOUT SYSTEM
+1. Layout tổng thể
+
+Teacher:
+
+Sidebar trái
+
+Content phải
+
+Topbar nhỏ phía trên
+
+Student:
+
+Sidebar icon to, dễ nhìn
+
+Dashboard trực quan
+
+Max width content:
+
+1200px center
+
+Spacing system:
+
+Sử dụng Tailwind spacing 4–8–12–16
+
+Padding card tối thiểu: p-4
+
+2. Card Design (Quan trọng nhất)
+
+Card tiêu chuẩn gồm:
+
+Thumbnail (bo tròn)
+
+Title
+
+Short description
+
+Tag nhỏ (badge pastel)
+
+Hover effect:
+
+Shadow tăng nhẹ
+
+Scale 1.02
+
+Shadow:
+
+shadow-md
+
+Hover: shadow-lg
+
+============================================================
+III. COMPONENT SPEC
+1. Button
+
+Primary:
+
+Background: Blue
+
+Text: White
+
+Hover: Darker blue
+
+Active: Scale 0.98
+
+Secondary:
+
+Background: White
+
+Border: Blue
+
+Text: Blue
+
+Danger:
+
+Background: #EF4444
+
+Text: White
+
+Disabled:
+
+opacity-50
+
+cursor-not-allowed
+
+2. Input Field
+
+Border: Gray nhẹ
+
+Focus:
+
+Ring blue-300
+
+Border blue-400
+
+Placeholder: text-gray-400
+
+Có icon bên trái (optional)
+
+3. Modal
+
+Background overlay: black opacity-40
+
+Card trắng
+
+Animation:
+
+Fade in
+
+Scale 0.95 → 1
+
+4. Table (Học sinh)
+
+Header nền xanh nhạt
+
+Hover row: bg-blue-50
+
+Border mảnh
+
+Avatar nhỏ tròn
+
+5. Exam Interface
+
+Yêu cầu đặc biệt:
+
+Timer nổi bật (góc phải trên)
+
+Màu xanh khi > 5 phút
+
+Màu vàng khi < 5 phút
+
+Màu đỏ khi < 1 phút
+
+Question card:
+
+Mỗi câu trong 1 card
+
+Số câu trong badge tròn
+
+Đáp án dạng radio lớn, dễ click
+
+============================================================
+IV. STUDENT EXPERIENCE REQUIREMENTS
+
+Vì target lớp 6 nên:
+
+Không quá nhiều chữ
+
+Icon minh họa (book, star, magic wand)
+
+Animation nhẹ:
+
+Hover bounce
+
+Fade
+
+Không quá nhiều form phức tạp
+
+Thông báo rõ ràng, thân thiện
+
+Ví dụ:
+
+❌ “Submission failed”
+✅ “Ôi! Có lỗi xảy ra rồi, thử lại nhé ✨”
+
+============================================================
+V. TEACHER EXPERIENCE REQUIREMENTS
+
+Phong cách:
+
+Nghiêm túc hơn một chút
+
+Ít màu pastel hơn
+
+Vẫn giữ blue-white
+
+Teacher UI:
+
+Table nhiều hơn
+
+Filter rõ ràng
+
+Dashboard thiên về số liệu
+
+============================================================
+VI. ICON & ILLUSTRATION
+
+Icon style:
+
+Line icon
+
+Bo tròn
+
+Không dùng icon sắc cạnh
+
+Có thể dùng:
+
+Lucide icons
+
+Heroicons
+
+Illustration:
+
+Nhẹ nhàng
+
+Có yếu tố cổ tích (sao, sách, mây)
+
+============================================================
+VII. RESPONSIVE REQUIREMENTS
+
+Desktop-first
+
+Tablet:
+
+Sidebar thu gọn icon
+
+Mobile:
+
+Sidebar thành bottom navigation
+
+Card xếp dọc
+
+Modal full screen
+
+============================================================
+VIII. ANIMATION & MICRO-INTERACTION
+
+Button hover: transition 200ms
+
+Card hover: shadow + scale nhẹ
+
+Modal: fade + zoom
+
+Toast notification: slide từ phải vào
+
+KHÔNG dùng animation phức tạp.
+
+============================================================
+IX. ACCESSIBILITY
+
+Contrast đủ rõ
+
+Font không quá nhỏ
+
+Button tối thiểu cao 40px
+
+Click area rộng
+
+============================================================
+X. DESIGN PRINCIPLES
+
+Thân thiện
+
+Không gây áp lực
+
+Rõ ràng
+
+Trực quan
+
+Nhất quán

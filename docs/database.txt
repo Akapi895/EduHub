@@ -1,0 +1,193 @@
+Project EduHub {
+  database_type: "PostgreSQL"
+}
+
+/* =========================
+   USERS & ROLES
+========================= */
+
+Table users {
+  id uuid [pk]
+  full_name varchar
+  email varchar [unique]
+  password_hash varchar
+  role varchar // teacher | student | admin
+  avatar_url varchar
+  is_active boolean
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table settings {
+  id uuid [pk]
+  user_id uuid [ref: > users.id]
+  email_notification boolean
+  push_notification boolean
+  created_at timestamp
+}
+
+/* =========================
+   CLASSES
+========================= */
+
+Table classes {
+  id uuid [pk]
+  name varchar
+  description text
+  thumbnail_url varchar
+  teacher_id uuid [ref: > users.id]
+  join_code varchar [unique]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table class_students {
+  id uuid [pk]
+  class_id uuid [ref: > classes.id]
+  student_id uuid [ref: > users.id]
+  joined_at timestamp
+}
+
+/* =========================
+   LIBRARY
+========================= */
+
+Table library_materials {
+  id uuid [pk]
+  title varchar
+  description text
+  thumbnail_url varchar
+  file_url varchar
+  material_type varchar 
+  // book | exam | video | reference | document
+  subject varchar
+  grade varchar
+  is_system boolean // true = thư viện chung
+  created_by uuid [ref: > users.id]
+  created_at timestamp
+}
+
+Table class_materials {
+  id uuid [pk]
+  class_id uuid [ref: > classes.id]
+  material_id uuid [ref: > library_materials.id]
+  chapter_id uuid [ref: > chapters.id]
+  assigned_at timestamp
+}
+
+Table chapters {
+  id uuid [pk]
+  class_id uuid [ref: > classes.id]
+  name varchar
+  order_index int
+  created_at timestamp
+}
+
+/* =========================
+   EXAMS
+========================= */
+
+Table exams {
+  id uuid [pk]
+  class_id uuid [ref: > classes.id]
+  title varchar
+  description text
+  thumbnail_url varchar
+  start_time timestamp
+  end_time timestamp
+  status varchar 
+  // upcoming | open | closed
+  created_by uuid [ref: > users.id]
+  created_at timestamp
+}
+
+/* =========================
+   QUESTIONS
+========================= */
+
+Table questions {
+  id uuid [pk]
+  exam_id uuid [ref: > exams.id]
+  type varchar 
+  // single_choice | multi_choice | text | image_upload | matching
+  content text
+  instruction text
+  points int
+  required boolean
+  order_index int
+  created_at timestamp
+}
+
+/* For single_choice & multi_choice */
+Table question_options {
+  id uuid [pk]
+  question_id uuid [ref: > questions.id]
+  content text
+  is_correct boolean
+}
+
+/* For matching type */
+Table matching_pairs {
+  id uuid [pk]
+  question_id uuid [ref: > questions.id]
+  left_text varchar
+  right_text varchar
+  correct_match varchar
+}
+
+/* =========================
+   EXAM SUBMISSION
+========================= */
+
+Table exam_submissions {
+  id uuid [pk]
+  exam_id uuid [ref: > exams.id]
+  student_id uuid [ref: > users.id]
+  started_at timestamp
+  submitted_at timestamp
+  total_score float
+  status varchar // in_progress | submitted | graded
+}
+
+Table answers {
+  id uuid [pk]
+  submission_id uuid [ref: > exam_submissions.id]
+  question_id uuid [ref: > questions.id]
+  text_answer text
+  uploaded_image_url varchar
+  score float
+  graded_by uuid [ref: > users.id]
+  graded_at timestamp
+}
+
+/* Multi choice selected options */
+Table answer_options {
+  id uuid [pk]
+  answer_id uuid [ref: > answers.id]
+  option_id uuid [ref: > question_options.id]
+}
+
+/* =========================
+   MESSAGING
+========================= */
+
+Table conversations {
+  id uuid [pk]
+  created_at timestamp
+}
+
+Table conversation_members {
+  id uuid [pk]
+  conversation_id uuid [ref: > conversations.id]
+  user_id uuid [ref: > users.id]
+}
+
+Table messages {
+  id uuid [pk]
+  conversation_id uuid [ref: > conversations.id]
+  sender_id uuid [ref: > users.id]
+  content text
+  file_url varchar
+  is_read boolean
+  created_at timestamp
+}

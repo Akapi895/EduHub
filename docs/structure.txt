@@ -1,0 +1,251 @@
+📁 ROOT PROJECT STRUCTURE
+the-gioi-co-tich/
+│
+├── frontend/                # Vite + Tailwind
+├── backend/                 # FastAPI
+├── docker-compose.yml       # (optional - future)
+├── .env
+├── .gitignore
+├── README.md
+🎨 FRONTEND (Vite + Tailwind)
+frontend/
+│
+├── public/
+│
+├── src/
+│   ├── assets/
+│   │
+│   ├── components/
+│   │   ├── common/
+│   │   │   ├── Button.tsx
+│   │   │   ├── Modal.tsx
+│   │   │   ├── Input.tsx
+│   │   │   ├── Card.tsx
+│   │   │   └── Table.tsx
+│   │   │
+│   │   ├── layout/
+│   │   │   ├── Navbar.tsx
+│   │   │   ├── Sidebar.tsx
+│   │   │   └── DashboardLayout.tsx
+│   │   │
+│   │   ├── library/
+│   │   │   ├── MaterialCard.tsx
+│   │   │   └── UploadMaterialModal.tsx
+│   │   │
+│   │   ├── classes/
+│   │   │   ├── ClassCard.tsx
+│   │   │   ├── ChapterSection.tsx
+│   │   │   └── StudentTable.tsx
+│   │   │
+│   │   ├── exam/
+│   │   │   ├── ExamCard.tsx
+│   │   │   ├── QuestionEditor.tsx
+│   │   │   └── ExamTimer.tsx
+│   │   │
+│   │   └── chat/
+│   │       ├── ChatWindow.tsx
+│   │       └── MessageItem.tsx
+│   │
+│   ├── pages/
+│   │   ├── auth/
+│   │   │   ├── Login.tsx
+│   │   │   └── Register.tsx
+│   │   │
+│   │   ├── teacher/
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Library.tsx
+│   │   │   ├── Classes.tsx
+│   │   │   ├── ClassDetail.tsx
+│   │   │   ├── ExamDetail.tsx
+│   │   │   ├── Inbox.tsx
+│   │   │   └── Settings.tsx
+│   │   │
+│   │   ├── student/
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── Classes.tsx
+│   │   │   ├── Exam.tsx
+│   │   │   ├── Inbox.tsx
+│   │   │   ├── Chatbot.tsx
+│   │   │   └── Settings.tsx
+│   │   │
+│   │   └── NotFound.tsx
+│   │
+│   ├── routes/
+│   │   └── index.tsx
+│   │
+│   ├── services/
+│   │   ├── api.ts          # axios instance
+│   │   ├── auth.service.ts
+│   │   ├── class.service.ts
+│   │   ├── library.service.ts
+│   │   ├── exam.service.ts
+│   │   └── chat.service.ts
+│   │
+│   ├── store/              # Zustand hoặc Redux
+│   │   ├── auth.store.ts
+│   │   ├── class.store.ts
+│   │   └── exam.store.ts
+│   │
+│   ├── hooks/
+│   │   ├── useAuth.ts
+│   │   └── useDebounce.ts
+│   │
+│   ├── utils/
+│   │   ├── constants.ts
+│   │   └── helpers.ts
+│   │
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── index.css
+│
+├── tailwind.config.js
+├── postcss.config.js
+├── vite.config.ts
+├── tsconfig.json
+└── package.json
+⚙️ BACKEND (FastAPI + SQLite)
+backend/
+│
+├── app/
+│   │
+│   ├── main.py              # Entry point
+│   │
+│   ├── core/
+│   │   ├── config.py
+│   │   ├── security.py      # JWT, password hashing
+│   │   └── dependencies.py
+│   │
+│   ├── db/
+│   │   ├── session.py
+│   │   ├── base.py
+│   │   └── init_db.py
+│   │
+│   ├── models/
+│   │   ├── user.py
+│   │   ├── class_model.py
+│   │   ├── material.py
+│   │   ├── exam.py
+│   │   ├── question.py
+│   │   ├── submission.py
+│   │   └── message.py
+│   │
+│   ├── schemas/             # Pydantic schemas
+│   │   ├── user.py
+│   │   ├── auth.py
+│   │   ├── class_schema.py
+│   │   ├── material.py
+│   │   ├── exam.py
+│   │   ├── question.py
+│   │   └── message.py
+│   │
+│   ├── crud/
+│   │   ├── user.py
+│   │   ├── class_crud.py
+│   │   ├── material.py
+│   │   ├── exam.py
+│   │   ├── submission.py
+│   │   └── message.py
+│   │
+│   ├── api/
+│   │   ├── deps.py
+│   │   │
+│   │   ├── v1/
+│   │   │   ├── router.py
+│   │   │   │
+│   │   │   ├── endpoints/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── users.py
+│   │   │   │   ├── classes.py
+│   │   │   │   ├── library.py
+│   │   │   │   ├── exams.py
+│   │   │   │   ├── submissions.py
+│   │   │   │   └── messages.py
+│   │
+│   ├── services/
+│   │   ├── auth_service.py
+│   │   ├── exam_service.py
+│   │   └── grading_service.py
+│   │
+│   └── utils/
+│       ├── file_upload.py
+│       └── enums.py
+│
+├── tests/
+│
+├── alembic/                 # migration (khuyến nghị dùng)
+│
+├── requirements.txt
+├── .env
+└── app.db                   # SQLite file
+🔐 AUTH FLOW (Backend)
+
+JWT Authentication
+
+Role-based access:
+
+teacher
+
+student
+
+admin
+
+Phân quyền:
+
+Dependency check role
+
+Middleware bảo vệ route
+
+📡 API STRUCTURE (RESTful)
+/api/v1/auth/login
+/api/v1/auth/register
+
+/api/v1/classes/
+/api/v1/classes/{id}
+
+/api/v1/library/
+/api/v1/exams/
+/api/v1/exams/{id}
+/api/v1/exams/{id}/submit
+
+/api/v1/messages/
+📦 UPLOAD STRUCTURE
+backend/
+└── uploads/
+    ├── materials/
+    ├── exams/
+    └── avatars/
+🧠 Nếu sau này scale lớn
+
+SQLite → PostgreSQL
+Thêm Redis cho:
+
+Cache
+
+Realtime chat
+
+Rate limit
+
+Thêm:
+
+Celery (background grading)
+
+WebSocket cho Inbox realtime
+
+🚀 Development Flow
+
+Chạy backend:
+
+uvicorn app.main:app --reload
+
+Chạy frontend:
+
+npm run dev
+🔥 Kiến trúc hiện tại là:
+
+Frontend (SPA)
+↕ REST API
+FastAPI Backend
+↕
+SQLite
+
+Rất phù hợp MVP và dễ nâng cấp.

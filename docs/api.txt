@@ -1,0 +1,330 @@
+Dưới đây là API Specification v1 cho “Thế giới cổ tích”
+Mục tiêu: Làm API cầu nối FE ↔ BE, thống nhất format, chưa đi sâu business logic.
+
+Base URL:
+
+/api/v1
+
+Response chuẩn cho toàn hệ thống:
+
+Success:
+
+{
+  "status": true,
+  "message": "Mô tả",
+  "data": {}
+}
+
+Error:
+
+{
+  "status": false,
+  "message": "Mô tả lỗi"
+}
+============================================================
+I. AUTH API
+
+POST /api/v1/auth/login
+Đăng nhập
+
+Request:
+
+{
+  "email": "string",
+  "password": "string"
+}
+
+Response success:
+
+{
+  "status": true,
+  "message": "Đăng nhập thành công",
+  "data": {
+    "access_token": "jwt_token",
+    "user": {
+      "id": "uuid",
+      "full_name": "string",
+      "role": "teacher | student"
+    }
+  }
+}
+
+Response error:
+
+{
+  "status": false,
+  "message": "Đăng nhập thất bại"
+}
+
+POST /api/v1/auth/register
+
+Request:
+
+{
+  "full_name": "string",
+  "email": "string",
+  "password": "string",
+  "role": "teacher | student"
+}
+
+GET /api/v1/auth/me
+Lấy thông tin user hiện tại (JWT required)
+
+POST /api/v1/auth/logout
+
+============================================================
+II. USER / SETTINGS
+
+GET /api/v1/users/profile
+
+PUT /api/v1/users/profile
+
+Request:
+
+{
+  "full_name": "string",
+  "avatar_url": "string"
+}
+
+PUT /api/v1/users/password
+
+============================================================
+III. CLASSES
+
+GET /api/v1/classes
+Lấy danh sách lớp của user
+
+POST /api/v1/classes
+Tạo lớp (teacher only)
+
+Request:
+
+{
+  "name": "Lớp 6A",
+  "description": "string",
+  "thumbnail_url": "string"
+}
+
+GET /api/v1/classes/{class_id}
+
+PUT /api/v1/classes/{class_id}
+
+DELETE /api/v1/classes/{class_id}
+
+POST /api/v1/classes/join
+(Student nhập mã lớp)
+
+Request:
+
+{
+  "join_code": "ABC123"
+}
+
+GET /api/v1/classes/{class_id}/students
+
+DELETE /api/v1/classes/{class_id}/students/{student_id}
+
+============================================================
+IV. LIBRARY
+
+GET /api/v1/library
+Query params:
+
+type
+
+subject
+
+grade
+
+search
+
+is_system=true/false
+
+POST /api/v1/library
+Upload tài liệu (teacher)
+
+Request:
+
+{
+  "title": "string",
+  "description": "string",
+  "thumbnail_url": "string",
+  "file_url": "string",
+  "material_type": "book | exam | video | reference",
+  "subject": "string",
+  "grade": "string"
+}
+
+GET /api/v1/library/{material_id}
+
+PUT /api/v1/library/{material_id}
+
+DELETE /api/v1/library/{material_id}
+
+POST /api/v1/classes/{class_id}/materials
+Add tài liệu vào lớp
+
+Request:
+
+{
+  "material_id": "uuid",
+  "chapter_id": "uuid"
+}
+
+GET /api/v1/classes/{class_id}/materials
+
+============================================================
+V. CHAPTER
+
+POST /api/v1/classes/{class_id}/chapters
+
+PUT /api/v1/chapters/{chapter_id}
+
+DELETE /api/v1/chapters/{chapter_id}
+
+============================================================
+VI. EXAMS
+
+GET /api/v1/classes/{class_id}/exams
+
+POST /api/v1/classes/{class_id}/exams
+
+Request:
+
+{
+  "title": "string",
+  "description": "string",
+  "thumbnail_url": "string",
+  "start_time": "datetime",
+  "end_time": "datetime"
+}
+
+GET /api/v1/exams/{exam_id}
+
+PUT /api/v1/exams/{exam_id}
+
+DELETE /api/v1/exams/{exam_id}
+
+============================================================
+VII. QUESTIONS
+
+GET /api/v1/exams/{exam_id}/questions
+
+POST /api/v1/exams/{exam_id}/questions
+
+Request:
+
+{
+  "type": "single_choice | multi_choice | text | image_upload | matching",
+  "content": "string",
+  "instruction": "string",
+  "points": 10,
+  "required": true,
+  "options": [
+    {
+      "content": "A",
+      "is_correct": true
+    }
+  ],
+  "matching_pairs": [
+    {
+      "left_text": "A",
+      "right_text": "1"
+    }
+  ]
+}
+
+PUT /api/v1/questions/{question_id}
+
+DELETE /api/v1/questions/{question_id}
+
+============================================================
+VIII. EXAM SUBMISSION
+
+POST /api/v1/exams/{exam_id}/start
+
+POST /api/v1/exams/{exam_id}/submit
+
+Request:
+
+{
+  "answers": [
+    {
+      "question_id": "uuid",
+      "text_answer": "string",
+      "selected_option_ids": ["uuid"],
+      "uploaded_image_url": "string"
+    }
+  ]
+}
+
+GET /api/v1/exams/{exam_id}/submissions
+(Teacher)
+
+GET /api/v1/submissions/{submission_id}
+
+============================================================
+IX. MESSAGING
+
+GET /api/v1/conversations
+
+POST /api/v1/conversations
+
+Request:
+
+{
+  "user_id": "uuid"
+}
+
+GET /api/v1/conversations/{conversation_id}/messages
+
+POST /api/v1/conversations/{conversation_id}/messages
+
+Request:
+
+{
+  "content": "string",
+  "file_url": "string"
+}
+============================================================
+X. CHATBOT
+
+POST /api/v1/chatbot/ask
+
+Request:
+
+{
+  "question": "string"
+}
+
+Response:
+
+{
+  "status": true,
+  "message": "Trả lời thành công",
+  "data": {
+    "answer": "string"
+  }
+}
+============================================================
+XI. DASHBOARD
+
+GET /api/v1/dashboard/teacher
+
+GET /api/v1/dashboard/student
+
+============================================================
+
+Đặc điểm hệ thống API hiện tại:
+
+RESTful rõ ràng
+
+Phân cấp theo resource
+
+Tách class resource và nested resource
+
+Dễ mở rộng version v2
+
+Phù hợp FastAPI
+
+Phù hợp frontend Vite gọi bằng axios
