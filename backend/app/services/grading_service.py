@@ -16,20 +16,16 @@ def auto_grade(db: Session, submission: Submission) -> Submission:
         if question.type == QuestionType.single_choice:
             correct_ids = {o.id for o in question.options if o.is_correct}
             selected_ids = {ao.option_id for ao in answer.selected_options}
-            if selected_ids == correct_ids and len(selected_ids) > 0:
-                answer.score = float(question.points)
-            else:
-                answer.score = 0.0
-            total_score += answer.score
+            scored = float(question.points) if (selected_ids == correct_ids and len(selected_ids) > 0) else 0.0
+            answer.score = scored
+            total_score += scored
 
         elif question.type == QuestionType.multi_choice:
             correct_ids = {o.id for o in question.options if o.is_correct}
             selected_ids = {ao.option_id for ao in answer.selected_options}
-            if selected_ids == correct_ids and len(selected_ids) > 0:
-                answer.score = float(question.points)
-            else:
-                answer.score = 0.0
-            total_score += answer.score
+            scored = float(question.points) if (selected_ids == correct_ids and len(selected_ids) > 0) else 0.0
+            answer.score = scored
+            total_score += scored
 
         elif question.type == QuestionType.matching:
             # Auto-grade matching: compare student answers with correct pairs
@@ -47,11 +43,9 @@ def auto_grade(db: Session, submission: Submission) -> Submission:
                 if student_val == pair.right_text:
                     correct_count += 1
 
-            if total_pairs > 0 and correct_count == total_pairs:
-                answer.score = float(question.points)
-            else:
-                answer.score = 0.0
-            total_score += answer.score
+            scored = float(question.points) if (total_pairs > 0 and correct_count == total_pairs) else 0.0
+            answer.score = scored
+            total_score += scored
 
         else:
             # text / image_upload = manual grading needed

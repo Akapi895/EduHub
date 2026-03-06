@@ -16,7 +16,7 @@ from app.models.exam import Exam
 from app.utils.responses import ok
 
 
-def _verify_class_access(db: Session, class_: object, user: User) -> None:
+def _verify_class_access(db: Session, class_: Class, user: User) -> None:
     """Raise 403 if user is neither the class teacher nor an enrolled student."""
     if user.role == "teacher" and class_.teacher_id == user.id:
         return
@@ -25,7 +25,7 @@ def _verify_class_access(db: Session, class_: object, user: User) -> None:
     raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập lớp học này")
 
 
-def _class_with_count(db: Session, class_: object) -> dict:
+def _class_with_count(db: Session, class_: Class) -> dict:
     """Serialize a class and add student_count, material_count, exam_count, teacher_name."""
     data = ClassOut.model_validate(class_).model_dump()
     data["student_count"] = db.query(ClassStudent).filter(ClassStudent.class_id == class_.id).count()
@@ -48,23 +48,23 @@ def list_classes(db: Session = Depends(get_db), current_user: User = Depends(get
     class_ids = [c.id for c in classes]
 
     # Batch count queries — one query each instead of N per class
-    student_counts = dict(
+    student_counts: dict[str, int] = dict(
         db.query(ClassStudent.class_id, func.count(ClassStudent.id))
         .filter(ClassStudent.class_id.in_(class_ids))
         .group_by(ClassStudent.class_id)
-        .all()
+        .all()  # type: ignore[arg-type]
     )
-    material_counts = dict(
+    material_counts: dict[str, int] = dict(
         db.query(ClassMaterial.class_id, func.count(ClassMaterial.id))
         .filter(ClassMaterial.class_id.in_(class_ids))
         .group_by(ClassMaterial.class_id)
-        .all()
+        .all()  # type: ignore[arg-type]
     )
-    exam_counts = dict(
+    exam_counts: dict[str, int] = dict(
         db.query(Exam.class_id, func.count(Exam.id))
         .filter(Exam.class_id.in_(class_ids))
         .group_by(Exam.class_id)
-        .all()
+        .all()  # type: ignore[arg-type]
     )
 
     result = []

@@ -1,9 +1,20 @@
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.utils.enums import UserRole
+
+if TYPE_CHECKING:
+    from app.models.class_model import Class, ClassStudent
+    from app.models.material import Material
+    from app.models.exam import Exam
+    from app.models.submission import Submission
+    from app.models.message import Message, ConversationMember
 
 
 class User(Base):
