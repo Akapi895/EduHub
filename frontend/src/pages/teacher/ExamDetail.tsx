@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2 } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2, Eye } from 'lucide-react';
 import QuestionEditor from '@/components/exam/QuestionEditor';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
@@ -11,6 +11,7 @@ import { generateId } from '@/utils/helpers';
 
 export default function TeacherExamDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [exam, setExam] = useState<Exam | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
@@ -334,11 +335,16 @@ export default function TeacherExamDetail() {
                         <th className="pb-3 font-medium text-gray-500">Bắt đầu</th>
                         <th className="pb-3 font-medium text-gray-500">Nộp bài</th>
                         <th className="pb-3 font-medium text-gray-500 text-right">Điểm</th>
+                        <th className="pb-3 font-medium text-gray-500 text-center">Chi tiết</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                       {submissions.map((sub) => (
-                        <tr key={sub.id} className="hover:bg-gray-50">
+                        <tr
+                          key={sub.id}
+                          onClick={() => sub.status !== 'in_progress' && navigate(`/teacher/exams/${exam.id}/submissions/${sub.id}`)}
+                          className={`hover:bg-gray-50 ${sub.status !== 'in_progress' ? 'cursor-pointer' : ''}`}
+                        >
                           <td className="py-3 font-medium text-gray-800">{sub.student_name || sub.student_id}</td>
                           <td className="py-3">
                             <Badge variant={sub.status === 'graded' ? 'mint' : sub.status === 'submitted' ? 'yellow' : 'gray'}>
@@ -348,6 +354,11 @@ export default function TeacherExamDetail() {
                           <td className="py-3 text-gray-500">{formatDate(sub.started_at)}</td>
                           <td className="py-3 text-gray-500">{sub.submitted_at ? formatDate(sub.submitted_at) : '-'}</td>
                           <td className="py-3 text-right font-bold text-primary">{sub.total_score != null ? sub.total_score : '-'}</td>
+                          <td className="py-3 text-center">
+                            {sub.status !== 'in_progress' && (
+                              <Eye className="w-4 h-4 text-gray-400 inline-block" />
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

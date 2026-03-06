@@ -11,6 +11,7 @@ import TeacherLibrary from '@/pages/teacher/Library';
 import TeacherClasses from '@/pages/teacher/Classes';
 import TeacherClassDetail from '@/pages/teacher/ClassDetail';
 import TeacherExamDetail from '@/pages/teacher/ExamDetail';
+import TeacherSubmissionReview from '@/pages/teacher/SubmissionReview';
 import CreateExam from '@/pages/teacher/CreateExam';
 import TeacherInbox from '@/pages/teacher/Inbox';
 import TeacherSettings from '@/pages/teacher/Settings';
@@ -45,6 +46,7 @@ export const routes: RouteObject[] = [
       { path: 'classes/:id', element: <TeacherClassDetail /> },
       { path: 'classes/:classId/exams/create', element: <CreateExam /> },
       { path: 'exams/:id', element: <TeacherExamDetail /> },
+      { path: 'exams/:examId/submissions/:submissionId', element: <TeacherSubmissionReview /> },
       { path: 'inbox', element: <TeacherInbox /> },
       { path: 'settings', element: <TeacherSettings /> },
     ],

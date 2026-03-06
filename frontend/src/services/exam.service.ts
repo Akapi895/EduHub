@@ -25,4 +25,7 @@ export const examService = {
   getSubmissionDetail: (submissionId: string) =>
     api.get(`/submissions/${submissionId}/detail`),
   getAllMySubmissions: () => api.get('/submissions/my-all'),
+  getAllMyExams: () => api.get('/exams/my-all'),
+  gradeAnswer: (answerId: string, score: number) =>
+    api.put(`/answers/${answerId}/grade`, { score }),
 };

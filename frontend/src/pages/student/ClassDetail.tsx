@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, FileText, Loader2 } from 'lucide-react';
 import ChapterSection from '@/components/classes/ChapterSection';
 import ExamCard from '@/components/exam/ExamCard';
@@ -11,11 +11,14 @@ type Tab = 'materials' | 'exams';
 export default function StudentClassDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [classItem, setClassItem] = useState<Class | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('materials');
+  const [activeTab, setActiveTab] = useState<Tab>(
+    (searchParams.get('tab') as Tab) || 'materials'
+  );
 
   const fetchClassData = useCallback(async () => {
     if (!id) return;
@@ -135,7 +138,7 @@ export default function StudentClassDetail() {
                 <ExamCard
                   key={exam.id}
                   exam={exam}
-                  onClick={() => navigate(`/student/exam/${exam.id}`)}
+                  onClick={() => navigate(`/student/exam/${exam.id}?from=class&classId=${id}`)}
                 />
               ))}
               {exams.length === 0 && (

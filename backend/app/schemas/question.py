@@ -16,6 +16,14 @@ class OptionOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class OptionStudentOut(BaseModel):
+    """Option without is_correct — safe for students."""
+    id: str
+    content: str
+
+    model_config = {"from_attributes": True}
+
+
 class MatchingPairCreate(BaseModel):
     left_text: str
     right_text: str
@@ -27,6 +35,15 @@ class MatchingPairOut(BaseModel):
     left_text: str
     right_text: str
     correct_match: str
+
+    model_config = {"from_attributes": True}
+
+
+class MatchingPairStudentOut(BaseModel):
+    """Matching pair without correct_match — safe for students."""
+    id: str
+    left_text: str
+    right_text: str
 
     model_config = {"from_attributes": True}
 
@@ -64,6 +81,23 @@ class QuestionOut(BaseModel):
     order_index: int
     options: list[OptionOut] = []
     matching_pairs: list[MatchingPairOut] = []
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class QuestionStudentOut(BaseModel):
+    """Question schema for students — no is_correct, no correct_match."""
+    id: str
+    exam_id: str
+    type: str
+    content: str
+    instruction: str | None = None
+    points: int
+    required: bool
+    order_index: int
+    options: list[OptionStudentOut] = []
+    matching_pairs: list[MatchingPairStudentOut] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}

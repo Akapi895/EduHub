@@ -89,6 +89,8 @@ export interface Exam {
   created_by: string;
   created_at: string;
   question_count?: number;
+  student_status?: 'not_started' | 'in_progress' | 'completed';
+  best_score?: number | null;
 }
 
 // ====== Question ======
@@ -144,6 +146,8 @@ export interface SubmissionAnswer {
   text_answer?: string;
   selected_option_ids?: string[];
   score?: number;
+  correct_option_ids?: string[];
+  correct_matches?: string[];
 }
 
 // ====== Messaging ======

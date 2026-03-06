@@ -46,6 +46,7 @@ def start_submission(db: Session, *, exam_id: str, student_id: str) -> Submissio
         exam_id=exam_id,
         student_id=student_id,
         status=SubmissionStatus.in_progress,
+        started_at=datetime.now(),
     )
     db.add(submission)
     db.commit()
@@ -65,7 +66,7 @@ def submit_exam(db: Session, *, submission: Submission, answers_data: list[dict]
         db.flush()
         for opt_id in a.get("selected_option_ids", []):
             db.add(AnswerOption(answer_id=answer.id, option_id=opt_id))
-    submission.submitted_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    submission.submitted_at = datetime.now()
     submission.status = SubmissionStatus.submitted
     db.commit()
     db.refresh(submission)

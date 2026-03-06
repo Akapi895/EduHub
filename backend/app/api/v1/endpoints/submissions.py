@@ -6,8 +6,10 @@ from app.db.session import get_db
 from app.crud import submission as submission_crud
 from app.crud import exam as exam_crud
 from app.services import exam_service
+from app.services.grading_service import grade_answer
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
+from app.models.submission import Answer as AnswerModel
 from app.utils.responses import ok
 
 router = APIRouter(tags=["Submissions"])
@@ -38,16 +40,27 @@ def _serialize_submission(s):
 
 
 def _serialize_submission_detail(s):
-    """Full submission with answers for review."""
+    """Full submission with answers for review, including correct answer data."""
+    is_completed = s.status != "in_progress"
     answers = []
     for a in s.answers:
-        answers.append({
+        answer_data = {
             "id": a.id,
             "question_id": a.question_id,
             "text_answer": a.text_answer,
             "selected_option_ids": [ao.option_id for ao in a.selected_options],
             "score": a.score,
-        })
+        }
+        # Include correct answer info for completed submissions
+        if is_completed and a.question:
+            q = a.question
+            if q.type in ("single_choice", "multi_choice"):
+                answer_data["correct_option_ids"] = [o.id for o in q.options if o.is_correct]
+            elif q.type == "matching":
+                answer_data["correct_matches"] = [
+                    p.right_text for p in q.matching_pairs
+                ]
+        answers.append(answer_data)
     data = _serialize_submission(s)
     data["answers"] = answers
     return data
@@ -147,3 +160,29 @@ def get_submission_detail(
     if sub.student_id != current_user.id and current_user.role != "teacher":
         raise HTTPException(status_code=403, detail="Forbidden")
     return ok(data=_serialize_submission_detail(sub))
+
+
+class GradeAnswerRequest(BaseModel):
+    score: float
+
+
+@router.put("/answers/{answer_id}/grade")
+def grade_single_answer(
+    answer_id: str,
+    data: GradeAnswerRequest,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    """Teacher grades a single answer (for text/essay questions)."""
+    answer = db.query(AnswerModel).filter(AnswerModel.id == answer_id).first()
+    if not answer:
+        raise HTTPException(status_code=404, detail="Answer not found")
+    if data.score < 0 or data.score > answer.question.points:
+        raise HTTPException(status_code=400, detail=f"Điểm phải từ 0 đến {answer.question.points}")
+    graded = grade_answer(db, answer=answer, score=data.score, grader_id=teacher.id)
+    return ok(data={
+        "id": graded.id,
+        "score": graded.score,
+        "submission_status": graded.submission.status,
+        "submission_total_score": graded.submission.total_score,
+    }, message="Đã chấm điểm")
