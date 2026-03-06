@@ -59,6 +59,7 @@ export const routes: RouteObject[] = [
       { path: 'dashboard', element: <StudentDashboard /> },
       { path: 'classes', element: <StudentClasses /> },
       { path: 'classes/:id', element: <StudentClassDetail /> },
+      { path: 'library/:id', element: <MaterialDetail /> },
       { path: 'exam/:id', element: <StudentExam /> },
       { path: 'exams', element: <StudentExams /> },
       { path: 'inbox', element: <StudentInbox /> },

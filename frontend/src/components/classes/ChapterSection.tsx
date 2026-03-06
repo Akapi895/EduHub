@@ -11,9 +11,10 @@ interface ChapterSectionProps {
   onMaterialAdded?: () => void;
   onChapterDeleted?: () => void;
   readOnly?: boolean;
+  materialBasePath?: string;
 }
 
-export default function ChapterSection({ chapter, classId, onMaterialAdded, onChapterDeleted, readOnly }: ChapterSectionProps) {
+export default function ChapterSection({ chapter, classId, onMaterialAdded, onChapterDeleted, readOnly, materialBasePath = '/teacher/library' }: ChapterSectionProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
   const [showAddMaterial, setShowAddMaterial] = useState(false);
@@ -74,7 +75,7 @@ export default function ChapterSection({ chapter, classId, onMaterialAdded, onCh
             <div
               key={mat.id}
               className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group cursor-pointer"
-              onClick={() => navigate(`/teacher/library/${mat.id}`)}
+              onClick={() => navigate(`${materialBasePath}/${mat.id}`)}
             >
               <FileText className="w-4 h-4 text-gray-400" />
               <div className="flex-1 min-w-0">

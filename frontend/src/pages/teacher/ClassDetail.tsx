@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, BookOpen, FileText, Plus, Copy, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, Users, BookOpen, FileText, Plus, Copy, Check, Loader2, Settings } from 'lucide-react';
 import ChapterSection from '@/components/classes/ChapterSection';
 import StudentTable from '@/components/classes/StudentTable';
 import ExamCard from '@/components/exam/ExamCard';
@@ -10,7 +10,7 @@ import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
 import type { Class, Chapter, Exam, User } from '@/types';
 
-type Tab = 'materials' | 'exams' | 'students';
+type Tab = 'materials' | 'exams' | 'students' | 'settings';
 
 export default function TeacherClassDetail() {
   const { id } = useParams();
@@ -24,6 +24,8 @@ export default function TeacherClassDetail() {
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [newChapter, setNewChapter] = useState('');
   const [copied, setCopied] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', description: '' });
+  const [saving, setSaving] = useState(false);
 
   const fetchClassData = useCallback(async () => {
     if (!id) return;
@@ -36,6 +38,8 @@ export default function TeacherClassDetail() {
         classService.getChapters(id),
       ]);
       setClassItem(classRes.data.data);
+      const cls = classRes.data.data;
+      setEditForm({ name: cls?.name || '', description: cls?.description || '' });
       setStudents(studentsRes.data.data || []);
       setExams(examsRes.data.data || []);
       setChapters(chaptersRes.data.data || []);
@@ -73,6 +77,7 @@ export default function TeacherClassDetail() {
     { key: 'materials', label: 'Tài liệu', icon: <BookOpen className="w-4 h-4" /> },
     { key: 'exams', label: 'Bài kiểm tra', icon: <FileText className="w-4 h-4" /> },
     { key: 'students', label: 'Học sinh', icon: <Users className="w-4 h-4" /> },
+    { key: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
   ];
 
   const handleCopyCode = () => {
@@ -207,6 +212,58 @@ export default function TeacherClassDetail() {
                   }
                 }}
               />
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-6 max-w-lg">
+              <Input
+                label="Tên lớp"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none resize-none"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      await classService.updateClass(id!, editForm);
+                      await fetchClassData();
+                    } catch (err: any) {
+                      alert(err.response?.data?.message || 'Cập nhật thất bại');
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                  disabled={!editForm.name || saving}
+                >
+                  {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={async () => {
+                    if (!window.confirm('Bạn có chắc chắn muốn xóa lớp học này?')) return;
+                    try {
+                      await classService.deleteClass(id!);
+                      navigate('/teacher/classes');
+                    } catch (err: any) {
+                      alert(err.response?.data?.message || 'Xóa lớp thất bại');
+                    }
+                  }}
+                  className="!text-red-600 !border-red-200 hover:!bg-red-50"
+                >
+                  Xóa lớp học
+                </Button>
+              </div>
             </div>
           )}
         </div>

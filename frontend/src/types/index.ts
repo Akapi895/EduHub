@@ -75,6 +75,7 @@ export interface Material {
 export interface Exam {
   id: string;
   class_id: string;
+  class_name?: string;
   title: string;
   description: string;
   thumbnail_url: string;

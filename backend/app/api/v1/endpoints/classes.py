@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.db.session import get_db
 from app.schemas.class_schema import (
@@ -10,9 +11,18 @@ from app.schemas.user import UserPublic
 from app.crud import class_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
-from app.models.class_model import Chapter, ClassStudent, ClassMaterial
+from app.models.class_model import Class, Chapter, ClassStudent, ClassMaterial
 from app.models.exam import Exam
 from app.utils.responses import ok
+
+
+def _verify_class_access(db: Session, class_: object, user: User) -> None:
+    """Raise 403 if user is neither the class teacher nor an enrolled student."""
+    if user.role == "teacher" and class_.teacher_id == user.id:
+        return
+    if user.role == "student" and class_crud.is_member(db, class_id=class_.id, user_id=user.id):
+        return
+    raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập lớp học này")
 
 
 def _class_with_count(db: Session, class_: object) -> dict:
@@ -27,13 +37,45 @@ def _class_with_count(db: Session, class_: object) -> dict:
 
 
 router = APIRouter(prefix="/classes", tags=["Classes"])
-chapters_router = APIRouter(prefix="/chapters", tags=["Chapters"])
 
 
 @router.get("")
 def list_classes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     classes = class_crud.get_classes_for_user(db, current_user.id, current_user.role)
-    return ok(data=[_class_with_count(db, c) for c in classes])
+    if not classes:
+        return ok(data=[])
+
+    class_ids = [c.id for c in classes]
+
+    # Batch count queries — one query each instead of N per class
+    student_counts = dict(
+        db.query(ClassStudent.class_id, func.count(ClassStudent.id))
+        .filter(ClassStudent.class_id.in_(class_ids))
+        .group_by(ClassStudent.class_id)
+        .all()
+    )
+    material_counts = dict(
+        db.query(ClassMaterial.class_id, func.count(ClassMaterial.id))
+        .filter(ClassMaterial.class_id.in_(class_ids))
+        .group_by(ClassMaterial.class_id)
+        .all()
+    )
+    exam_counts = dict(
+        db.query(Exam.class_id, func.count(Exam.id))
+        .filter(Exam.class_id.in_(class_ids))
+        .group_by(Exam.class_id)
+        .all()
+    )
+
+    result = []
+    for c in classes:
+        data = ClassOut.model_validate(c).model_dump()
+        data["student_count"] = student_counts.get(c.id, 0)
+        data["material_count"] = material_counts.get(c.id, 0)
+        data["exam_count"] = exam_counts.get(c.id, 0)
+        data["teacher_name"] = c.teacher.full_name if c.teacher else None
+        result.append(data)
+    return ok(data=result)
 
 
 @router.post("", status_code=201)
@@ -55,6 +97,7 @@ def get_class(
     class_ = class_crud.get_class(db, class_id)
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
+    _verify_class_access(db, class_, current_user)
     return ok(data=_class_with_count(db, class_))
 
 
@@ -111,6 +154,7 @@ def get_students(
     class_ = class_crud.get_class(db, class_id)
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
+    _verify_class_access(db, class_, current_user)
     students = [UserPublic.model_validate(m.student).model_dump() for m in class_.students]
     return ok(data=students)
 
@@ -141,6 +185,7 @@ def list_chapters(
     class_ = class_crud.get_class(db, class_id)
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
+    _verify_class_access(db, class_, current_user)
     chapters = class_crud.get_chapters(db, class_id)
     result = []
     for ch in chapters:
@@ -232,44 +277,6 @@ def get_class_materials(
     class_ = class_crud.get_class(db, class_id)
     if not class_:
         raise HTTPException(status_code=404, detail="Class not found")
+    _verify_class_access(db, class_, current_user)
     mats = class_crud.get_class_materials(db, class_id)
     return ok(data=[{"id": m.id, "material_id": m.material_id, "chapter_id": m.chapter_id} for m in mats])
-
-
-# ---- Standalone chapter routes: PUT/DELETE /chapters/{chapter_id} ----
-
-def _get_chapter_or_404(db: Session, chapter_id: str) -> Chapter:
-    ch = db.query(Chapter).filter(Chapter.id == chapter_id).first()
-    if not ch:
-        raise HTTPException(status_code=404, detail="Chapter not found")
-    return ch
-
-
-@chapters_router.put("/{chapter_id}")
-def update_chapter(
-    chapter_id: str,
-    data: ChapterUpdate,
-    db: Session = Depends(get_db),
-    teacher: User = Depends(require_teacher),
-):
-    ch = _get_chapter_or_404(db, chapter_id)
-    # Verify teacher owns the class
-    class_ = class_crud.get_class(db, ch.class_id)
-    if not class_ or class_.teacher_id != teacher.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    ch = class_crud.update_chapter(db, chapter=ch, data=data)
-    return ok(data=ChapterOut.model_validate(ch).model_dump())
-
-
-@chapters_router.delete("/{chapter_id}", status_code=200)
-def delete_chapter(
-    chapter_id: str,
-    db: Session = Depends(get_db),
-    teacher: User = Depends(require_teacher),
-):
-    ch = _get_chapter_or_404(db, chapter_id)
-    class_ = class_crud.get_class(db, ch.class_id)
-    if not class_ or class_.teacher_id != teacher.id:
-        raise HTTPException(status_code=403, detail="Not allowed")
-    class_crud.delete_chapter(db, chapter=ch)
-    return ok(message="Da xoa chuong")

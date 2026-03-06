@@ -77,7 +77,7 @@ export default function StudentDashboard() {
           {data?.classes?.map((cls) => (
             <Link
               key={cls.id}
-              to={`/student/classes`}
+              to={`/student/classes/${cls.id}`}
               className="flex items-center justify-between p-3 bg-primary-lighter rounded-xl hover:bg-blue-100 transition-colors"
             >
               <p className="font-medium text-gray-800">{cls.name}</p>

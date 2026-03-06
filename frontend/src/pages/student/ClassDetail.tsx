@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, Loader2, User, Users } from 'lucide-react';
 import ChapterSection from '@/components/classes/ChapterSection';
 import ExamCard from '@/components/exam/ExamCard';
 import { classService } from '@/services/class.service';
@@ -84,7 +84,20 @@ export default function StudentClassDetail() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {classItem.teacher_name && (
+          <div className="bg-white rounded-card p-4 shadow-sm text-center">
+            <div className="flex justify-center mb-1"><User className="w-5 h-5 text-primary" /></div>
+            <p className="text-sm font-semibold text-gray-800 truncate">{classItem.teacher_name}</p>
+            <p className="text-xs text-gray-500">Giáo viên</p>
+          </div>
+        )}
+        {classItem.student_count != null && (
+          <div className="bg-white rounded-card p-4 shadow-sm text-center">
+            <p className="text-2xl font-bold text-primary">{classItem.student_count}</p>
+            <p className="text-sm text-gray-500">Sĩ số</p>
+          </div>
+        )}
         <div className="bg-white rounded-card p-4 shadow-sm text-center">
           <p className="text-2xl font-bold text-accent-purple">{chapters.length}</p>
           <p className="text-sm text-gray-500">Chương</p>
@@ -124,6 +137,7 @@ export default function StudentClassDetail() {
                     chapter={chapter}
                     classId={id!}
                     readOnly
+                    materialBasePath="/student/library"
                   />
                 ))
               ) : (

@@ -7,7 +7,6 @@ import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
 import { useDebounce } from '@/hooks/useDebounce';
-import { SUBJECTS, GRADES } from '@/utils/constants';
 import api from '@/services/api';
 import type { Class } from '@/types';
 
@@ -17,7 +16,7 @@ export default function TeacherClasses() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', subject: 'ngữ văn', grade: '', description: '' });
+  const [form, setForm] = useState({ name: '', description: '' });
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -75,15 +74,20 @@ export default function TeacherClasses() {
         });
         thumbnail_url = uploadRes.data.data.url;
       }
-      await classService.createClass({
+      const res = await classService.createClass({
         name: form.name,
         description: form.description,
         thumbnail_url,
       });
+      const newClassId = res.data.data?.id;
       setShowCreate(false);
-      setForm({ name: '', subject: 'ngữ văn', grade: '', description: '' });
+      setForm({ name: '', description: '' });
       removeThumbnail();
-      fetchClasses();
+      if (newClassId) {
+        navigate(`/teacher/classes/${newClassId}`);
+      } else {
+        fetchClasses();
+      }
     } catch (err: any) {
       alert(err.response?.data?.message || 'Tạo lớp thất bại');
     } finally {
@@ -140,34 +144,6 @@ export default function TeacherClasses() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="VD: Văn 6A1"
           />
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
-              <select
-                value={form.subject}
-                onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-              >
-                <option value="">Chọn môn</option>
-                {SUBJECTS.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Khối lớp</label>
-              <select
-                value={form.grade}
-                onChange={(e) => setForm({ ...form, grade: e.target.value })}
-                className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-              >
-                <option value="">Chọn khối</option>
-                {GRADES.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
             <textarea

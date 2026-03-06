@@ -54,6 +54,9 @@ export default function ExamCard({ exam, onClick }: ExamCardProps) {
       </div>
       <div className="p-4">
         <h3 className="font-semibold text-gray-800 mb-2">{exam.title}</h3>
+        {exam.class_name && (
+          <p className="text-xs text-primary font-medium mb-1">{exam.class_name}</p>
+        )}
         <p className="text-sm text-gray-500 line-clamp-2 mb-3">{exam.description}</p>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4 text-xs text-gray-400">
