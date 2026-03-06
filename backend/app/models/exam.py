@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 from app.utils.enums import ExamStatus
@@ -16,6 +16,11 @@ class Exam(Base):
     thumbnail_url: Mapped[str | None] = mapped_column(String, nullable=True)
     start_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    shuffle_questions: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_attempts: Mapped[int] = mapped_column(Integer, default=1)
+    allow_review: Mapped[bool] = mapped_column(Boolean, default=True)
+    show_answers_policy: Mapped[str] = mapped_column(String, default="never")
     status: Mapped[str] = mapped_column(String, default=ExamStatus.upcoming, nullable=False)
     created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

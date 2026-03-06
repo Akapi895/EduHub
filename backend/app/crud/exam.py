@@ -24,7 +24,10 @@ def get_exams_for_class(db: Session, class_id: str) -> list[Exam]:
 
 
 def get_exam(db: Session, exam_id: str) -> Exam | None:
-    return db.query(Exam).filter(Exam.id == exam_id).first()
+    exam = db.query(Exam).filter(Exam.id == exam_id).first()
+    if exam:
+        exam.status = _compute_status(exam)
+    return exam
 
 
 def create_exam(db: Session, *, class_id: str, created_by: str, data: ExamCreate) -> Exam:
@@ -80,15 +83,21 @@ def create_question(db: Session, *, exam_id: str, data: QuestionCreate) -> Quest
 def update_question(db: Session, *, question: Question, data: QuestionUpdate) -> Question:
     update_data = data.model_dump(exclude_unset=True)
     options_data = update_data.pop("options", None)
+    pairs_data = update_data.pop("matching_pairs", None)
     for field, value in update_data.items():
         setattr(question, field, value)
     if options_data is not None:
-        # Replace all options
         for opt in question.options:
             db.delete(opt)
         db.flush()
         for opt in options_data:
             db.add(QuestionOption(question_id=question.id, **opt))
+    if pairs_data is not None:
+        for pair in question.matching_pairs:
+            db.delete(pair)
+        db.flush()
+        for pair in pairs_data:
+            db.add(MatchingPair(question_id=question.id, **pair))
     db.commit()
     db.refresh(question)
     return question

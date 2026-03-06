@@ -6,6 +6,17 @@ from app.db.base import Base
 from app.utils.enums import MaterialType
 
 
+class Folder(Base):
+    __tablename__ = "folders"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    materials: Mapped[list["Material"]] = relationship("Material", back_populates="folder")
+
+
 class Material(Base):
     __tablename__ = "library_materials"
 
@@ -18,8 +29,10 @@ class Material(Base):
     subject: Mapped[str | None] = mapped_column(String, nullable=True)
     grade: Mapped[str | None] = mapped_column(String, nullable=True)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
+    folder_id: Mapped[str | None] = mapped_column(String, ForeignKey("folders.id"), nullable=True)
     created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     creator: Mapped["User"] = relationship("User", back_populates="materials")
+    folder: Mapped["Folder | None"] = relationship("Folder", back_populates="materials")
     class_materials: Mapped[list["ClassMaterial"]] = relationship("ClassMaterial", back_populates="material", cascade="all, delete-orphan")

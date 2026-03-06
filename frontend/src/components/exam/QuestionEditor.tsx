@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Question, QuestionOption } from '@/types';
+import type { Question, QuestionOption, MatchingPair } from '@/types';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import Badge from '@/components/common/Badge';
@@ -69,6 +69,21 @@ export default function QuestionEditor({
     }
   };
 
+  const pairs = question.matching_pairs || [];
+
+  const addPair = () => {
+    const newPair: MatchingPair = { id: generateId(), left_text: '', right_text: '' };
+    onChange({ ...question, matching_pairs: [...pairs, newPair] });
+  };
+
+  const updatePair = (pairId: string, data: Partial<MatchingPair>) => {
+    onChange({ ...question, matching_pairs: pairs.map((p) => (p.id === pairId ? { ...p, ...data } : p)) });
+  };
+
+  const removePair = (pairId: string) => {
+    onChange({ ...question, matching_pairs: pairs.filter((p) => p.id !== pairId) });
+  };
+
   return (
     <div className="bg-white rounded-card border border-border shadow-sm">
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
@@ -127,6 +142,7 @@ export default function QuestionEditor({
                 <option value="single_choice">Trắc nghiệm (1 đáp án)</option>
                 <option value="multi_choice">Nhiều đáp án</option>
                 <option value="text">Tự luận</option>
+                <option value="matching">Nối cột</option>
               </select>
             </div>
           </div>
@@ -168,6 +184,42 @@ export default function QuestionEditor({
               ))}
               <Button variant="ghost" size="sm" onClick={addOption}>
                 <Plus className="w-4 h-4 mr-1" /> Thêm đáp án
+              </Button>
+            </div>
+          )}
+
+          {question.type === 'matching' && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Các cặp nối</label>
+              <div className="grid grid-cols-[1fr_1fr_auto] gap-2 text-xs font-medium text-gray-500 px-1">
+                <span>Cột trái</span>
+                <span>Cột phải</span>
+                <span className="w-8" />
+              </div>
+              {pairs.map((pair) => (
+                <div key={pair.id} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                  <input
+                    value={pair.left_text}
+                    onChange={(e) => updatePair(pair.id, { left_text: e.target.value })}
+                    placeholder="Nội dung trái"
+                    className="px-3 py-2 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none text-sm"
+                  />
+                  <input
+                    value={pair.right_text}
+                    onChange={(e) => updatePair(pair.id, { right_text: e.target.value })}
+                    placeholder="Nội dung phải"
+                    className="px-3 py-2 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none text-sm"
+                  />
+                  <button
+                    onClick={() => removePair(pair.id)}
+                    className="p-1 text-gray-400 hover:text-red-500"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              <Button variant="ghost" size="sm" onClick={addPair}>
+                <Plus className="w-4 h-4 mr-1" /> Thêm cặp nối
               </Button>
             </div>
           )}

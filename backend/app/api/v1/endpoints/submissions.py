@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.crud import submission as submission_crud
+from app.crud import exam as exam_crud
 from app.services import exam_service
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
@@ -28,11 +29,28 @@ def _serialize_submission(s):
         "id": s.id,
         "exam_id": s.exam_id,
         "student_id": s.student_id,
+        "student_name": s.student.full_name if s.student else None,
         "started_at": s.started_at.isoformat() if s.started_at else None,
         "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
         "total_score": s.total_score,
         "status": s.status,
     }
+
+
+def _serialize_submission_detail(s):
+    """Full submission with answers for review."""
+    answers = []
+    for a in s.answers:
+        answers.append({
+            "id": a.id,
+            "question_id": a.question_id,
+            "text_answer": a.text_answer,
+            "selected_option_ids": [ao.option_id for ao in a.selected_options],
+            "score": a.score,
+        })
+    data = _serialize_submission(s)
+    data["answers"] = answers
+    return data
 
 
 @router.post("/exams/{exam_id}/start")
@@ -57,6 +75,23 @@ def submit_exam(
     return ok(data=_serialize_submission(submission), message="Nop bai thanh cong")
 
 
+@router.get("/exams/{exam_id}/my-submissions")
+def my_submissions(
+    exam_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all submissions for the current student on this exam."""
+    subs = submission_crud.get_all_submissions_for_exam_student(db, exam_id, current_user.id)
+    exam = exam_crud.get_exam(db, exam_id)
+    return ok(data={
+        "submissions": [_serialize_submission(s) for s in subs],
+        "max_attempts": exam.max_attempts if exam else 1,
+        "allow_review": exam.allow_review if exam else False,
+        "show_answers_policy": exam.show_answers_policy if exam else "never",
+    })
+
+
 @router.get("/exams/{exam_id}/submissions")
 def list_submissions(
     exam_id: str,
@@ -65,6 +100,25 @@ def list_submissions(
 ):
     subs = submission_crud.get_submissions_for_exam(db, exam_id)
     return ok(data=[_serialize_submission(s) for s in subs])
+
+
+@router.get("/submissions/my-all")
+def my_all_submissions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """All submissions for the current student across all exams."""
+    subs = submission_crud.get_all_submissions_for_student(db, current_user.id)
+    result = []
+    for s in subs:
+        d = _serialize_submission(s)
+        d["exam_title"] = s.exam.title if s.exam else None
+        d["class_name"] = s.exam.class_.name if s.exam and s.exam.class_ else None
+        d["class_id"] = s.exam.class_id if s.exam else None
+        d["allow_review"] = s.exam.allow_review if s.exam else False
+        d["duration_minutes"] = s.exam.duration_minutes if s.exam else None
+        result.append(d)
+    return ok(data=result)
 
 
 @router.get("/submissions/{submission_id}")
@@ -77,3 +131,19 @@ def get_submission(
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
     return ok(data=_serialize_submission(sub))
+
+
+@router.get("/submissions/{submission_id}/detail")
+def get_submission_detail(
+    submission_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get submission with all answers for review."""
+    sub = submission_crud.get_submission(db, submission_id)
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    # Only the student themselves or a teacher can view
+    if sub.student_id != current_user.id and current_user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return ok(data=_serialize_submission_detail(sub))

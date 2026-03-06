@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText, BookOpen, Video, ClipboardList, Download, Loader2 } from 'lucide-react';
 import Badge from '@/components/common/Badge';
 import { libraryService } from '@/services/library.service';
@@ -24,6 +24,7 @@ const typeBadge: Record<string, { label: string; variant: 'blue' | 'pink' | 'pur
 
 export default function MaterialDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [material, setMaterial] = useState<Material | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -62,9 +63,9 @@ export default function MaterialDetail() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3">
-        <Link to="/teacher/library/personal" className="text-gray-400 hover:text-gray-600">
+        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600">
           <ArrowLeft className="w-5 h-5" />
-        </Link>
+        </button>
         <h1 className="text-2xl font-bold text-gray-800">Chi tiết tài liệu</h1>
       </div>
 

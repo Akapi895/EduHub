@@ -37,12 +37,10 @@ export const SUBMISSION_STATUS = {
 } as const;
 
 export const SUBJECTS = [
-  'Toán',
-  'Ngữ Văn',
-  'Tiếng Anh',
-  'Khoa học',
-  'Lịch sử',
-  'Địa lý',
+  'Đọc',
+  'Viết',
+  'Nói và nghe',
+  'Thực hành tiếng Việt',
 ] as const;
 
 export const GRADES = ['Lớp 6', 'Lớp 7', 'Lớp 8', 'Lớp 9'] as const;

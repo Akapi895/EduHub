@@ -50,6 +50,7 @@ class QuestionUpdate(BaseModel):
     required: bool | None = None
     order_index: int | None = None
     options: list[OptionCreate] | None = None
+    matching_pairs: list[MatchingPairCreate] | None = None
 
 
 class QuestionOut(BaseModel):

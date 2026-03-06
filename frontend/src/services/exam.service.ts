@@ -16,8 +16,13 @@ export const examService = {
   startExam: (examId: string) => api.post(`/exams/${examId}/start`),
   submitExam: (examId: string, answers: Answer[]) =>
     api.post(`/exams/${examId}/submit`, { answers }),
+  getMySubmissions: (examId: string) =>
+    api.get(`/exams/${examId}/my-submissions`),
   getSubmissions: (examId: string) =>
     api.get(`/exams/${examId}/submissions`),
   getSubmission: (submissionId: string) =>
     api.get(`/submissions/${submissionId}`),
+  getSubmissionDetail: (submissionId: string) =>
+    api.get(`/submissions/${submissionId}/detail`),
+  getAllMySubmissions: () => api.get('/submissions/my-all'),
 };

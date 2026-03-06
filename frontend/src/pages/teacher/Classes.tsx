@@ -17,7 +17,7 @@ export default function TeacherClasses() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: '', subject: '', grade: '', description: '' });
+  const [form, setForm] = useState({ name: '', subject: 'ngữ văn', grade: '', description: '' });
   const [thumbnailFile, setThumbnailFile] = useState<File | null>(null);
   const [thumbnailPreview, setThumbnailPreview] = useState<string | null>(null);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
@@ -81,7 +81,7 @@ export default function TeacherClasses() {
         thumbnail_url,
       });
       setShowCreate(false);
-      setForm({ name: '', subject: '', grade: '', description: '' });
+      setForm({ name: '', subject: 'ngữ văn', grade: '', description: '' });
       removeThumbnail();
       fetchClasses();
     } catch (err: any) {
@@ -138,7 +138,7 @@ export default function TeacherClasses() {
             label="Tên lớp"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="VD: Toán 12A1"
+            placeholder="VD: Văn 6A1"
           />
           <div className="grid grid-cols-2 gap-4">
             <div>

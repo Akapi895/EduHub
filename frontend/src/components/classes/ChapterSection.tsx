@@ -1,5 +1,6 @@
-import { ChevronDown, ChevronRight, FileText, Plus, Trash2, MoreVertical } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { ChevronDown, ChevronRight, FileText, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { Chapter } from '@/types';
 import { classService } from '@/services/class.service';
 import AddMaterialToChapterModal from './AddMaterialToChapterModal';
@@ -13,18 +14,9 @@ interface ChapterSectionProps {
 }
 
 export default function ChapterSection({ chapter, classId, onMaterialAdded, onChapterDeleted, readOnly }: ChapterSectionProps) {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(true);
   const [showAddMaterial, setShowAddMaterial] = useState(false);
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   const handleRemoveMaterial = async (materialId: string) => {
     const classMaterialId = chapter.class_material_ids?.[materialId];
@@ -77,11 +69,12 @@ export default function ChapterSection({ chapter, classId, onMaterialAdded, onCh
       </div>
 
       {isOpen && (
-        <div className="divide-y divide-border" ref={menuRef}>
+        <div className="divide-y divide-border">
           {chapter.materials.map((mat) => (
             <div
               key={mat.id}
-              className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group"
+              className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors group cursor-pointer"
+              onClick={() => navigate(`/teacher/library/${mat.id}`)}
             >
               <FileText className="w-4 h-4 text-gray-400" />
               <div className="flex-1 min-w-0">
@@ -89,24 +82,13 @@ export default function ChapterSection({ chapter, classId, onMaterialAdded, onCh
                 <p className="text-xs text-gray-400">{mat.subject} • {mat.material_type}</p>
               </div>
               {!readOnly && (
-                <div className="relative">
-                  <button
-                    onClick={() => setMenuOpen(menuOpen === mat.id ? null : mat.id)}
-                    className="p-1 text-gray-300 hover:text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <MoreVertical className="w-4 h-4" />
-                  </button>
-                  {menuOpen === mat.id && (
-                    <div className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-border py-1 z-10 min-w-[140px]">
-                      <button
-                        onClick={() => { setMenuOpen(null); handleRemoveMaterial(mat.id); }}
-                        className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> Gỡ khỏi chương
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleRemoveMaterial(mat.id); }}
+                  className="p-1 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Gỡ khỏi chương"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               )}
             </div>
           ))}

@@ -15,9 +15,15 @@ def start_exam(db: Session, *, exam_id: str, student_id: str):
     if exam.status == ExamStatus.closed:
         raise HTTPException(status_code=400, detail="Exam is closed")
 
+    # Check for active in-progress submission
     existing = submission_crud.get_submission_for_exam_student(db, exam_id, student_id)
     if existing:
         return existing  # resume
+
+    # Check max attempts
+    all_subs = submission_crud.get_all_submissions_for_exam_student(db, exam_id, student_id)
+    if len(all_subs) >= exam.max_attempts:
+        raise HTTPException(status_code=400, detail="Bạn đã hết lượt làm bài")
 
     return submission_crud.start_submission(db, exam_id=exam_id, student_id=student_id)
 
@@ -29,7 +35,6 @@ def submit_exam(db: Session, *, exam_id: str, student_id: str, answers_data: lis
 
     submission = submission_crud.submit_exam(db, submission=submission, answers_data=answers_data)
     # Auto-grade immediately
-    # Reload to ensure relationships are loaded
     db.expire(submission)
     db.refresh(submission)
     submission = auto_grade(db, submission)

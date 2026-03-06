@@ -48,6 +48,14 @@ export interface Chapter {
 }
 
 // ====== Material ======
+export interface Folder {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  material_count: number;
+}
+
 export interface Material {
   id: string;
   title: string;
@@ -58,6 +66,7 @@ export interface Material {
   subject: string;
   grade: string;
   is_system: boolean;
+  folder_id?: string;
   created_by: string;
   created_at: string;
 }
@@ -74,6 +83,8 @@ export interface Exam {
   duration_minutes?: number;
   shuffle_questions?: boolean;
   max_attempts?: number;
+  allow_review?: boolean;
+  show_answers_policy?: string;
   status: 'upcoming' | 'open' | 'closed';
   created_by: string;
   created_at: string;
@@ -119,12 +130,20 @@ export interface Submission {
   id: string;
   exam_id: string;
   student_id: string;
-  student_name: string;
+  student_name?: string;
   started_at: string;
   submitted_at?: string;
   total_score?: number;
   status: 'in_progress' | 'submitted' | 'graded';
-  answers: Answer[];
+  answers?: SubmissionAnswer[];
+}
+
+export interface SubmissionAnswer {
+  id: string;
+  question_id: string;
+  text_answer?: string;
+  selected_option_ids?: string[];
+  score?: number;
 }
 
 // ====== Messaging ======

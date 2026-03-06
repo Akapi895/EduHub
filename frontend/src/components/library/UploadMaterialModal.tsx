@@ -9,6 +9,7 @@ import api from '@/services/api';
 interface UploadMaterialModalProps {
   isOpen: boolean;
   onClose: () => void;
+  folderId?: string;
   onSubmit: (data: {
     title: string;
     description: string;
@@ -17,12 +18,14 @@ interface UploadMaterialModalProps {
     grade: string;
     thumbnail_url?: string;
     file_url?: string;
+    folder_id?: string;
   }) => void;
 }
 
 export default function UploadMaterialModal({
   isOpen,
   onClose,
+  folderId,
   onSubmit,
 }: UploadMaterialModalProps) {
   const [title, setTitle] = useState('');
@@ -82,6 +85,7 @@ export default function UploadMaterialModal({
         grade,
         thumbnail_url,
         file_url,
+        folder_id: folderId,
       });
 
       // Reset form

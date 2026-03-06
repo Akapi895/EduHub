@@ -16,13 +16,29 @@ def get_submission(db: Session, submission_id: str) -> Submission | None:
 
 
 def get_submission_for_exam_student(db: Session, exam_id: str, student_id: str) -> Submission | None:
+    """Get the active (in_progress) submission, or None."""
     return db.query(Submission).filter(
-        Submission.exam_id == exam_id, Submission.student_id == student_id
+        Submission.exam_id == exam_id,
+        Submission.student_id == student_id,
+        Submission.status == SubmissionStatus.in_progress,
     ).first()
 
 
+def get_all_submissions_for_exam_student(db: Session, exam_id: str, student_id: str) -> list[Submission]:
+    return db.query(Submission).filter(
+        Submission.exam_id == exam_id, Submission.student_id == student_id
+    ).order_by(Submission.started_at.desc()).all()
+
+
 def get_submissions_for_exam(db: Session, exam_id: str) -> list[Submission]:
-    return db.query(Submission).filter(Submission.exam_id == exam_id).all()
+    return db.query(Submission).filter(Submission.exam_id == exam_id).order_by(Submission.submitted_at.desc()).all()
+
+
+def get_all_submissions_for_student(db: Session, student_id: str) -> list[Submission]:
+    """All submissions for a student across all exams, newest first."""
+    return db.query(Submission).filter(
+        Submission.student_id == student_id
+    ).order_by(Submission.started_at.desc()).all()
 
 
 def start_submission(db: Session, *, exam_id: str, student_id: str) -> Submission:

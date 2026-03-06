@@ -21,6 +21,7 @@ import StudentDashboard from '@/pages/student/Dashboard';
 import StudentClasses from '@/pages/student/Classes';
 import StudentClassDetail from '@/pages/student/ClassDetail';
 import StudentExam from '@/pages/student/Exam';
+import StudentExams from '@/pages/student/Exams';
 import StudentInbox from '@/pages/student/Inbox';
 import StudentChatbot from '@/pages/student/Chatbot';
 import StudentSettings from '@/pages/student/Settings';
@@ -57,7 +58,7 @@ export const routes: RouteObject[] = [
       { path: 'classes', element: <StudentClasses /> },
       { path: 'classes/:id', element: <StudentClassDetail /> },
       { path: 'exam/:id', element: <StudentExam /> },
-      { path: 'exams', element: <Navigate to="/student/classes" replace /> },
+      { path: 'exams', element: <StudentExams /> },
       { path: 'inbox', element: <StudentInbox /> },
       { path: 'chatbot', element: <StudentChatbot /> },
       { path: 'settings', element: <StudentSettings /> },
