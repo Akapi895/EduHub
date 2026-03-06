@@ -7,6 +7,7 @@ interface ChatWindowProps {
   messages: Message[];
   currentUserId: string;
   participantName: string;
+  participantRole?: string;
   onSend: (content: string) => void;
 }
 
@@ -14,6 +15,7 @@ export default function ChatWindow({
   messages,
   currentUserId,
   participantName,
+  participantRole,
   onSend,
 }: ChatWindowProps) {
   const [newMessage, setNewMessage] = useState('');
@@ -39,7 +41,7 @@ export default function ChatWindow({
         </div>
         <div>
           <p className="font-medium text-gray-800">{participantName}</p>
-          <p className="text-xs text-green-500">Online</p>
+          <p className="text-xs text-gray-500">{participantRole === 'teacher' ? 'Giáo viên' : 'Học sinh'}</p>
         </div>
       </div>
 

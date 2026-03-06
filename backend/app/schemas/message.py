@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class ConversationCreate(BaseModel):
@@ -9,6 +9,12 @@ class ConversationCreate(BaseModel):
 class MessageCreate(BaseModel):
     content: str | None = None
     file_url: str | None = None
+
+    @model_validator(mode="after")
+    def check_not_empty(self):
+        if not self.content and not self.file_url:
+            raise ValueError("Tin nhắn phải có nội dung hoặc file đính kèm")
+        return self
 
 
 class MessageOut(BaseModel):

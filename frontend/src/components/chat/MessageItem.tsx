@@ -20,7 +20,7 @@ export default function MessageItem({ message, isOwn, senderName }: MessageItemP
           {getInitials(senderName || 'U')}
         </div>
       )}
-      <div className={`max-w-[70%]`}>
+      <div className={`flex items-end gap-2 max-w-[70%] ${isOwn ? 'flex-row-reverse' : ''}`}>
         <div
           className={`px-4 py-2.5 rounded-2xl text-sm ${
             isOwn
@@ -30,9 +30,7 @@ export default function MessageItem({ message, isOwn, senderName }: MessageItemP
         >
           {message.content}
         </div>
-        <p className={`text-xs text-gray-400 mt-1 ${isOwn ? 'text-right' : ''}`}>
-          {time}
-        </p>
+        <span className="text-[11px] text-gray-400 whitespace-nowrap shrink-0">{time}</span>
       </div>
     </div>
   );

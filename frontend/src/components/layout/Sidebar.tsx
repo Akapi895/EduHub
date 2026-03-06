@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Home,
   BookOpen,
@@ -15,6 +15,8 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import { useChatStore } from '@/store/chat.store';
+import { chatService } from '@/services/chat.service';
 import { cn } from '@/utils/helpers';
 
 interface MenuItem {
@@ -57,6 +59,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const menu = user?.role === 'teacher' ? teacherMenu : studentMenu;
   const location = useLocation();
+  const { unreadCount, setUnreadCount } = useChatStore();
   const [expandedItems, setExpandedItems] = useState<string[]>(() => {
     // Auto-expand if currently on a child route
     const expanded: string[] = [];
@@ -73,6 +76,23 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
       prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path]
     );
   };
+
+  // Fetch unread count on mount and poll every 30s
+  useEffect(() => {
+    const fetchUnread = async () => {
+      try {
+        const res = await chatService.getUnreadCount();
+        setUnreadCount(res.data.data?.total || 0);
+      } catch {
+        // silent
+      }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000);
+    return () => clearInterval(interval);
+  }, [setUnreadCount]);
+
+  const showBadge = unreadCount > 0;
 
   return (
     <aside
@@ -148,7 +168,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               to={item.path}
               className={({ isActive }) =>
                 cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative',
                   isActive
                     ? 'bg-primary text-white shadow-md'
                     : 'text-gray-600 hover:bg-primary-lighter hover:text-primary'
@@ -156,7 +176,19 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               }
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && (
+                <>
+                  <span className="flex-1">{item.label}</span>
+                  {showBadge && item.path.endsWith('/inbox') && (
+                    <span className="ml-auto min-w-[20px] h-5 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold px-1.5">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
+                </>
+              )}
+              {collapsed && showBadge && item.path.endsWith('/inbox') && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500" />
+              )}
             </NavLink>
           );
         })}
