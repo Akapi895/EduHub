@@ -78,7 +78,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
     );
   };
 
-  // Fetch unread count on mount and poll every 30s
+  // Fetch unread count on mount and poll every 15s
   useEffect(() => {
     const fetchUnread = async () => {
       try {
@@ -89,7 +89,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
       }
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 30000);
+    const interval = setInterval(fetchUnread, 15000);
     return () => clearInterval(interval);
   }, [setUnreadCount]);
 

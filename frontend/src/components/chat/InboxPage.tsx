@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { MessageCircle, Loader2, PenSquare, Search } from 'lucide-react';
 import ChatWindow from '@/components/chat/ChatWindow';
 import Modal from '@/components/common/Modal';
@@ -30,6 +30,7 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
   const [loading, setLoading] = useState(true);
   const user = useAuthStore((s) => s.user);
   const setUnreadCount = useChatStore((s) => s.setUnreadCount);
+  const selectedIdRef = useRef<string | null>(null);
 
   // Conversation search
   const [convSearch, setConvSearch] = useState('');
@@ -50,6 +51,12 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
         const tb = b.last_message_at || b.id;
         return tb.localeCompare(ta);
       });
+      // Zero out unread for the actively-viewed conversation
+      const activeId = selectedIdRef.current;
+      if (activeId) {
+        const idx = convs.findIndex((c) => c.id === activeId);
+        if (idx !== -1) convs[idx] = { ...convs[idx], unread_count: 0 };
+      }
       setConversations(convs);
       // Sync total unread to sidebar badge
       const total = convs.reduce((sum, c) => sum + (c.unread_count || 0), 0);
@@ -64,6 +71,35 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
+
+  // Keep ref in sync for polling closures
+  useEffect(() => {
+    selectedIdRef.current = selected?.id || null;
+  }, [selected]);
+
+  // Poll conversation list every 5s for near-real-time updates
+  useEffect(() => {
+    const interval = setInterval(fetchConversations, 5000);
+    return () => clearInterval(interval);
+  }, [fetchConversations]);
+
+  // Poll messages for the active conversation every 3s
+  useEffect(() => {
+    const convId = selected?.id;
+    if (!convId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await chatService.getMessages(convId);
+        const fresh: Message[] = res.data.data || [];
+        setMessages((prev) => {
+          const lastPrev = prev[prev.length - 1]?.id;
+          const lastFresh = fresh[fresh.length - 1]?.id;
+          return (fresh.length !== prev.length || lastFresh !== lastPrev) ? fresh : prev;
+        });
+      } catch { /* silent */ }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [selected?.id]);
 
   const handleSelectConversation = async (conv: Conversation) => {
     setSelected(conv);
@@ -86,7 +122,7 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
     if (!selected) return;
     try {
       const res = await chatService.sendMessage(selected.id, { content });
-      setMessages([...messages, res.data.data]);
+      setMessages((prev) => [...prev, res.data.data]);
       fetchConversations();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Gửi tin nhắn thất bại');
