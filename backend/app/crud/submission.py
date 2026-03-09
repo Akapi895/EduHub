@@ -4,13 +4,6 @@ from app.models.submission import Submission, Answer, AnswerOption
 from app.utils.enums import SubmissionStatus
 
 
-class AnswerPayload:
-    question_id: str
-    text_answer: str | None
-    selected_option_ids: list[str]
-    uploaded_image_url: str | None
-
-
 def get_submission(db: Session, submission_id: str) -> Submission | None:
     return db.query(Submission).filter(Submission.id == submission_id).first()
 

@@ -63,16 +63,18 @@ def _serialize_conv(conv, current_user_id: str, db: Session):
 def list_contacts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Return eligible message recipients based on class relationships."""
     eligible_ids = _get_eligible_user_ids(db, current_user)
-    contacts = []
-    for uid in eligible_ids:
-        u = user_crud.get_by_id(db, uid)
-        if u and u.is_active:
-            contacts.append({
-                "id": u.id,
-                "full_name": u.full_name,
-                "avatar_url": u.avatar_url,
-                "role": u.role.value if hasattr(u.role, 'value') else u.role,
-            })
+    if not eligible_ids:
+        return ok(data=[])
+    users = db.query(User).filter(User.id.in_(eligible_ids), User.is_active == True).all()  # noqa: E712
+    contacts = [
+        {
+            "id": u.id,
+            "full_name": u.full_name,
+            "avatar_url": u.avatar_url,
+            "role": u.role.value if hasattr(u.role, 'value') else u.role,
+        }
+        for u in users
+    ]
     contacts.sort(key=lambda c: c["full_name"])
     return ok(data=contacts)
 

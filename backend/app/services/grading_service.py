@@ -1,8 +1,11 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
+import json
+
 from app.models.submission import Submission, Answer, AnswerOption
 from app.models.question import Question, QuestionOption
 from app.utils.enums import QuestionType, SubmissionStatus
-import json
 
 
 def auto_grade(db: Session, submission: Submission) -> Submission:
@@ -64,7 +67,6 @@ def auto_grade(db: Session, submission: Submission) -> Submission:
 
 def grade_answer(db: Session, *, answer: Answer, score: float, grader_id: str) -> Answer:
     """Teacher manually grades a single answer (for text/image_upload questions)."""
-    from datetime import datetime
     old_score = answer.score or 0.0
     answer.score = score
     answer.graded_by = grader_id

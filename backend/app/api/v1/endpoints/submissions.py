@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.crud import submission as submission_crud
 from app.crud import exam as exam_crud
+from app.crud import notification as noti_crud
 from app.services import exam_service
 from app.services.grading_service import grade_answer
 from app.core.dependencies import get_current_user, require_teacher
@@ -85,6 +86,17 @@ def submit_exam(
 ):
     answers_data = [a.model_dump() for a in data.answers]
     submission = exam_service.submit_exam(db, exam_id=exam_id, student_id=current_user.id, answers_data=answers_data)
+    # Notify the teacher who created the exam
+    exam = exam_crud.get_exam(db, exam_id)
+    if exam:
+        noti_crud.create(
+            db,
+            user_id=exam.created_by,
+            type="exam_submitted",
+            title="Học sinh nộp bài",
+            content=f"{current_user.full_name} đã nộp bài thi: {exam.title}",
+            link=f"/teacher/exams/{exam.id}",
+        )
     return ok(data=_serialize_submission(submission), message="Nop bai thanh cong")
 
 

@@ -171,7 +171,7 @@ export default function StudentDashboard() {
                 return (
                   <Link
                     key={r.submission_id}
-                    to={r.allow_review ? `/student/exams/${r.exam_id}/review` : '#'}
+                    to={r.allow_review ? `/student/exam/${r.exam_id}` : '#'}
                     className="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 transition-colors border border-border"
                   >
                     <div className="min-w-0">

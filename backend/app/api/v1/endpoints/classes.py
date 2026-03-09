@@ -10,6 +10,7 @@ from app.schemas.class_schema import (
 from app.schemas.user import UserPublic
 from app.schemas.material import MaterialOut
 from app.crud import class_crud
+from app.crud import notification as noti_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
 from app.models.class_model import Class, Chapter, ClassStudent, ClassMaterial
@@ -271,6 +272,22 @@ def add_material(
         if class_crud.is_material_in_chapter(db, chapter_id=data.chapter_id, material_id=data.material_id):
             raise HTTPException(status_code=400, detail="Tai lieu da ton tai trong chuong nay")
     cm = class_crud.add_material_to_class(db, class_id=class_id, material_id=data.material_id, chapter_id=data.chapter_id)
+    # Notify all students in the class about new material
+    student_ids = [m.student_id for m in class_.students]
+    if student_ids:
+        chapter_name = ""
+        if data.chapter_id:
+            ch_obj = db.query(Chapter).filter(Chapter.id == data.chapter_id).first()
+            if ch_obj:
+                chapter_name = f" vào chương {ch_obj.name}"
+        noti_crud.create_bulk(
+            db,
+            user_ids=student_ids,
+            type="new_material",
+            title="Tài liệu mới",
+            content=f"Giáo viên đã thêm tài liệu mới{chapter_name} trong lớp {class_.name}",
+            link=f"/student/classes/{class_id}",
+        )
     return ok(data={"id": cm.id, "class_id": cm.class_id, "material_id": cm.material_id, "chapter_id": cm.chapter_id}, status_code=201)
 
 

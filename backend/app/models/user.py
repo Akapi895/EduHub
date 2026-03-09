@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.exam import Exam
     from app.models.submission import Submission
     from app.models.message import Message, ConversationMember
+    from app.models.notification import Notification
 
 
 class User(Base):
@@ -52,4 +53,7 @@ class User(Base):
     )
     conversation_memberships: Mapped[list["ConversationMember"]] = relationship(  # noqa: F821
         "ConversationMember", back_populates="user"
+    )
+    notifications: Mapped[list["Notification"]] = relationship(  # noqa: F821
+        "Notification", back_populates="user"
     )

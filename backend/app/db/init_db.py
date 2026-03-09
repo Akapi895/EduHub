@@ -9,6 +9,7 @@ from app.models.exam import Exam  # noqa: F401
 from app.models.question import Question, QuestionOption, MatchingPair  # noqa: F401
 from app.models.submission import Submission, Answer, AnswerOption  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
+from app.models.notification import Notification  # noqa: F401
 
 
 def _add_column_if_missing(conn, table: str, column: str, col_type: str, default=None):
