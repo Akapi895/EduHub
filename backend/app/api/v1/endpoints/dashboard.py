@@ -1,29 +1,21 @@
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.crud import class_crud, exam as exam_crud, submission as submission_crud
+from app.crud import class_crud
+from app.crud.exam import _compute_status
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.exam import Exam
-from app.models.submission import Submission, Answer
-from app.models.class_model import Class, ClassStudent, ClassMaterial
+from app.models.submission import Submission
+from app.models.class_model import ClassStudent, ClassMaterial
 from app.utils.enums import ExamStatus, SubmissionStatus
 from app.utils.responses import ok
 
 router = APIRouter(tags=["Dashboard"])
-
-
-def _compute_status(exam: Exam) -> str:
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    if exam.start_time and now < exam.start_time:
-        return ExamStatus.upcoming
-    if exam.end_time and now > exam.end_time:
-        return ExamStatus.closed
-    return ExamStatus.open
 
 
 @router.get("/dashboard/teacher")

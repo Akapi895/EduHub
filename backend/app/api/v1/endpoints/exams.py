@@ -7,13 +7,28 @@ from app.schemas.question import QuestionCreate, QuestionUpdate, QuestionOut, Qu
 from app.crud import exam as exam_crud
 from app.crud import class_crud
 from app.crud import submission as submission_crud
+from app.crud import notification as noti_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
+from app.models.exam import Exam as ExamModel
 from app.models.question import Question
 from app.models.class_model import ClassStudent
+from app.models.submission import Submission
 from app.utils.responses import ok
 
 router = APIRouter(tags=["Exams"])
+
+
+def _student_exam_status(subs: list[Submission]) -> tuple[str, float | None]:
+    """Compute student_status and best_score from a list of submissions."""
+    completed = [s for s in subs if s.status != "in_progress"]
+    in_progress = any(s.status == "in_progress" for s in subs)
+    if completed:
+        best = max((s.total_score for s in completed if s.total_score is not None), default=None)
+        return "completed", best
+    if in_progress:
+        return "in_progress", None
+    return "not_started", None
 
 
 @router.get("/exams/my-all")
@@ -28,7 +43,6 @@ def list_my_all_exams(
     class_ids = [m.class_id for m in memberships]
     if not class_ids:
         return ok(data=[])
-    from app.models.exam import Exam as ExamModel
     exams = db.query(ExamModel).filter(ExamModel.class_id.in_(class_ids)).all()
     result = []
     for e in exams:
@@ -36,18 +50,7 @@ def list_my_all_exams(
         d["question_count"] = len(e.questions)
         d["class_name"] = e.class_.name if e.class_ else None
         subs = submission_crud.get_all_submissions_for_exam_student(db, e.id, current_user.id)
-        completed = [s for s in subs if s.status != "in_progress"]
-        in_progress = any(s.status == "in_progress" for s in subs)
-        if completed:
-            best = max((s.total_score for s in completed if s.total_score is not None), default=None)
-            d["student_status"] = "completed"
-            d["best_score"] = best
-        elif in_progress:
-            d["student_status"] = "in_progress"
-            d["best_score"] = None
-        else:
-            d["student_status"] = "not_started"
-            d["best_score"] = None
+        d["student_status"], d["best_score"] = _student_exam_status(subs)
         result.append(d)
     return ok(data=result)
 
@@ -63,21 +66,9 @@ def list_exams(
     for e in exams:
         d = ExamOut.model_validate(e).model_dump()
         d["question_count"] = len(e.questions)
-        # For students: include their submission status on this exam
         if current_user.role == "student":
             subs = submission_crud.get_all_submissions_for_exam_student(db, e.id, current_user.id)
-            completed = [s for s in subs if s.status != "in_progress"]
-            in_progress = any(s.status == "in_progress" for s in subs)
-            if completed:
-                best = max((s.total_score for s in completed if s.total_score is not None), default=None)
-                d["student_status"] = "completed"
-                d["best_score"] = best
-            elif in_progress:
-                d["student_status"] = "in_progress"
-                d["best_score"] = None
-            else:
-                d["student_status"] = "not_started"
-                d["best_score"] = None
+            d["student_status"], d["best_score"] = _student_exam_status(subs)
         result.append(d)
     return ok(data=result)
 
@@ -93,6 +84,17 @@ def create_exam(
     if not class_ or class_.teacher_id != teacher.id:
         raise HTTPException(status_code=404, detail="Class not found")
     exam = exam_crud.create_exam(db, class_id=class_id, created_by=teacher.id, data=data)
+    # Notify all students in the class
+    student_ids = [m.student_id for m in db.query(ClassStudent).filter(ClassStudent.class_id == class_id).all()]
+    if student_ids:
+        noti_crud.create_bulk(
+            db,
+            user_ids=student_ids,
+            type="new_exam",
+            title="Bài thi mới",
+            content=f"Lớp {class_.name} vừa có bài thi mới: {exam.title}",
+            link=f"/student/exam/{exam.id}",
+        )
     return ok(data=ExamOut.model_validate(exam).model_dump(), status_code=201)
 
 

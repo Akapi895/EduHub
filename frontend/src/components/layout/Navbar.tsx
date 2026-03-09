@@ -2,6 +2,7 @@ import { LogOut, Menu } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useNavigate } from 'react-router-dom';
 import { getInitials } from '@/utils/helpers';
+import NotificationBell from './NotificationBell';
 
 interface NavbarProps {
   onToggleSidebar?: () => void;
@@ -28,6 +29,7 @@ export default function Navbar({ onToggleSidebar }: NavbarProps) {
       <div className="flex-1" />
 
       <div className="flex items-center gap-4">
+        <NotificationBell />
         {user && (
           <div className="flex items-center gap-3">
             {user.avatar_url ? (
