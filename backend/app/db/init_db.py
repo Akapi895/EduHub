@@ -4,7 +4,7 @@ from app.db.session import engine
 # Explicit model imports to register them with SQLAlchemy metadata
 from app.models.user import User  # noqa: F401
 from app.models.class_model import Class, ClassStudent, Chapter, ClassMaterial  # noqa: F401
-from app.models.material import Material, Folder  # noqa: F401
+from app.models.material import Material, Folder, MaterialView  # noqa: F401
 from app.models.exam import Exam  # noqa: F401
 from app.models.question import Question, QuestionOption, MatchingPair  # noqa: F401
 from app.models.submission import Submission, Answer, AnswerOption  # noqa: F401
@@ -24,6 +24,8 @@ def _migrate(conn):
     """Add any missing columns for schema evolution."""
     _add_column_if_missing(conn, "exams", "allow_review", "BOOLEAN", 1)
     _add_column_if_missing(conn, "exams", "show_answers_policy", "VARCHAR", "'never'")
+    _add_column_if_missing(conn, "library_materials", "shared_by", "VARCHAR")
+    _add_column_if_missing(conn, "library_materials", "source_id", "VARCHAR")
 
 
 def create_tables() -> None:

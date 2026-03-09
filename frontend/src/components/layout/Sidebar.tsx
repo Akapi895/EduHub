@@ -45,6 +45,7 @@ const teacherMenu: MenuItem[] = [
 const studentMenu: MenuItem[] = [
   { label: 'Trang chủ', icon: Home, path: '/student/dashboard' },
   { label: 'Lớp học', icon: GraduationCap, path: '/student/classes' },
+  { label: 'Thư viện', icon: BookOpen, path: '/student/library' },
   { label: 'Bài thi', icon: ClipboardList, path: '/student/exams' },
   { label: 'Hộp thư', icon: Mail, path: '/student/inbox' },
   { label: 'Trợ lý AI', icon: Bot, path: '/student/chatbot' },

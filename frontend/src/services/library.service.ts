@@ -24,4 +24,15 @@ export const libraryService = {
   getFolder: (id: string) => api.get(`/library/folders/${id}`),
   createFolder: (data: { name: string }) => api.post('/library/folders', data),
   deleteFolder: (id: string) => api.delete(`/library/folders/${id}`),
+
+  // Copy / Share / Save
+  copyMaterial: (id: string, data: { folder_id?: string }) =>
+    api.post(`/library/${id}/copy`, data),
+  shareMaterial: (id: string) => api.post(`/library/${id}/share`),
+  saveMaterial: (id: string, data: { folder_id?: string }) =>
+    api.post(`/library/${id}/save`, data),
+
+  // View tracking
+  recordView: (materialId: string, classId?: string) =>
+    api.post(`/library/${materialId}/view`, { class_id: classId }),
 };

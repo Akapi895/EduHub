@@ -39,7 +39,8 @@ export default function AddMaterialToChapterModal({
       if (tab === 'system') params.is_system = 'true';
       else params.is_system = 'false';
       const res = await libraryService.getMaterials(params);
-      setMaterials(res.data.data || []);
+      const resData = res.data.data;
+      setMaterials(Array.isArray(resData) ? resData : resData?.items || []);
     } catch {
       setMaterials([]);
     } finally {

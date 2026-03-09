@@ -45,6 +45,7 @@ export interface Chapter {
   order_index: number;
   materials: Material[];
   class_material_ids?: Record<string, string>;
+  student_count?: number;
 }
 
 // ====== Material ======
@@ -68,7 +69,20 @@ export interface Material {
   is_system: boolean;
   folder_id?: string;
   created_by: string;
+  shared_by?: string;
+  shared_by_name?: string;
+  source_id?: string;
   created_at: string;
+  view_count?: number;
+}
+
+export interface MaterialViewStudent {
+  student_id: string;
+  full_name: string;
+  email: string;
+  avatar_url?: string;
+  viewed: boolean;
+  viewed_at?: string;
 }
 
 // ====== Exam ======

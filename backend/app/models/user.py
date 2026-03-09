@@ -39,7 +39,7 @@ class User(Base):
         "ClassStudent", back_populates="student"
     )
     materials: Mapped[list["Material"]] = relationship(  # noqa: F821
-        "Material", back_populates="creator"
+        "Material", back_populates="creator", foreign_keys="[Material.created_by]"
     )
     created_exams: Mapped[list["Exam"]] = relationship(  # noqa: F821
         "Exam", back_populates="creator"

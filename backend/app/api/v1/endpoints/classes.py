@@ -8,10 +8,12 @@ from app.schemas.class_schema import (
     JoinClassRequest, ChapterCreate, ChapterUpdate, ChapterOut, AddMaterialToClass,
 )
 from app.schemas.user import UserPublic
+from app.schemas.material import MaterialOut
 from app.crud import class_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
 from app.models.class_model import Class, Chapter, ClassStudent, ClassMaterial
+from app.models.material import Material as MaterialModel, MaterialView
 from app.models.exam import Exam
 from app.utils.responses import ok
 
@@ -187,19 +189,46 @@ def list_chapters(
         raise HTTPException(status_code=404, detail="Class not found")
     _verify_class_access(db, class_, current_user)
     chapters = class_crud.get_chapters(db, class_id)
+    # Batch-load all materials for all chapters in one query
+    all_cm = db.query(ClassMaterial).filter(ClassMaterial.class_id == class_id).all()
+    material_ids = list({cm.material_id for cm in all_cm})
+    materials_by_id: dict[str, MaterialModel] = {}
+    if material_ids:
+        materials_by_id = {
+            m.id: m for m in db.query(MaterialModel).filter(MaterialModel.id.in_(material_ids)).all()
+        }
+
+    # For teachers: batch-load view counts per material
+    view_counts: dict[str, int] = {}
+    student_count = 0
+    is_teacher = current_user.role == "teacher" and class_.teacher_id == current_user.id
+    if is_teacher and material_ids:
+        student_count = db.query(ClassStudent).filter(ClassStudent.class_id == class_id).count()
+        view_counts = dict(
+            db.query(MaterialView.material_id, func.count(MaterialView.id))  # type: ignore[arg-type]
+            .filter(
+                MaterialView.material_id.in_(material_ids),
+                MaterialView.class_id == class_id,
+            )
+            .group_by(MaterialView.material_id)
+            .all()
+        )
+
     result = []
     for ch in chapters:
         ch_data = ChapterOut.model_validate(ch).model_dump()
-        # Include materials for this chapter
-        from app.models.material import Material as MaterialModel
         mats = []
         for cm in ch.class_materials:
-            mat = db.query(MaterialModel).filter(MaterialModel.id == cm.material_id).first()
+            mat = materials_by_id.get(cm.material_id)
             if mat:
-                from app.schemas.material import MaterialOut
-                mats.append(MaterialOut.model_validate(mat).model_dump())
+                mat_data = MaterialOut.model_validate(mat).model_dump()
+                if is_teacher:
+                    mat_data["view_count"] = view_counts.get(mat.id, 0)
+                mats.append(mat_data)
         ch_data["materials"] = mats
         ch_data["class_material_ids"] = {cm.material_id: cm.id for cm in ch.class_materials}
+        if is_teacher:
+            ch_data["student_count"] = student_count
         result.append(ch_data)
     return ok(data=result)
 
@@ -230,8 +259,17 @@ def add_material(
     class_ = class_crud.get_class(db, class_id)
     if not class_ or class_.teacher_id != teacher.id:
         raise HTTPException(status_code=404, detail="Class not found")
-    if data.chapter_id and class_crud.is_material_in_chapter(db, chapter_id=data.chapter_id, material_id=data.material_id):
-        raise HTTPException(status_code=400, detail="Tai lieu da ton tai trong chuong nay")
+    # Validate material exists
+    mat = db.query(MaterialModel).filter(MaterialModel.id == data.material_id).first()
+    if not mat:
+        raise HTTPException(status_code=404, detail="Tai lieu khong ton tai")
+    # Validate chapter belongs to this class
+    if data.chapter_id:
+        ch = db.query(Chapter).filter(Chapter.id == data.chapter_id, Chapter.class_id == class_id).first()
+        if not ch:
+            raise HTTPException(status_code=404, detail="Chuong khong thuoc lop nay")
+        if class_crud.is_material_in_chapter(db, chapter_id=data.chapter_id, material_id=data.material_id):
+            raise HTTPException(status_code=400, detail="Tai lieu da ton tai trong chuong nay")
     cm = class_crud.add_material_to_class(db, class_id=class_id, material_id=data.material_id, chapter_id=data.chapter_id)
     return ok(data={"id": cm.id, "class_id": cm.class_id, "material_id": cm.material_id, "chapter_id": cm.chapter_id}, status_code=201)
 
@@ -266,6 +304,40 @@ def delete_chapter(
         raise HTTPException(status_code=404, detail="Chapter not found")
     class_crud.delete_chapter(db, chapter=chapter)
     return ok(message="Da xoa chuong")
+
+
+@router.get("/{class_id}/materials/{material_id}/views")
+def get_material_views(
+    class_id: str,
+    material_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    """Teacher: get list of students with their view status for a material in a class."""
+    class_ = class_crud.get_class(db, class_id)
+    if not class_ or class_.teacher_id != teacher.id:
+        raise HTTPException(status_code=404, detail="Class not found")
+    # All students in class
+    students = [cs.student for cs in class_.students]
+    # Views for this material in this class
+    views = db.query(MaterialView).filter(
+        MaterialView.material_id == material_id,
+        MaterialView.class_id == class_id,
+    ).all()
+    viewed_ids = {v.student_id for v in views}
+    viewed_at_map = {v.student_id: str(v.viewed_at) for v in views}
+    result = []
+    for s in students:
+        result.append({
+            "student_id": s.id,
+            "full_name": s.full_name,
+            "email": s.email,
+            "avatar_url": s.avatar_url,
+            "viewed": s.id in viewed_ids,
+            "viewed_at": viewed_at_map.get(s.id),
+        })
+    result.sort(key=lambda x: (not x["viewed"], x["full_name"]))
+    return ok(data=result)
 
 
 @router.get("/{class_id}/materials")

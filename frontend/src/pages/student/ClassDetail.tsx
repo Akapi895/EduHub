@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, FileText, Loader2, User, Users } from 'lucide-react';
+import { ArrowLeft, BookOpen, FileText, Loader2, User, Users, FolderOpen } from 'lucide-react';
 import ChapterSection from '@/components/classes/ChapterSection';
 import ExamCard from '@/components/exam/ExamCard';
 import { classService } from '@/services/class.service';
@@ -141,7 +141,11 @@ export default function StudentClassDetail() {
                   />
                 ))
               ) : (
-                <p className="text-center text-gray-400 py-8">Chưa có tài liệu nào</p>
+                <div className="text-center py-12">
+                  <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-400 text-lg font-medium">Chưa có tài liệu nào</p>
+                  <p className="text-gray-400 text-sm mt-1">Giáo viên chưa thêm tài liệu cho lớp này</p>
+                </div>
               )}
             </div>
           )}

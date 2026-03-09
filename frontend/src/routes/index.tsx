@@ -23,6 +23,7 @@ import StudentClasses from '@/pages/student/Classes';
 import StudentClassDetail from '@/pages/student/ClassDetail';
 import StudentExam from '@/pages/student/Exam';
 import StudentExams from '@/pages/student/Exams';
+import StudentLibrary from '@/pages/student/Library';
 import StudentInbox from '@/pages/student/Inbox';
 import StudentChatbot from '@/pages/student/Chatbot';
 import StudentSettings from '@/pages/student/Settings';
@@ -59,6 +60,7 @@ export const routes: RouteObject[] = [
       { path: 'dashboard', element: <StudentDashboard /> },
       { path: 'classes', element: <StudentClasses /> },
       { path: 'classes/:id', element: <StudentClassDetail /> },
+      { path: 'library', element: <StudentLibrary /> },
       { path: 'library/:id', element: <MaterialDetail /> },
       { path: 'exam/:id', element: <StudentExam /> },
       { path: 'exams', element: <StudentExams /> },

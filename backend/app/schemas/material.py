@@ -52,6 +52,10 @@ class MaterialOut(BaseModel):
     is_system: bool
     folder_id: str | None = None
     created_by: str
+    shared_by: str | None = None
+    shared_by_name: str | None = None
+    source_id: str | None = None
     created_at: datetime
+    view_count: int | None = None
 
     model_config = {"from_attributes": True}

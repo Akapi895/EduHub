@@ -25,4 +25,6 @@ export const classService = {
   getExams: (classId: string) => api.get(`/classes/${classId}/exams`),
   createExam: (classId: string, data: Record<string, unknown>) =>
     api.post(`/classes/${classId}/exams`, data),
+  getMaterialViews: (classId: string, materialId: string) =>
+    api.get(`/classes/${classId}/materials/${materialId}/views`),
 };

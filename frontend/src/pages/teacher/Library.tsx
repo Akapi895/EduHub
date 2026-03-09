@@ -37,6 +37,10 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
+  const [saveMaterialId, setSaveMaterialId] = useState<string | null>(null);
+  const [saveFolderId, setSaveFolderId] = useState('');
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const debouncedSearch = useDebounce(search);
   const navigate = useNavigate();
 
@@ -44,14 +48,11 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
   const isPersonal = mode === 'personal';
 
   const fetchFolders = useCallback(async () => {
-    if (!isPersonal) return;
     try {
       const res = await libraryService.getFolders();
       setFolders(res.data.data || []);
-    } catch {
-      setFolders([]);
-    }
-  }, [isPersonal]);
+    } catch { setFolders([]); }
+  }, []);
 
   const fetchMaterials = useCallback(async () => {
     setLoading(true);
@@ -63,22 +64,19 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       if (isSystem) params.is_system = 'true';
       else params.is_system = 'false';
       if (currentFolder) params.folder_id = currentFolder.id;
+      else if (isPersonal) params.exclude_folder_copies = 'true';
       const res = await libraryService.getMaterials(params);
-      setMaterials(res.data.data || []);
+      const resData = res.data.data;
+      setMaterials(Array.isArray(resData) ? resData : resData?.items || []);
     } catch {
       setMaterials([]);
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, typeFilter, subjectFilter, isSystem, currentFolder]);
+  }, [debouncedSearch, typeFilter, subjectFilter, isSystem, isPersonal, currentFolder]);
 
-  useEffect(() => {
-    fetchMaterials();
-  }, [fetchMaterials]);
-
-  useEffect(() => {
-    fetchFolders();
-  }, [fetchFolders]);
+  useEffect(() => { fetchMaterials(); }, [fetchMaterials]);
+  useEffect(() => { fetchFolders(); }, [fetchFolders]);
 
   // Restore folder context from URL search params
   useEffect(() => {
@@ -106,15 +104,90 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
     }
   };
 
+  const [folderToDelete, setFolderToDelete] = useState<FolderType | null>(null);
+
   const handleDeleteFolder = async (folder: FolderType) => {
-    if (!confirm(`Xóa thư mục "${folder.name}"? Tài liệu bên trong sẽ không bị xóa.`)) return;
     try {
       await libraryService.deleteFolder(folder.id);
       if (currentFolder?.id === folder.id) setSearchParams({});
+      setFolderToDelete(null);
       fetchFolders();
       fetchMaterials();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Xóa thư mục thất bại');
+    }
+  };
+
+  // Drag-and-drop: copy into folder
+  const handleDropOnFolder = async (folderId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOverFolder(null);
+    const materialId = e.dataTransfer.getData('materialId');
+    if (!materialId) return;
+    try {
+      await libraryService.copyMaterial(materialId, { folder_id: folderId });
+      fetchMaterials();
+      fetchFolders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Tạo bản sao thất bại');
+    }
+  };
+
+  // Context-menu: remove from folder (delete copy or clear folder_id)
+  const handleRemoveFromFolder = async (materialId: string) => {
+    const mat = materials.find((m) => m.id === materialId);
+    try {
+      if (mat?.source_id) {
+        await libraryService.deleteMaterial(materialId);
+      } else {
+        await libraryService.updateMaterial(materialId, { folder_id: null });
+      }
+      fetchMaterials();
+      fetchFolders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Thao tác thất bại');
+    }
+  };
+
+  const handleCopy = async (materialId: string, folderId: string) => {
+    try {
+      await libraryService.copyMaterial(materialId, { folder_id: folderId });
+      fetchFolders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Tạo bản sao thất bại');
+    }
+  };
+
+  const handleShare = async (materialId: string) => {
+    try {
+      await libraryService.shareMaterial(materialId);
+      alert('Đã chia sẻ tài liệu vào thư viện hệ thống');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Chia sẻ thất bại');
+    }
+  };
+
+  const handleDeleteMaterial = async () => {
+    if (!deleteTarget) return;
+    try {
+      await libraryService.deleteMaterial(deleteTarget);
+      setDeleteTarget(null);
+      fetchMaterials();
+      fetchFolders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Xóa tài liệu thất bại');
+    }
+  };
+
+  const handleSaveConfirm = async () => {
+    if (!saveMaterialId) return;
+    try {
+      await libraryService.saveMaterial(saveMaterialId, { folder_id: saveFolderId || undefined });
+      setSaveMaterialId(null);
+      setSaveFolderId('');
+      alert('Đã lưu tài liệu về thư viện cá nhân');
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lưu tài liệu thất bại');
     }
   };
 
@@ -206,7 +279,12 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
               <div
                 key={folder.id}
                 onClick={() => setSearchParams({ folder: folder.id })}
-                className="bg-white rounded-card shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer p-4 flex items-center gap-3 group"
+                onDragOver={(e) => { e.preventDefault(); setDragOverFolder(folder.id); }}
+                onDragLeave={() => setDragOverFolder(null)}
+                onDrop={(e) => handleDropOnFolder(folder.id, e)}
+                className={`bg-white rounded-card shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer p-4 flex items-center gap-3 group ${
+                  dragOverFolder === folder.id ? 'ring-2 ring-primary bg-primary/5' : ''
+                }`}
               >
                 <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
                   <Folder className="w-5 h-5 text-amber-600" />
@@ -216,7 +294,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
                   <p className="text-xs text-gray-400">{folder.material_count} tài liệu</p>
                 </div>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder); }}
+                  onClick={(e) => { e.stopPropagation(); setFolderToDelete(folder); }}
                   className="p-1.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg hover:bg-red-50"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -229,7 +307,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
 
       {/* Materials grid */}
       {isPersonal && !currentFolder && folders.length > 0 && (
-        <h2 className="text-sm font-medium text-gray-500">Tài liệu chưa phân loại</h2>
+        <h2 className="text-sm font-medium text-gray-500">Tất cả tài liệu</h2>
       )}
 
       {loading ? (
@@ -243,6 +321,13 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
               key={material.id}
               material={material}
               onClick={() => navigate(`/teacher/library/${material.id}`)}
+              folders={isPersonal ? folders : undefined}
+              onRemoveFromFolder={isPersonal && currentFolder ? handleRemoveFromFolder : undefined}
+              onCopy={isPersonal ? handleCopy : undefined}
+              onShare={isPersonal ? handleShare : undefined}
+              onDelete={isPersonal ? (id) => setDeleteTarget(id) : undefined}
+              onSave={isSystem ? (id) => { setSaveMaterialId(id); setSaveFolderId(''); } : undefined}
+              mode={mode}
             />
           ))}
         </div>
@@ -288,6 +373,44 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
             <Button onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}>
               {creatingFolder ? 'Đang tạo...' : 'Tạo thư mục'}
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!folderToDelete} onClose={() => setFolderToDelete(null)} title="Xóa thư mục" size="sm">
+        <p className="text-gray-600 mb-4">Xóa thư mục &ldquo;{folderToDelete?.name}&rdquo;? Tài liệu bên trong sẽ không bị xóa.</p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setFolderToDelete(null)}>Hủy</Button>
+          <Button onClick={() => folderToDelete && handleDeleteFolder(folderToDelete)}>Xóa thư mục</Button>
+        </div>
+      </Modal>
+
+      {/* Delete material confirmation */}
+      <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Xóa tài liệu" size="sm">
+        <p className="text-gray-600 mb-4">Bạn có chắc muốn xóa tài liệu này? Tài liệu sẽ bị gỡ khỏi tất cả các lớp đã gắn.</p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Hủy</Button>
+          <Button onClick={handleDeleteMaterial}>Xóa tài liệu</Button>
+        </div>
+      </Modal>
+
+      {/* Save-to-personal modal (system mode) */}
+      <Modal isOpen={!!saveMaterialId} onClose={() => setSaveMaterialId(null)} title="Lưu về thư viện cá nhân" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">Chọn thư mục để lưu (không bắt buộc):</p>
+          <select
+            value={saveFolderId}
+            onChange={(e) => setSaveFolderId(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl border border-border text-sm"
+          >
+            <option value="">— Không phân loại —</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setSaveMaterialId(null)}>Hủy</Button>
+            <Button onClick={handleSaveConfirm}>Lưu tài liệu</Button>
           </div>
         </div>
       </Modal>
