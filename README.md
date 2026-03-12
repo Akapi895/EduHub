@@ -5,7 +5,7 @@ Nền tảng học tập trực tuyến dành cho học sinh và giáo viên.
 ## Tech Stack
 
 - **Frontend:** Vite + React + TypeScript + Tailwind CSS
-- **Backend:** FastAPI + SQLite
+- **Backend:** FastAPI + PostgreSQL
 
 ## Cấu trúc dự án
 

@@ -1,6 +1,6 @@
 # EduHub Backend — API Reference
 
-FastAPI + SQLite backend for the EduHub learning management platform.
+FastAPI + PostgreSQL backend for the EduHub learning management platform.
 
 - **Base URL (dev):** `http://127.0.0.1:8002`
 - **Interactive docs:** `GET /docs` (Swagger UI) · `GET /redoc`
@@ -1463,13 +1463,13 @@ python tests/test_api.py --base-url http://127.0.0.1:8002
 
 ### Environment variables (`.env`)
 
-| Variable                      | Default              | Description                                         |
-| ----------------------------- | -------------------- | --------------------------------------------------- |
-| `APP_NAME`                    | `EduHub`             | Application name shown in docs                      |
-| `DEBUG`                       | `false`              | SQLAlchemy query logging                            |
-| `SECRET_KEY`                  | _(change this)_      | JWT signing key — **must be changed in production** |
-| `ALGORITHM`                   | `HS256`              | JWT algorithm                                       |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440`               | Token TTL (24 hours)                                |
-| `DATABASE_URL`                | `sqlite:///./app.db` | SQLAlchemy connection string                        |
-| `UPLOAD_DIR`                  | `uploads`            | Local directory for uploaded files                  |
-| `MAX_UPLOAD_SIZE_MB`          | `10`                 | Max file upload size                                |
+| Variable                      | Default                                            | Description                                         |
+| ----------------------------- | -------------------------------------------------- | --------------------------------------------------- |
+| `APP_NAME`                    | `EduHub`                                           | Application name shown in docs                      |
+| `DEBUG`                       | `false`                                            | SQLAlchemy query logging                            |
+| `SECRET_KEY`                  | _(change this)_                                    | JWT signing key — **must be changed in production** |
+| `ALGORITHM`                   | `HS256`                                            | JWT algorithm                                       |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `1440`                                             | Token TTL (24 hours)                                |
+| `DATABASE_URL`                | `postgresql://eduhub:eduhub@localhost:5433/eduhub` | SQLAlchemy connection string (PostgreSQL)           |
+| `UPLOAD_DIR`                  | `uploads`                                          | Local directory for uploaded files                  |
+| `MAX_UPLOAD_SIZE_MB`          | `10`                                               | Max file upload size                                |

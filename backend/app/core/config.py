@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24h
 
-    database_url: str = "sqlite:///./app.db"
+    database_url: str = "postgresql://eduhub:eduhub@localhost:5433/eduhub"
     upload_dir: str = "uploads"
     max_upload_size_mb: int = 10
 

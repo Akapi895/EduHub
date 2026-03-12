@@ -1,14 +1,39 @@
 version: "3.9"
 
 services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eduhub
+      POSTGRES_PASSWORD: eduhub
+      POSTGRES_DB: eduhub
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      DATABASE_URL: postgresql://eduhub:eduhub@db:5432/eduhub
+    depends_on:
+      db:
+        condition: service_healthy
 
   frontend:
     build: ./frontend
     ports:
       - "5173:5173"
+
+volumes:
+  pgdata:
