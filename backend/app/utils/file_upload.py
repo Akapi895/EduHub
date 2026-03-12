@@ -1,17 +1,11 @@
-"""File upload utilities.
+"""File upload utilities — Cloudinary backend."""
 
-Currently saves files to a local `uploads/` directory relative to where the
-server is started.  Replace `save_upload_file` with cloud-storage logic (e.g.
-Azure Blob Storage) when moving to production.
-"""
-
-import os
-import uuid
-from pathlib import Path
-
+import cloudinary
+import cloudinary.uploader
 from fastapi import UploadFile, HTTPException
 
-UPLOAD_DIR = Path("uploads")
+from app.core.config import settings
+
 ALLOWED_MIME_TYPES = {
     "image/jpeg", "image/png", "image/gif", "image/webp",
     "application/pdf",
@@ -22,21 +16,24 @@ ALLOWED_MIME_TYPES = {
 }
 MAX_FILE_SIZE_MB = 50
 
-
-def ensure_upload_dir() -> None:
-    """Create the uploads directory if it doesn't exist."""
-    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# Configure Cloudinary once at import time
+cloudinary.config(
+    cloud_name=settings.cloudinary_cloud_name,
+    api_key=settings.cloudinary_api_key,
+    api_secret=settings.cloudinary_api_secret,
+    secure=True,
+)
 
 
 async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
-    """Save an uploaded file and return a URL-like path string.
+    """Upload a file to Cloudinary and return the public URL.
 
     Args:
         file:    The FastAPI UploadFile object.
-        sub_dir: Optional sub-directory under UPLOAD_DIR (e.g. "materials").
+        sub_dir: Cloudinary folder (e.g. "materials", "avatars").
 
     Returns:
-        A relative URL string like ``/uploads/materials/<uuid>_<filename>``.
+        The Cloudinary secure URL of the uploaded file.
 
     Raises:
         HTTPException 400 if the file type is not allowed or file is too large.
@@ -47,12 +44,6 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
             detail=f"File type '{file.content_type}' is not allowed.",
         )
 
-    dest_dir = UPLOAD_DIR / sub_dir if sub_dir else UPLOAD_DIR
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    safe_filename = f"{uuid.uuid4()}_{Path(file.filename or 'file').name}"
-    dest_path = dest_dir / safe_filename
-
     contents = await file.read()
     if len(contents) > MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(
@@ -60,8 +51,22 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
             detail=f"File exceeds the {MAX_FILE_SIZE_MB}MB size limit.",
         )
 
-    dest_path.write_bytes(contents)
+    folder = f"eduhub/{sub_dir}" if sub_dir else "eduhub"
 
-    # Return a URL path that can be served as a static file
-    rel = dest_path.as_posix()
-    return f"/{rel}"
+    # Determine resource_type based on content type
+    resource_type = "auto"
+    if file.content_type and file.content_type.startswith("video/"):
+        resource_type = "video"
+
+    try:
+        result = cloudinary.uploader.upload(
+            contents,
+            folder=folder,
+            resource_type=resource_type,
+            use_filename=True,
+            unique_filename=True,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+    return result["secure_url"]

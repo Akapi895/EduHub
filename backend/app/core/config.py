@@ -17,7 +17,11 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://eduhub:eduhub@localhost:5433/eduhub"
     upload_dir: str = "uploads"
-    max_upload_size_mb: int = 10
+    max_upload_size_mb: int = 50
+
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
 
 
 @lru_cache
