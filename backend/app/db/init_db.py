@@ -23,7 +23,7 @@ def _add_column_if_missing(conn, table: str, column: str, col_type: str, default
 
 def _migrate(conn):
     """Add any missing columns for schema evolution."""
-    _add_column_if_missing(conn, "exams", "allow_review", "BOOLEAN", 1)
+    _add_column_if_missing(conn, "exams", "allow_review", "BOOLEAN", "TRUE")
     _add_column_if_missing(conn, "exams", "show_answers_policy", "VARCHAR", "'never'")
     _add_column_if_missing(conn, "library_materials", "shared_by", "VARCHAR")
     _add_column_if_missing(conn, "library_materials", "source_id", "VARCHAR")

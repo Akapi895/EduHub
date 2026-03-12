@@ -7,10 +7,16 @@ connect_args = {}
 if settings.database_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
+# Use a larger connection pool for PostgreSQL
+pool_kwargs = {}
+if not settings.database_url.startswith("sqlite"):
+    pool_kwargs = {"pool_size": 10, "max_overflow": 20, "pool_pre_ping": True}
+
 engine = create_engine(
     settings.database_url,
     connect_args=connect_args,
     echo=settings.debug,
+    **pool_kwargs,
 )
 
 # Enable SQLite foreign key enforcement so ON DELETE CASCADE works
