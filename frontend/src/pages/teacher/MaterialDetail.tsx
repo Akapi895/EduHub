@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, BookOpen, Video, ClipboardList, Download, Loader2, PlusCircle, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, FileText, BookOpen, Video, ClipboardList, Download, Loader2, PlusCircle, Pencil, Trash2, Sparkles } from 'lucide-react';
 import Badge from '@/components/common/Badge';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
@@ -11,6 +11,7 @@ import { formatDate } from '@/utils/helpers';
 import { useAuthStore } from '@/store/auth.store';
 import { SUBJECTS, GRADES } from '@/utils/constants';
 import type { Material, Class, Chapter } from '@/types';
+import { getMaterialRoute } from '@/utils/materialRoutes';
 
 const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   book: BookOpen,
@@ -18,6 +19,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   video: Video,
   reference: FileText,
   document: FileText,
+  interactive_book: Sparkles,
 };
 
 const typeBadge: Record<string, { label: string; variant: 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' }> = {
@@ -69,6 +71,11 @@ export default function MaterialDetail() {
   useEffect(() => {
     fetchMaterial();
   }, [fetchMaterial]);
+
+  useEffect(() => {
+    if (!material || material.material_type !== 'interactive_book' || !user) return;
+    navigate(getMaterialRoute(material, user.role), { replace: true });
+  }, [material, navigate, user]);
 
   // Fetch classes when add-to-class modal opens
   useEffect(() => {

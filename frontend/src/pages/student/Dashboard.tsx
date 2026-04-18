@@ -149,7 +149,7 @@ export default function StudentDashboard() {
               <ExamCard
                 key={exam.id}
                 exam={exam as unknown as Exam}
-                onClick={() => navigate(`/student/exams/${exam.id}`)}
+                onClick={() => navigate(`/student/exam/${exam.id}`)}
               />
             ))}
           </div>

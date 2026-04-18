@@ -16,7 +16,7 @@ export const classService = {
   createChapter: (classId: string, data: { name: string }) =>
     api.post(`/classes/${classId}/chapters`, data),
   getMaterials: (classId: string) => api.get(`/classes/${classId}/materials`),
-  addMaterial: (classId: string, data: { material_id: string; chapter_id: string }) =>
+  addMaterial: (classId: string, data: { material_id: string; chapter_id?: string }) =>
     api.post(`/classes/${classId}/materials`, data),
   removeMaterial: (classId: string, classMaterialId: string) =>
     api.delete(`/classes/${classId}/materials/${classMaterialId}`),

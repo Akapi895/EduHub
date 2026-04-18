@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" fill="none">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f8fafc" />
+      <stop offset="55%" stop-color="#ede9fe" />
+      <stop offset="100%" stop-color="#fde68a" />
+    </linearGradient>
+    <linearGradient id="hill" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#bbf7d0" />
+      <stop offset="100%" stop-color="#86efac" />
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" rx="36" fill="url(#sky)" />
+  <circle cx="1060" cy="132" r="64" fill="#fff7ed" opacity="0.92" />
+  <path d="M0 530C110 468 220 448 332 470C438 492 522 548 632 560C760 574 862 508 972 486C1086 462 1178 476 1280 534V720H0V530Z" fill="url(#hill)" />
+  <path d="M0 590C112 560 230 550 352 570C496 594 620 650 764 650C898 650 1048 594 1168 582C1208 578 1245 580 1280 588V720H0V590Z" fill="#4ade80" opacity="0.5" />
+  <g opacity="0.28">
+    <path d="M160 112L212 148L170 196" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M1080 188L1138 226L1090 278" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M958 86L992 106L966 138" stroke="#8b5cf6" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+  <rect x="92" y="88" width="226" height="58" rx="29" fill="#8b5cf6" />
+  <text x="205" y="124" fill="white" font-size="24" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">Cảnh 5</text>
+  <rect x="88" y="152" width="1104" height="370" rx="40" fill="white" opacity="0.88" />
+  <text x="116" y="248" fill="#0f172a" font-size="60" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Sợi chỉ qua vỏ ốc</text>
+  <text x="116" y="314" fill="#334155" font-size="28" font-weight="500" font-family="Segoe UI, Arial, sans-serif">Quiz mô phỏng mẹo dùng kiến để đưa sợi chỉ đi xuyên qua vỏ ốc.</text>
+  <g transform="translate(824 208)">
+    <rect width="272" height="186" rx="28" fill="#ede9fe" />
+    <circle cx="84" cy="78" r="42" fill="#8b5cf6" opacity="0.85" />
+    <rect x="132" y="46" width="96" height="20" rx="10" fill="white" opacity="0.8" />
+    <rect x="132" y="82" width="74" height="16" rx="8" fill="white" opacity="0.7" />
+    <rect x="132" y="116" width="108" height="16" rx="8" fill="white" opacity="0.7" />
+    <path d="M22 150C50 126 96 126 126 150C156 174 214 174 248 148" stroke="#8b5cf6" stroke-width="12" stroke-linecap="round" />
+  </g>
+  <rect x="112" y="560" width="400" height="82" rx="28" fill="white" opacity="0.8" />
+  <text x="144" y="610" fill="#334155" font-size="24" font-weight="600" font-family="Segoe UI, Arial, sans-serif">Mock asset để kiểm thử player, preview và thẻ thư viện.</text>
+</svg>

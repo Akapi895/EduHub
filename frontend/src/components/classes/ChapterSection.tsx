@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, FileText, Plus, Trash2, BookOpen, Video, ClipboardList, Eye } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Plus, Trash2, BookOpen, Video, ClipboardList, Eye, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Chapter, MaterialViewStudent } from '@/types';
@@ -7,6 +7,7 @@ import Modal from '@/components/common/Modal';
 import Button from '@/components/common/Button';
 import { classService } from '@/services/class.service';
 import { libraryService } from '@/services/library.service';
+import { getMaterialRoute } from '@/utils/materialRoutes';
 import AddMaterialToChapterModal from './AddMaterialToChapterModal';
 
 const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -15,6 +16,7 @@ const typeIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   video: Video,
   reference: FileText,
   document: FileText,
+  interactive_book: Sparkles,
 };
 
 const typeBadge: Record<string, { label: string; variant: 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' }> = {
@@ -84,12 +86,18 @@ export default function ChapterSection({ chapter, classId, onMaterialAdded, onCh
   };
 
   const handleMaterialClick = async (materialId: string) => {
+    const material = chapter.materials.find((item) => item.id === materialId);
+    if (!material) return;
     if (readOnly) {
       try {
         await libraryService.recordView(materialId, classId);
       } catch { /* silent */ }
     }
-    navigate(`${materialBasePath}/${materialId}`);
+    navigate(
+      getMaterialRoute(material, readOnly ? 'student' : 'teacher', {
+        classId: readOnly ? classId : undefined,
+      })
+    );
   };
 
   return (

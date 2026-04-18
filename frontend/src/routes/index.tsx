@@ -1,3 +1,5 @@
+import { Suspense, lazy, type ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Navigate, type RouteObject } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
@@ -30,6 +32,23 @@ import StudentSettings from '@/pages/student/Settings';
 
 import NotFound from '@/pages/NotFound';
 
+const TeacherInteractiveBookEditor = lazy(() => import('@/pages/teacher/InteractiveBookEditor'));
+const StudentInteractiveBook = lazy(() => import('@/pages/student/InteractiveBook'));
+
+function withLazyShell(element: ReactNode) {
+  return (
+    <Suspense
+      fallback={(
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      )}
+    >
+      {element}
+    </Suspense>
+  );
+}
+
 export const routes: RouteObject[] = [
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
@@ -43,6 +62,8 @@ export const routes: RouteObject[] = [
       { path: 'library/system', element: <TeacherLibrary mode="system" /> },
       { path: 'library/personal', element: <TeacherLibrary mode="personal" /> },
       { path: 'library/:id', element: <MaterialDetail /> },
+      { path: 'interactive-books/new', element: withLazyShell(<TeacherInteractiveBookEditor />) },
+      { path: 'interactive-books/:id', element: withLazyShell(<TeacherInteractiveBookEditor />) },
       { path: 'classes', element: <TeacherClasses /> },
       { path: 'classes/:id', element: <TeacherClassDetail /> },
       { path: 'classes/:classId/exams/create', element: <CreateExam /> },
@@ -63,7 +84,10 @@ export const routes: RouteObject[] = [
       { path: 'library', element: <StudentLibrary /> },
       { path: 'library/:id', element: <MaterialDetail /> },
       { path: 'exam/:id', element: <StudentExam /> },
+      { path: 'exams/:id', element: <StudentExam /> },
       { path: 'exams', element: <StudentExams /> },
+      { path: 'interactive-books/:id', element: withLazyShell(<StudentInteractiveBook />) },
+      { path: 'interactive-books/:id/scenes/:sceneId', element: withLazyShell(<StudentInteractiveBook />) },
       { path: 'inbox', element: <StudentInbox /> },
       { path: 'chatbot', element: <StudentChatbot /> },
       { path: 'settings', element: <StudentSettings /> },

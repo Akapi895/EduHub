@@ -15,6 +15,11 @@ from app.models.question import Question, QuestionOption, MatchingPair  # noqa: 
 from app.models.submission import Submission, Answer, AnswerOption  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
+from app.models.interactive_book import (  # noqa: F401
+    InteractiveBook,
+    InteractiveBookAttempt,
+    InteractiveBookEvent,
+)
 
 config = context.config
 
@@ -22,7 +27,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Override sqlalchemy.url with the value from app settings
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", settings.normalized_database_url)
 
 target_metadata = Base.metadata
 

@@ -6,6 +6,7 @@ import { libraryService } from '@/services/library.service';
 import { useDebounce } from '@/hooks/useDebounce';
 import { SUBJECTS } from '@/utils/constants';
 import type { Material } from '@/types';
+import { getMaterialRoute } from '@/utils/materialRoutes';
 
 const TYPES = [
   { value: '', label: 'Tất cả' },
@@ -14,6 +15,7 @@ const TYPES = [
   { value: 'video', label: 'Video' },
   { value: 'reference', label: 'Tham khảo' },
   { value: 'document', label: 'Tài liệu' },
+  { value: 'interactive_book', label: 'Sach tuong tac' },
 ];
 
 export default function StudentLibrary() {
@@ -100,7 +102,7 @@ export default function StudentLibrary() {
             <MaterialCard
               key={material.id}
               material={material}
-              onClick={() => navigate(`/student/library/${material.id}`)}
+              onClick={() => navigate(getMaterialRoute(material, 'student'))}
             />
           ))}
         </div>
