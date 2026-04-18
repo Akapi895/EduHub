@@ -63,7 +63,7 @@ export interface Material {
   description: string;
   thumbnail_url: string;
   file_url: string;
-  material_type: 'book' | 'exam' | 'video' | 'reference' | 'document';
+  material_type: 'book' | 'exam' | 'video' | 'reference' | 'document' | 'interactive_book';
   subject: string;
   grade: string;
   is_system: boolean;
@@ -74,6 +74,10 @@ export interface Material {
   source_id?: string;
   created_at: string;
   view_count?: number;
+  interactive_status?: 'draft' | 'published' | 'archived';
+  manifest_version?: number;
+  entry_scene_id?: string;
+  estimated_duration?: number;
 }
 
 export interface MaterialViewStudent {
@@ -188,4 +192,112 @@ export interface Message {
   file_url?: string;
   is_read?: boolean;
   created_at: string;
+}
+
+// ====== Interactive Books ======
+export type InteractiveBookStatus = 'draft' | 'published' | 'archived';
+export type InteractiveAttemptStatus = 'in_progress' | 'completed' | 'abandoned';
+export type InteractiveSceneType =
+  | 'timeline'
+  | 'slideshow'
+  | 'interactive_video'
+  | 'branching'
+  | 'quiz'
+  | 'hotspot_audio'
+  | 'mini_game'
+  | 'vr_scene';
+export type InteractiveTrigger =
+  | 'on_enter'
+  | 'timecode'
+  | 'on_click'
+  | 'on_choice'
+  | 'on_complete';
+
+export interface InteractiveAssetRef {
+  id?: string;
+  kind?: string;
+  label?: string;
+  url: string;
+}
+
+export interface InteractiveChoice {
+  id: string;
+  label: string;
+  target_scene_id?: string;
+  feedback?: string;
+  feedback_image_url?: string;
+  feedback_audio_url?: string;
+  is_correct?: boolean;
+  retry?: boolean;
+  score_delta?: number;
+}
+
+export interface InteractiveInteraction {
+  id?: string;
+  type: string;
+  trigger: InteractiveTrigger;
+  timecode?: number;
+  prompt?: string;
+  target_scene_id?: string;
+  choices?: InteractiveChoice[];
+  data?: Record<string, unknown>;
+}
+
+export interface InteractiveScene {
+  id: string;
+  type: InteractiveSceneType;
+  title?: string;
+  assets?: InteractiveAssetRef[];
+  content?: Record<string, unknown> | unknown[] | string | null;
+  interactions?: InteractiveInteraction[];
+  next?: unknown;
+}
+
+export interface InteractiveBookManifest {
+  title?: string;
+  entry_scene_id: string;
+  scenes: InteractiveScene[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface InteractiveBookMeta {
+  material_id: string;
+  status: InteractiveBookStatus;
+  manifest_version: number;
+  entry_scene_id?: string;
+  estimated_duration?: number;
+  published_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InteractiveBookAttempt {
+  id: string;
+  interactive_book_id: string;
+  student_id: string;
+  class_id?: string | null;
+  manifest_version: number;
+  status: InteractiveAttemptStatus;
+  current_scene_id?: string | null;
+  state_snapshot?: Record<string, any> | null;
+  completion_percent: number;
+  score_summary?: Record<string, any> | null;
+  started_at: string;
+  last_seen_at: string;
+  completed_at?: string | null;
+}
+
+export interface InteractiveBookBundle {
+  material: Material;
+  interactive_book: InteractiveBookMeta;
+  manifest: InteractiveBookManifest;
+  view: 'draft' | 'published';
+}
+
+export interface InteractiveBookAttemptBundle {
+  material: Material;
+  interactive_book: InteractiveBookMeta;
+  manifest: InteractiveBookManifest;
+  attempt: InteractiveBookAttempt;
+  resume: boolean;
 }

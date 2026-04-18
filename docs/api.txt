@@ -328,3 +328,85 @@ Dễ mở rộng version v2
 Phù hợp FastAPI
 
 Phù hợp frontend Vite gọi bằng axios
+============================================================
+XII. INTERACTIVE BOOKS
+
+Material type moi:
+
+interactive_book
+
+POST /api/v1/interactive-books
+Tao draft interactive book (teacher)
+
+Request:
+
+{
+  "title": "string",
+  "description": "string",
+  "thumbnail_url": "string",
+  "subject": "string",
+  "grade": "string",
+  "is_system": false,
+  "estimated_duration": 10,
+  "manifest": {
+    "entry_scene_id": "intro",
+    "scenes": []
+  }
+}
+
+PUT /api/v1/interactive-books/{material_id}/draft
+Cap nhat metadata + draft manifest
+
+POST /api/v1/interactive-books/{material_id}/publish
+Publish draft -> published manifest, tang manifest_version
+
+GET /api/v1/interactive-books/{material_id}?view=draft|published
+Teacher owner co the xem draft, student chi xem published
+
+POST /api/v1/interactive-books/{material_id}/attempts/start
+Student start/resume attempt
+
+Request:
+
+{
+  "class_id": "uuid | null"
+}
+
+PATCH /api/v1/interactive-book-attempts/{attempt_id}/checkpoint
+Luu checkpoint scene hien tai
+
+Request:
+
+{
+  "current_scene_id": "scene-id",
+  "state_snapshot": {},
+  "completion_percent": 45,
+  "score_summary": {}
+}
+
+POST /api/v1/interactive-book-attempts/{attempt_id}/events/batch
+Batch log su kien runtime
+
+Request:
+
+{
+  "events": [
+    {
+      "scene_id": "scene-id",
+      "event_type": "interaction_choice",
+      "payload": {}
+    }
+  ]
+}
+
+POST /api/v1/interactive-book-attempts/{attempt_id}/complete
+Dong attempt va danh dau completed
+
+Request:
+
+{
+  "current_scene_id": "scene-id",
+  "state_snapshot": {},
+  "completion_percent": 100,
+  "score_summary": {}
+}

@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.class_model import Class, Chapter, ClassStudent, ClassMaterial
 from app.models.material import Material as MaterialModel, MaterialView
 from app.models.exam import Exam
+from app.utils.enums import InteractiveBookStatus, MaterialType
 from app.utils.responses import ok
 
 
@@ -223,6 +224,11 @@ def list_chapters(
             mat = materials_by_id.get(cm.material_id)
             if mat:
                 mat_data = MaterialOut.model_validate(mat).model_dump()
+                if mat.interactive_book:
+                    mat_data["interactive_status"] = mat.interactive_book.status
+                    mat_data["manifest_version"] = mat.interactive_book.manifest_version
+                    mat_data["entry_scene_id"] = mat.interactive_book.entry_scene_id
+                    mat_data["estimated_duration"] = mat.interactive_book.estimated_duration
                 if is_teacher:
                     mat_data["view_count"] = view_counts.get(mat.id, 0)
                 mats.append(mat_data)
@@ -264,6 +270,11 @@ def add_material(
     mat = db.query(MaterialModel).filter(MaterialModel.id == data.material_id).first()
     if not mat:
         raise HTTPException(status_code=404, detail="Tai lieu khong ton tai")
+    if not mat.is_system and mat.created_by != teacher.id:
+        raise HTTPException(status_code=403, detail="Ban khong co quyen gan tai lieu nay vao lop")
+    if mat.material_type == MaterialType.interactive_book:
+        if not mat.interactive_book or mat.interactive_book.status != InteractiveBookStatus.published:
+            raise HTTPException(status_code=400, detail="Chi co the gan sach tuong tac da phat hanh vao lop")
     # Validate chapter belongs to this class
     if data.chapter_id:
         ch = db.query(Chapter).filter(Chapter.id == data.chapter_id, Chapter.class_id == class_id).first()
@@ -271,6 +282,18 @@ def add_material(
             raise HTTPException(status_code=404, detail="Chuong khong thuoc lop nay")
         if class_crud.is_material_in_chapter(db, chapter_id=data.chapter_id, material_id=data.material_id):
             raise HTTPException(status_code=400, detail="Tai lieu da ton tai trong chuong nay")
+    else:
+        existing_root_link = (
+            db.query(ClassMaterial)
+            .filter(
+                ClassMaterial.class_id == class_id,
+                ClassMaterial.material_id == data.material_id,
+                ClassMaterial.chapter_id.is_(None),
+            )
+            .first()
+        )
+        if existing_root_link:
+            raise HTTPException(status_code=400, detail="Tai lieu da duoc gan truc tiep vao lop nay")
     cm = class_crud.add_material_to_class(db, class_id=class_id, material_id=data.material_id, chapter_id=data.chapter_id)
     # Notify all students in the class about new material
     student_ids = [m.student_id for m in class_.students]

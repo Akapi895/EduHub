@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#eff6ff" />
+      <stop offset="100%" stop-color="#fef3c7" />
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" rx="36" fill="url(#bg)" />
+  <path d="M0 562C154 508 294 500 426 536C578 578 734 650 886 630C1036 610 1140 544 1280 540V720H0V562Z" fill="#bbf7d0" opacity="0.8" />
+  <text x="640" y="70" fill="#0f172a" font-size="40" font-weight="700" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">Bấm vào từng ô để mở một nhánh truyện</text>
+  <text x="640" y="104" fill="#475569" font-size="22" font-weight="500" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">Hotspot đã đặt đúng vị trí với 5 sự kiện của mock flow</text>
+
+  <g>
+    <rect x="120" y="120" width="286" height="182" rx="28" fill="white" opacity="0.94" />
+    <rect x="142" y="142" width="242" height="18" rx="9" fill="#0ea5e9" opacity="0.92" />
+    <text x="148" y="212" fill="#0f172a" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Giới thiệu chung</text>
+    <text x="148" y="256" fill="#475569" font-size="24" font-weight="500" font-family="Segoe UI, Arial, sans-serif">Video mở đầu</text>
+    <circle cx="364" cy="262" r="18" fill="#0ea5e9" opacity="0.9" />
+  </g>
+
+  <g>
+    <rect x="496" y="120" width="286" height="182" rx="28" fill="white" opacity="0.94" />
+    <rect x="518" y="142" width="242" height="18" rx="9" fill="#f97316" opacity="0.92" />
+    <text x="524" y="212" fill="#0f172a" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Quan hỏi</text>
+    <text x="524" y="256" fill="#475569" font-size="24" font-weight="500" font-family="Segoe UI, Arial, sans-serif">Quiz câu đố</text>
+    <circle cx="740" cy="262" r="18" fill="#f97316" opacity="0.9" />
+  </g>
+
+  <g>
+    <rect x="872" y="120" width="286" height="182" rx="28" fill="white" opacity="0.94" />
+    <rect x="894" y="142" width="242" height="18" rx="9" fill="#84cc16" opacity="0.92" />
+    <text x="900" y="212" fill="#0f172a" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Ba con trâu đực đẻ</text>
+    <text x="900" y="256" fill="#475569" font-size="24" font-weight="500" font-family="Segoe UI, Arial, sans-serif">Video có timecode</text>
+    <circle cx="1116" cy="262" r="18" fill="#84cc16" opacity="0.9" />
+  </g>
+
+  <g>
+    <rect x="250" y="396" width="286" height="182" rx="28" fill="white" opacity="0.94" />
+    <rect x="272" y="418" width="242" height="18" rx="9" fill="#ec4899" opacity="0.92" />
+    <text x="278" y="488" fill="#0f172a" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Con chim sẻ</text>
+    <text x="278" y="532" fill="#475569" font-size="24" font-weight="500" font-family="Segoe UI, Arial, sans-serif">Nhánh lựa chọn</text>
+    <circle cx="494" cy="538" r="18" fill="#ec4899" opacity="0.9" />
+  </g>
+
+  <g>
+    <rect x="742" y="396" width="286" height="182" rx="28" fill="white" opacity="0.94" />
+    <rect x="764" y="418" width="242" height="18" rx="9" fill="#8b5cf6" opacity="0.92" />
+    <text x="770" y="488" fill="#0f172a" font-size="34" font-weight="700" font-family="Segoe UI, Arial, sans-serif">Sợi chỉ</text>
+    <text x="770" y="532" fill="#475569" font-size="24" font-weight="500" font-family="Segoe UI, Arial, sans-serif">Quiz vỏ ốc</text>
+    <circle cx="986" cy="538" r="18" fill="#8b5cf6" opacity="0.9" />
+  </g>
+
+  <rect x="380" y="630" width="520" height="48" rx="24" fill="white" opacity="0.84" />
+  <text x="640" y="661" fill="#334155" font-size="22" font-weight="600" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">Sau mỗi nhánh, bấm 'Cảnh tiếp theo' hoặc 'Tổng quan' để thử nhanh nhánh khác.</text>
+</svg>

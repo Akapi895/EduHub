@@ -10,6 +10,11 @@ from app.models.question import Question, QuestionOption, MatchingPair  # noqa: 
 from app.models.submission import Submission, Answer, AnswerOption  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
+from app.models.interactive_book import (  # noqa: F401
+    InteractiveBook,
+    InteractiveBookAttempt,
+    InteractiveBookEvent,
+)
 
 
 def _add_column_if_missing(conn, table: str, column: str, col_type: str, default=None):
@@ -29,14 +34,15 @@ def _migrate(conn):
     _add_column_if_missing(conn, "library_materials", "source_id", "VARCHAR")
 
 
-def create_tables() -> None:
-    """Create all database tables based on SQLAlchemy models."""
+def create_tables(*, run_legacy_migrations: bool = False) -> None:
+    """Dev bootstrap helper: create all known tables from SQLAlchemy metadata."""
     Base.metadata.create_all(bind=engine)
-    with engine.connect() as conn:
-        _migrate(conn)
-        conn.commit()
+    if run_legacy_migrations:
+        with engine.connect() as conn:
+            _migrate(conn)
+            conn.commit()
     print("[DB] All tables created successfully.")
 
 
 if __name__ == "__main__":
-    create_tables()
+    create_tables(run_legacy_migrations=True)

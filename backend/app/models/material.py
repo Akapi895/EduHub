@@ -49,6 +49,13 @@ class Material(Base):
     views: Mapped[list["MaterialView"]] = relationship(
         "MaterialView", back_populates="material", cascade="all, delete-orphan", passive_deletes=True,
     )
+    interactive_book: Mapped["InteractiveBook | None"] = relationship(
+        "InteractiveBook",
+        back_populates="material",
+        uselist=False,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class MaterialView(Base):

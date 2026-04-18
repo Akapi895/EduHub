@@ -36,4 +36,5 @@ Thumbs.db
 
 # Uploads
 backend/uploads/
+backend/.postgres-dev/
 ./start.bat

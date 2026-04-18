@@ -1,6 +1,9 @@
 @echo off
 title EduHub - Starting...
 
+echo Starting Docker Postgres for EduHub...
+powershell -ExecutionPolicy Bypass -File "%~dp0backend\scripts\dev-postgres.ps1" start
+
 :: Use Windows Terminal split panes (1 window, 2 panels)
 where wt >nul 2>nul
 if %errorlevel%==0 (

@@ -9,6 +9,7 @@ from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
 from app.models.material import Material
 from app.utils.responses import ok
+from app.utils.enums import MaterialType
 
 router = APIRouter(prefix="/library", tags=["Library"])
 
@@ -18,6 +19,11 @@ def _serialize(m: Material, db: Session) -> dict:
     if m.shared_by:
         sharer = db.query(User).filter(User.id == m.shared_by).first()
         d["shared_by_name"] = sharer.full_name if sharer else None
+    if m.interactive_book:
+        d["interactive_status"] = m.interactive_book.status
+        d["manifest_version"] = m.interactive_book.manifest_version
+        d["entry_scene_id"] = m.interactive_book.entry_scene_id
+        d["estimated_duration"] = m.interactive_book.estimated_duration
     return d
 
 
@@ -124,6 +130,8 @@ def create_material(
     db: Session = Depends(get_db),
     teacher: User = Depends(require_teacher),
 ):
+    if data.material_type == MaterialType.interactive_book:
+        raise HTTPException(status_code=400, detail="Hay dung endpoint /interactive-books de tao sach tuong tac")
     material = material_crud.create(db, data=data, created_by=teacher.id)
     return ok(data=_serialize(material, db), status_code=201)
 
@@ -157,6 +165,8 @@ def update_material(
     m = material_crud.get_by_id(db, material_id)
     if not m or m.created_by != teacher.id:
         raise HTTPException(status_code=404, detail="Material not found")
+    if data.material_type == MaterialType.interactive_book:
+        raise HTTPException(status_code=400, detail="Khong the doi mot tai lieu thuong thanh sach tuong tac")
     # If moving to a folder, check for duplicate
     if data.folder_id is not None and m.file_url:
         existing = db.query(Material).filter(
@@ -201,6 +211,8 @@ def copy_material(
     m = material_crud.get_by_id(db, material_id)
     if not m or m.created_by != teacher.id:
         raise HTTPException(status_code=404, detail="Material not found")
+    if m.material_type == MaterialType.interactive_book:
+        raise HTTPException(status_code=400, detail="V1 chua ho tro sao chep sach tuong tac")
     # Prevent duplicate in target folder
     if m.file_url and body.folder_id:
         existing = db.query(Material).filter(
@@ -226,6 +238,8 @@ def share_material(
     m = material_crud.get_by_id(db, material_id)
     if not m or m.created_by != teacher.id:
         raise HTTPException(status_code=404, detail="Material not found")
+    if m.material_type == MaterialType.interactive_book:
+        raise HTTPException(status_code=400, detail="V1 chua ho tro chia se sach tuong tac")
     if m.is_system:
         raise HTTPException(status_code=400, detail="Material is already in system library")
     # Prevent duplicate share: same file already shared by this teacher
@@ -255,6 +269,8 @@ def save_to_personal(
     m = material_crud.get_by_id(db, material_id)
     if not m or not m.is_system:
         raise HTTPException(status_code=404, detail="System material not found")
+    if m.material_type == MaterialType.interactive_book:
+        raise HTTPException(status_code=400, detail="V1 chua ho tro luu ban sao sach tuong tac")
     # Prevent saving own shared material back
     if m.shared_by == teacher.id:
         raise HTTPException(status_code=400, detail="Day la tai lieu ban da chia se, khong can luu lai")

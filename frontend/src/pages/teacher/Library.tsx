@@ -10,6 +10,7 @@ import { libraryService } from '@/services/library.service';
 import { useDebounce } from '@/hooks/useDebounce';
 import { SUBJECTS } from '@/utils/constants';
 import type { Material, Folder as FolderType } from '@/types';
+import { getMaterialRoute } from '@/utils/materialRoutes';
 
 const TYPES = [
   { value: '', label: 'Tất cả' },
@@ -18,6 +19,7 @@ const TYPES = [
   { value: 'video', label: 'Video' },
   { value: 'reference', label: 'Tham khảo' },
   { value: 'document', label: 'Tài liệu' },
+  { value: 'interactive_book', label: 'Sách tương tác' },
 ];
 
 interface Props {
@@ -223,6 +225,12 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
                 <FolderPlus className="w-4 h-4 mr-2" /> Tạo thư mục
               </Button>
             )}
+            <Button
+              variant="secondary"
+              onClick={() => navigate('/teacher/interactive-books/new')}
+            >
+              Tạo sách tương tác
+            </Button>
             <Button onClick={() => setShowUpload(true)}>
               <Upload className="w-4 h-4 mr-2" /> Upload tài liệu
             </Button>
@@ -320,7 +328,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
             <MaterialCard
               key={material.id}
               material={material}
-              onClick={() => navigate(`/teacher/library/${material.id}`)}
+              onClick={() => navigate(getMaterialRoute(material, 'teacher'))}
               folders={isPersonal ? folders : undefined}
               onRemoveFromFolder={isPersonal && currentFolder ? handleRemoveFromFolder : undefined}
               onCopy={isPersonal ? handleCopy : undefined}

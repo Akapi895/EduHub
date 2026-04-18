@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from app.models.submission import Submission
     from app.models.message import Message, ConversationMember
     from app.models.notification import Notification
+    from app.models.interactive_book import InteractiveBook, InteractiveBookAttempt
 
 
 class User(Base):
@@ -56,4 +57,10 @@ class User(Base):
     )
     notifications: Mapped[list["Notification"]] = relationship(  # noqa: F821
         "Notification", back_populates="user"
+    )
+    created_interactive_books: Mapped[list["InteractiveBook"]] = relationship(  # noqa: F821
+        "InteractiveBook", back_populates="creator"
+    )
+    interactive_book_attempts: Mapped[list["InteractiveBookAttempt"]] = relationship(  # noqa: F821
+        "InteractiveBookAttempt", back_populates="student"
     )

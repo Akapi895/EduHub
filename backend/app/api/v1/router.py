@@ -1,5 +1,17 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, chatbot, dashboard, messages, submissions, exams, library, upload, notifications
+from app.api.v1.endpoints import (
+    auth,
+    chatbot,
+    dashboard,
+    exams,
+    interactive_books,
+    library,
+    messages,
+    notifications,
+    submissions,
+    upload,
+    users,
+)
 from app.api.v1.endpoints.classes import router as classes_router
 
 api_router = APIRouter()
@@ -15,3 +27,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(chatbot.router)
 api_router.include_router(upload.router)
 api_router.include_router(notifications.router)
+api_router.include_router(interactive_books.router)

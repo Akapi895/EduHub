@@ -57,5 +57,9 @@ class MaterialOut(BaseModel):
     source_id: str | None = None
     created_at: datetime
     view_count: int | None = None
+    interactive_status: str | None = None
+    manifest_version: int | None = None
+    entry_scene_id: str | None = None
+    estimated_duration: int | None = None
 
     model_config = {"from_attributes": True}

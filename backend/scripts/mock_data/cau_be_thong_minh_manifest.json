@@ -1,0 +1,396 @@
+{
+  "title": "Mock demo - Cau be thong minh",
+  "entry_scene_id": "story-glance",
+  "metadata": {
+    "story_id": "mock-cau-be-thong-minh",
+    "theme": "dan-gian",
+    "authoring_mode": "json-seeded-demo",
+    "note": "Mock flow de test player interactive book"
+  },
+  "scenes": [
+    {
+      "id": "story-glance",
+      "type": "slideshow",
+      "title": "5 su kien chinh",
+      "assets": [
+        {
+          "id": "intro-slide",
+          "kind": "image",
+          "label": "Gioi thieu chung",
+          "url": "/mock/interactive-books/cau-be-thong-minh/01-gioi-thieu.svg"
+        },
+        {
+          "id": "quan-slide",
+          "kind": "image",
+          "label": "Quan hoi",
+          "url": "/mock/interactive-books/cau-be-thong-minh/02-quan-hoi.svg"
+        },
+        {
+          "id": "trau-slide",
+          "kind": "image",
+          "label": "3 con trau duc de",
+          "url": "/mock/interactive-books/cau-be-thong-minh/03-trau-duc-de.svg"
+        },
+        {
+          "id": "chim-slide",
+          "kind": "image",
+          "label": "Con chim se",
+          "url": "/mock/interactive-books/cau-be-thong-minh/04-chim-se.svg"
+        },
+        {
+          "id": "chi-slide",
+          "kind": "image",
+          "label": "Soi chi",
+          "url": "/mock/interactive-books/cau-be-thong-minh/05-soi-chi.svg"
+        }
+      ],
+      "content": {
+        "text": "Scene mo dau tom tat 5 su kien chinh. Nen co canh dong, dieu bay, am thanh gio va sao nhe de tao boi canh dan gian cho hoc sinh.",
+        "background_audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/field-breeze.wav"
+      },
+      "next": "event-map"
+    },
+    {
+      "id": "event-map",
+      "type": "hotspot_audio",
+      "title": "Bam vao tung su kien de kham pha",
+      "assets": [
+        {
+          "id": "event-map-bg",
+          "kind": "image",
+          "label": "Ban do su kien",
+          "url": "/mock/interactive-books/cau-be-thong-minh/event-map.svg"
+        }
+      ],
+      "content": {
+        "text": "Scene nay dong vai tro menu trung tam. Bam vao tung o anh de di vao moi nhanh. Sau khi test xong tung nhanh, bam 'Scene tiep theo' de quay lai ban do. Khi da kham pha xong, bam 'Hoan thanh' ngay tai scene nay.",
+        "image_url": "/mock/interactive-books/cau-be-thong-minh/event-map.svg",
+        "background_audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/story-flute.wav"
+      },
+      "interactions": [
+        {
+          "id": "hotspot-intro-video",
+          "type": "hotspot",
+          "trigger": "on_click",
+          "prompt": "Gioi thieu chung",
+          "target_scene_id": "intro-video",
+          "data": {
+            "x": 19,
+            "y": 27,
+            "subtitle": "Mo video cau be tu ke ve hoan canh va boi canh dong que.",
+            "audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/hotspot-chime.wav"
+          }
+        },
+        {
+          "id": "hotspot-ox-quiz",
+          "type": "hotspot",
+          "trigger": "on_click",
+          "prompt": "Quan hoi: Trau 1 ngay cay duoc may duong?",
+          "target_scene_id": "ox-quiz",
+          "data": {
+            "x": 50,
+            "y": 27,
+            "subtitle": "Scene quiz de hoc sinh chon dap an va nhan feedback ngay.",
+            "audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/hotspot-chime.wav"
+          }
+        },
+        {
+          "id": "hotspot-buffalo-video",
+          "type": "hotspot",
+          "trigger": "on_click",
+          "prompt": "3 con trau duc de",
+          "target_scene_id": "buffalo-video",
+          "data": {
+            "x": 81,
+            "y": 27,
+            "subtitle": "Video tu dong dung giua chung de hoc sinh chon huong di tiep.",
+            "audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/hotspot-chime.wav"
+          }
+        },
+        {
+          "id": "hotspot-sparrow-branch",
+          "type": "hotspot",
+          "trigger": "on_click",
+          "prompt": "Con chim se",
+          "target_scene_id": "sparrow-branch",
+          "data": {
+            "x": 31,
+            "y": 73,
+            "subtitle": "Scene branching de so sanh cac cach xu ly va buoc hoc sinh nghi logic.",
+            "audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/hotspot-chime.wav"
+          }
+        },
+        {
+          "id": "hotspot-thread-quiz",
+          "type": "hotspot",
+          "trigger": "on_click",
+          "prompt": "Soi chi va vo oc",
+          "target_scene_id": "thread-quiz",
+          "data": {
+            "x": 69,
+            "y": 73,
+            "subtitle": "Scene quiz mo phong phan me cung vo oc va meo xau chi thong minh.",
+            "audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/hotspot-chime.wav"
+          }
+        }
+      ]
+    },
+    {
+      "id": "intro-video",
+      "type": "interactive_video",
+      "title": "Gioi thieu chung",
+      "assets": [
+        {
+          "id": "intro-poster",
+          "kind": "image",
+          "label": "Poster gioi thieu",
+          "url": "/mock/interactive-books/cau-be-thong-minh/video-intro-poster.svg"
+        },
+        {
+          "id": "intro-video-asset",
+          "kind": "video",
+          "label": "Video gioi thieu",
+          "url": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+        }
+      ],
+      "content": {
+        "text": "Video demo dung sample cong khai de test player. Noi dung thong diep mo phong viec cau be tu gioi thieu hoan canh cua minh trong boi canh dong que va san dinh.",
+        "poster_url": "/mock/interactive-books/cau-be-thong-minh/video-intro-poster.svg",
+        "video_url": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+        "background_audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/field-breeze.wav"
+      },
+      "next": "event-map"
+    },
+    {
+      "id": "ox-quiz",
+      "type": "quiz",
+      "title": "Quan hoi: Trau 1 ngay cay duoc may duong?",
+      "assets": [
+        {
+          "id": "ox-quiz-image",
+          "kind": "image",
+          "label": "Quan gap cau be",
+          "url": "/mock/interactive-books/cau-be-thong-minh/quiz-quan-hoi.svg"
+        }
+      ],
+      "content": {
+        "text": "Vien quan gap cau be dang cay va hoi mot cau do. Hoc sinh can chon dap an hop ly va xem feedback.",
+        "image_url": "/mock/interactive-books/cau-be-thong-minh/quiz-quan-hoi.svg",
+        "background_audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/story-flute.wav"
+      },
+      "interactions": [
+        {
+          "id": "ox-question",
+          "type": "multiple_choice",
+          "trigger": "on_enter",
+          "prompt": "Theo ban, mot ngay trau cua cau be cay duoc may duong?",
+          "choices": [
+            {
+              "id": "ox-choice-3",
+              "label": "3 duong",
+              "is_correct": true,
+              "feedback": "Cau be dong tinh va moi ban di tiep. Day la dap an mock dung de test flow quiz.",
+              "score_delta": 1
+            },
+            {
+              "id": "ox-choice-5",
+              "label": "5 duong",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Chua dung. Thu doc ky goi y trong tranh va chon lai."
+            },
+            {
+              "id": "ox-choice-7",
+              "label": "7 duong",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Dap an nay qua voian. Ban hay thu lai."
+            }
+          ]
+        }
+      ],
+      "next": "event-map"
+    },
+    {
+      "id": "buffalo-video",
+      "type": "interactive_video",
+      "title": "3 con trau duc de",
+      "assets": [
+        {
+          "id": "buffalo-poster",
+          "kind": "image",
+          "label": "Poster trau duc de",
+          "url": "/mock/interactive-books/cau-be-thong-minh/buffalo-poster.svg"
+        },
+        {
+          "id": "buffalo-video-asset",
+          "kind": "video",
+          "label": "Video choose your own adventure",
+          "url": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+        }
+      ],
+      "content": {
+        "text": "Video nay dung sample cong khai de test logic timecode. Den giay 2.5, player se tu dong dung va bat interaction chon huong xu ly.",
+        "poster_url": "/mock/interactive-books/cau-be-thong-minh/buffalo-poster.svg",
+        "video_url": "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+      },
+      "interactions": [
+        {
+          "id": "buffalo-time-stop",
+          "type": "choose_path",
+          "trigger": "timecode",
+          "timecode": 2.5,
+          "prompt": "Neu em la cau be, em chon cach nao?",
+          "choices": [
+            {
+              "id": "buffalo-cry",
+              "label": "Khoc loc xin vua rut lenh",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Neu chi khoc loc, bai toan van chua duoc giai. Hay chon mot huong thong minh hon."
+            },
+            {
+              "id": "buffalo-think",
+              "label": "Binh tinh xem day la cau do de tim cach doi dap",
+              "is_correct": true,
+              "target_scene_id": "buffalo-success",
+              "feedback": "Dung roi. Chon su binh tinh va lap luan se mo ra nhanh dung.",
+              "score_delta": 2
+            }
+          ],
+          "data": {
+            "subtitle": "Lua chon sai thi giu lai de chon lai; lua chon dung se sang nhanh thanh cong."
+          }
+        }
+      ]
+    },
+    {
+      "id": "buffalo-success",
+      "type": "slideshow",
+      "title": "Vuot ai 3 con trau duc",
+      "assets": [
+        {
+          "id": "buffalo-success-1",
+          "kind": "image",
+          "label": "Giai thich thong minh",
+          "url": "/mock/interactive-books/cau-be-thong-minh/buffalo-success.svg"
+        },
+        {
+          "id": "buffalo-success-2",
+          "kind": "image",
+          "label": "Qua ai",
+          "url": "/mock/interactive-books/cau-be-thong-minh/03-trau-duc-de.svg"
+        }
+      ],
+      "content": {
+        "text": "Nhanh thanh cong nhac hoc sinh rang gia tri nam o cach dat cau hoi nguoc lai va dung ly le de pha the kho."
+      },
+      "next": "event-map"
+    },
+    {
+      "id": "sparrow-branch",
+      "type": "branching",
+      "title": "Con chim se",
+      "assets": [
+        {
+          "id": "sparrow-image",
+          "kind": "image",
+          "label": "Tinh huong chim se",
+          "url": "/mock/interactive-books/cau-be-thong-minh/sparrow-branching.svg"
+        }
+      ],
+      "content": {
+        "text": "Scene branching nay tap trung vao viec can nhac nhieu cach xu ly. Hoc sinh phai chon mot phuong an va nhan feedback ngay.",
+        "image_url": "/mock/interactive-books/cau-be-thong-minh/sparrow-branching.svg"
+      },
+      "interactions": [
+        {
+          "id": "sparrow-question",
+          "type": "branching_prompt",
+          "trigger": "on_enter",
+          "prompt": "Neu em la cau be, em se xu ly con chim se the nao?",
+          "choices": [
+            {
+              "id": "sparrow-feast",
+              "label": "Lam thit chim roi chia 3 mam co be xiu",
+              "is_correct": true,
+              "feedback": "Dung voi mock flow: day la cach doi lai mot de bai phi ly bang chinh lap luan phi ly cua no.",
+              "score_delta": 1
+            },
+            {
+              "id": "sparrow-raise",
+              "label": "Nhot chim lai, cho an thoc va moi vua den nghe hot",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Phuong an nay hay ve tinh nhan van, nhung khong giai dung thu thach mock."
+            },
+            {
+              "id": "sparrow-protest",
+              "label": "Noi rang mot con chim khong the bay ra 3 mam co",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Ban da nhin ra su vo ly, nhung van can mot doi dap thong minh hon de thuyet phuc."
+            }
+          ],
+          "data": {
+            "subtitle": "Day la phan 'Lua chon hanh dong' trong de xuat mock."
+          }
+        }
+      ],
+      "next": "event-map"
+    },
+    {
+      "id": "thread-quiz",
+      "type": "quiz",
+      "title": "Soi chi va vo oc",
+      "assets": [
+        {
+          "id": "thread-image",
+          "kind": "image",
+          "label": "Vo oc me cung",
+          "url": "/mock/interactive-books/cau-be-thong-minh/thread-shell.svg"
+        }
+      ],
+      "content": {
+        "text": "Scene nay mo phong me cung vo oc de hoc sinh hinh dung do kho cua cau do ngoai doi that.",
+        "image_url": "/mock/interactive-books/cau-be-thong-minh/thread-shell.svg",
+        "background_audio_url": "/mock/interactive-books/cau-be-thong-minh/audio/field-breeze.wav"
+      },
+      "interactions": [
+        {
+          "id": "thread-question",
+          "type": "multiple_choice",
+          "trigger": "on_enter",
+          "prompt": "Lam sao dua soi chi qua vo oc?",
+          "choices": [
+            {
+              "id": "thread-ant",
+              "label": "Buoc soi chi vao chan kien de kien bo qua vo oc",
+              "is_correct": true,
+              "feedback": "Chinh xac. Day la meo thong minh dung suc vat nho de giai bai toan kho.",
+              "score_delta": 2
+            },
+            {
+              "id": "thread-force",
+              "label": "Day thang soi chi vao trong vo oc",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Cach nay rat kho thuc hien voi vo oc xoan."
+            },
+            {
+              "id": "thread-break",
+              "label": "Dap vo oc ra de xong nhanh",
+              "is_correct": false,
+              "retry": true,
+              "feedback": "Neu dap vo oc thi cau do khong con y nghia nua."
+            }
+          ],
+          "data": {
+            "subtitle": "Mock nay thay cho phan me cung truc quan trong de xuat."
+          }
+        }
+      ],
+      "next": "event-map"
+    }
+  ]
+}

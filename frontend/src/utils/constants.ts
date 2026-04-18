@@ -14,6 +14,7 @@ export const MATERIAL_TYPES = {
   VIDEO: 'video',
   REFERENCE: 'reference',
   DOCUMENT: 'document',
+  INTERACTIVE_BOOK: 'interactive_book',
 } as const;
 
 export const QUESTION_TYPES = {
@@ -44,3 +45,21 @@ export const SUBJECTS = [
 ] as const;
 
 export const GRADES = ['Lớp 6', 'Lớp 7', 'Lớp 8', 'Lớp 9'] as const;
+
+export const INTERACTIVE_SCENE_TYPES = {
+  SLIDESHOW: 'slideshow',
+  INTERACTIVE_VIDEO: 'interactive_video',
+  BRANCHING: 'branching',
+  QUIZ: 'quiz',
+  HOTSPOT_AUDIO: 'hotspot_audio',
+  MINI_GAME: 'mini_game',
+  VR_SCENE: 'vr_scene',
+} as const;
+
+export const INTERACTIVE_TRIGGERS = {
+  ON_ENTER: 'on_enter',
+  TIMECODE: 'timecode',
+  ON_CLICK: 'on_click',
+  ON_CHOICE: 'on_choice',
+  ON_COMPLETE: 'on_complete',
+} as const;
