@@ -18,6 +18,7 @@ export default function StudentInteractiveBook() {
   const [error, setError] = useState<string | null>(null);
   const [bundle, setBundle] = useState<InteractiveBookAttemptBundle | null>(null);
   const [attemptStatus, setAttemptStatus] = useState<'in_progress' | 'completed' | 'abandoned' | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
@@ -37,7 +38,7 @@ export default function StudentInteractiveBook() {
     };
 
     void load();
-  }, [classId, id]);
+  }, [classId, id, reloadKey]);
 
   const validSceneIds = useMemo(
     () => new Set(bundle?.manifest.scenes.map((scene) => scene.id) ?? []),
@@ -76,6 +77,17 @@ export default function StudentInteractiveBook() {
       return;
     }
     navigate('/student/library');
+  };
+
+  const handleRestart = () => {
+    if (!bundle) return;
+    const nextPath = classId
+      ? `/student/interactive-books/${bundle.material.id}?classId=${encodeURIComponent(classId)}`
+      : `/student/interactive-books/${bundle.material.id}`;
+    navigate(nextPath, { replace: true });
+    setBundle(null);
+    setAttemptStatus(null);
+    setReloadKey((current) => current + 1);
   };
 
   if (loading) {
@@ -145,6 +157,7 @@ export default function StudentInteractiveBook() {
       onLogEvents={handleLogEvents}
       onSceneChange={handleSceneChange}
       onExit={handleBack}
+      onRestart={handleRestart}
     />
   );
 }

@@ -88,6 +88,7 @@ interface InteractiveBookPlayerProps {
   onLogEvents?: (events: PlayerEventPayload[]) => Promise<void> | void;
   onSceneChange?: (sceneId: string) => void;
   onExit?: () => void;
+  onRestart?: () => void;
   immersive?: boolean;
 }
 
@@ -706,6 +707,7 @@ export default function InteractiveBookPlayer({
   onLogEvents,
   onSceneChange,
   onExit,
+  onRestart,
   immersive: immersiveProp,
 }: InteractiveBookPlayerProps) {
   const immersive = immersiveProp ?? mode === 'student';
@@ -790,14 +792,29 @@ export default function InteractiveBookPlayer({
   const didMountSceneRef = useRef(false);
   const sceneEnteredAtRef = useRef(Date.now());
 
-  const hasCompletedSceneMedia = (sceneId: string) => {
-    const progress = checkpointRef.current.stateSnapshot.media_progress[sceneId];
-    return progress?.scene_media_completed === true;
+  const getSceneMediaRequirements = (scene: InteractiveScene | undefined) => ({
+    requiresVideo: Boolean(scene && getRenderableVideoUrl(scene)),
+    requiresAudio: Boolean(scene && getAudioUrl(scene)),
+  });
+
+  const hasCompletedSceneMedia = (scene: InteractiveScene | undefined, snapshot = stateSnapshot) => {
+    if (!scene) return true;
+    const progress = snapshot.media_progress[scene.id] ?? {};
+    const { requiresVideo, requiresAudio } = getSceneMediaRequirements(scene);
+    if (!requiresVideo && !requiresAudio) return true;
+    if (requiresVideo && progress.video_completed !== true) return false;
+    if (requiresAudio && progress.audio_completed !== true) return false;
+    return true;
   };
 
-  const markSceneMediaCompleted = (previous: RuntimeStateSnapshot, sceneId: string) => updateMediaProgress(previous, sceneId, {
-    scene_media_completed: true,
-    media_completed_at: new Date().toISOString(),
+  const markSceneVideoCompleted = (previous: RuntimeStateSnapshot, sceneId: string) => updateMediaProgress(previous, sceneId, {
+    video_completed: true,
+    video_completed_at: new Date().toISOString(),
+  });
+
+  const markSceneAudioCompleted = (previous: RuntimeStateSnapshot, sceneId: string) => updateMediaProgress(previous, sceneId, {
+    audio_completed: true,
+    audio_completed_at: new Date().toISOString(),
   });
 
   useEffect(() => {
@@ -993,7 +1010,7 @@ export default function InteractiveBookPlayer({
         return;
       }
       const hasSceneMediaToWait = Boolean(getRenderableVideoUrl(currentScene) || getAudioUrl(currentScene));
-      if (shouldWaitForMediaEnd(currentScene) && !hasCompletedSceneMedia(currentScene.id) && hasSceneMediaToWait) {
+      if (shouldWaitForMediaEnd(currentScene) && !hasCompletedSceneMedia(currentScene, checkpointRef.current.stateSnapshot) && hasSceneMediaToWait) {
         setActiveInteraction(null);
         setPhase(getRenderableVideoUrl(currentScene) ? 'paused' : 'scene_active');
         return;
@@ -1012,12 +1029,6 @@ export default function InteractiveBookPlayer({
       );
 
     if (onEnterInteraction) {
-      const nextState = markInteractionHandled(
-        checkpointRef.current.stateSnapshot,
-        currentScene.id,
-        onEnterInteraction.interactionKey,
-      );
-      setStateSnapshot(nextState);
       setActiveInteraction(onEnterInteraction);
       setPhase('interaction_open');
       return;
@@ -1200,6 +1211,10 @@ export default function InteractiveBookPlayer({
 
   const handleContinue = () => {
     if (!currentScene) return;
+    if (!hasCompletedSceneMedia(currentScene)) {
+      setSceneAudioNotice('Em cần xem hoặc nghe xong nội dung hiện tại trước khi sang trang tiếp theo.');
+      return;
+    }
     const defaultNext = resolveDefaultNext(currentScene, manifest.scenes);
     if (defaultNext) {
       transitionToScene(defaultNext, 'default_next');
@@ -1210,7 +1225,7 @@ export default function InteractiveBookPlayer({
 
   const handleVideoEnded = () => {
     if (!currentScene) return;
-    updateSnapshot((previous) => markSceneMediaCompleted(
+    updateSnapshot((previous) => markSceneVideoCompleted(
       updateMediaProgress(previous, currentScene.id, {
         current_time: videoRef.current?.duration ?? videoRef.current?.currentTime ?? 0,
         ended_at: new Date().toISOString(),
@@ -1223,7 +1238,7 @@ export default function InteractiveBookPlayer({
 
   const handleSceneAudioEnded = () => {
     if (!currentScene) return;
-    updateSnapshot((previous) => markSceneMediaCompleted(
+    updateSnapshot((previous) => markSceneAudioCompleted(
       updateMediaProgress(previous, currentScene.id, {
         ended_at: new Date().toISOString(),
       }),
@@ -1247,7 +1262,12 @@ export default function InteractiveBookPlayer({
       setPhase('scene_active');
       return;
     }
-    updateSnapshot((previous) => markSceneMediaCompleted(previous, currentScene.id));
+    if (getRenderableVideoUrl(currentScene)) {
+      updateSnapshot((previous) => markSceneVideoCompleted(previous, currentScene.id));
+    }
+    if (getAudioUrl(currentScene)) {
+      updateSnapshot((previous) => markSceneAudioCompleted(previous, currentScene.id));
+    }
     setActiveInteraction({ interaction: primary, interactionKey });
     setInteractionFeedback(null);
     setInteractionFeedbackImage(null);
@@ -1280,8 +1300,7 @@ export default function InteractiveBookPlayer({
     };
 
     updateSnapshot((previous) => {
-      const withHandled = markInteractionHandled(previous, currentSceneId, interactionKey);
-      const withResult = appendInteractionResult(withHandled, {
+      const withResult = appendInteractionResult(previous, {
         scene_id: currentSceneId,
         interaction_id: interactionKey,
         choice_id: choice.id,
@@ -1316,6 +1335,7 @@ export default function InteractiveBookPlayer({
 
     if (!correct && choice.retry) {
       setInteractionRequiresRetry(true);
+      setPendingInteractionTargetSceneId(null);
       return;
     }
 
@@ -1347,7 +1367,9 @@ export default function InteractiveBookPlayer({
     });
     setInteractionFeedback(null);
     setInteractionFeedbackImage(null);
+    setPendingInteractionTargetSceneId(null);
     setInteractionRequiresRetry(false);
+    setPhase('interaction_open');
     queueEvent('retry_clicked', retryItem, currentSceneId);
   };
 
@@ -1658,7 +1680,7 @@ export default function InteractiveBookPlayer({
       case 'after_media_time':
         return currentMediaTime >= Number(rule.timecode ?? 0);
       case 'after_media_end':
-        return hasCompletedSceneMedia(scene.id);
+        return hasCompletedSceneMedia(scene);
       case 'after_click': {
         const targetId = rule.layer_id || rule.interaction_id;
         return targetId ? clickedTargets.includes(targetId) : clickedTargets.length > 0;
@@ -1735,6 +1757,43 @@ export default function InteractiveBookPlayer({
     if (!currentScene) return null;
 
     const sceneText = getVisibleSceneText(currentScene);
+    const feedbackTitle = interactionRequiresRetry ? 'Chưa đúng' : 'Chính xác';
+    const feedbackToneClass = interactionRequiresRetry
+      ? 'border-red-200 bg-red-50 text-red-700'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    const feedbackVisual = hasInteractionFeedback ? (
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-100">
+          {interactionFeedbackImage ? (
+            <img
+              src={interactionFeedbackImage}
+              alt={interactionRequiresRetry ? 'Phản hồi sai' : 'Phản hồi đúng'}
+              className="h-[420px] w-full object-cover"
+            />
+          ) : (
+            <div className={`flex h-[420px] items-center justify-center ${feedbackToneClass}`}>
+              <div className="text-center">
+                {interactionRequiresRetry ? (
+                  <AlertCircle className="mx-auto h-16 w-16" />
+                ) : (
+                  <CheckCircle2 className="mx-auto h-16 w-16" />
+                )}
+                <p className="mt-4 text-2xl font-bold">{feedbackTitle}</p>
+              </div>
+            </div>
+          )}
+        </div>
+        {interactionFeedback && (
+          <div className={`rounded-2xl border px-4 py-4 text-sm leading-6 ${feedbackToneClass}`}>
+            {interactionFeedback}
+          </div>
+        )}
+      </div>
+    ) : null;
+
+    if (feedbackVisual) {
+      return feedbackVisual;
+    }
 
     if (currentScene.type === 'timeline') {
       const cards = getTimelineCards(currentScene);
@@ -1879,7 +1938,7 @@ export default function InteractiveBookPlayer({
     if (currentScene.type === 'branching' || currentScene.type === 'quiz' || currentScene.type === 'media') {
       const videoUrl = getRenderableVideoUrl(currentScene);
       const previewImage = getRenderableImageUrl(currentScene);
-      const waitForMediaEnd = shouldWaitForMediaEnd(currentScene) && !hasCompletedSceneMedia(currentScene.id);
+      const waitForMediaEnd = shouldWaitForMediaEnd(currentScene) && !hasCompletedSceneMedia(currentScene);
 
       return (
         <div className="space-y-4">
@@ -2135,7 +2194,7 @@ export default function InteractiveBookPlayer({
           <div className="grid grid-cols-2 gap-3 text-center md:grid-cols-3">
             <div className="rounded-2xl bg-white px-3 py-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Tổng điểm</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{scoreSummary.total_score}/{Math.max(scoreSummary.max_score, maxScore)}</p>
+              <p className="mt-1 text-2xl font-bold text-slate-950">{scoreSummary.total_score}/{Math.max(scoreSummary.max_score, maxScore)}</p>
             </div>
             <div className="rounded-2xl bg-white px-3 py-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Thử lại</p>
@@ -2143,7 +2202,7 @@ export default function InteractiveBookPlayer({
             </div>
             <div className="rounded-2xl bg-white px-3 py-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Lỗi sai</p>
-              <p className="mt-1 text-lg font-semibold text-slate-900">{scoreSummary.wrong_count}</p>
+              <p className="mt-1 text-2xl font-bold text-red-600">{scoreSummary.wrong_count}</p>
             </div>
             <div className="rounded-2xl bg-white px-3 py-3">
               <p className="text-xs uppercase tracking-wide text-slate-400">Đúng</p>
@@ -2161,11 +2220,20 @@ export default function InteractiveBookPlayer({
           <div className="rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-emerald-900">
             {completionMessage}
           </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button type="button" onClick={onRestart} className="flex-1" disabled={!onRestart}>
+              Thử lại
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => transitionToScene(entrySceneId, 'review_from_completion')} className="flex-1">
+              Về trang tổng quan
+            </Button>
+          </div>
         </div>
       );
     }
 
     if (!activeInteraction) {
+      const mediaLocked = Boolean((getRenderableVideoUrl(currentScene) || getAudioUrl(currentScene)) && !hasCompletedSceneMedia(currentScene));
       return (
         <div className="space-y-5 rounded-3xl border border-slate-200 bg-white p-5">
           <div className="space-y-2">
@@ -2198,6 +2266,11 @@ export default function InteractiveBookPlayer({
             </div>
           </div>
           {renderSceneAudioControl()}
+          {mediaLocked && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Em cần xem hoặc nghe xong nội dung hiện tại trước khi sang trang tiếp theo.
+            </div>
+          )}
         </div>
       );
     }
@@ -2267,6 +2340,40 @@ export default function InteractiveBookPlayer({
     const imageUrl = currentScene.type === 'connect_the_dots'
       ? getConnectDotsBackground(currentScene)
       : getRenderableImageUrl(currentScene);
+    const feedbackVisual = hasInteractionFeedback ? (
+      <div className="absolute inset-0 bg-slate-950">
+        {interactionFeedbackImage ? (
+          <img
+            src={interactionFeedbackImage}
+            alt={interactionRequiresRetry ? 'Phản hồi sai' : 'Phản hồi đúng'}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className={`flex h-full w-full items-center justify-center ${
+            interactionRequiresRetry ? 'bg-red-600 text-white' : 'bg-emerald-600 text-white'
+          }`}>
+            <div className="text-center">
+              {interactionRequiresRetry ? (
+                <AlertCircle className="mx-auto h-20 w-20" />
+              ) : (
+                <CheckCircle2 className="mx-auto h-20 w-20" />
+              )}
+              <p className="mt-5 text-4xl font-bold">{interactionRequiresRetry ? 'Chưa đúng' : 'Chính xác'}</p>
+            </div>
+          </div>
+        )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-56 bg-gradient-to-t from-black/80 to-transparent" />
+        {interactionFeedback && (
+          <div className="absolute inset-x-4 bottom-24 z-10 mx-auto max-w-3xl rounded-lg bg-black/60 px-5 py-4 text-center text-base text-white">
+            {interactionFeedback}
+          </div>
+        )}
+      </div>
+    ) : null;
+
+    if (feedbackVisual) {
+      return feedbackVisual;
+    }
 
     if (currentScene.type === 'timeline') {
       const cards = getTimelineCards(currentScene);
@@ -2451,6 +2558,10 @@ export default function InteractiveBookPlayer({
   }
 
   const defaultNext = resolveDefaultNext(currentScene, manifest.scenes);
+  const isOverviewScene = currentScene.id === entrySceneId;
+  const nextSceneButtonLabel = isOverviewScene && defaultNext ? 'Bắt đầu đọc sách' : 'Cảnh tiếp theo';
+  const currentSceneRequiresMediaCompletion = Boolean(getRenderableVideoUrl(currentScene) || getAudioUrl(currentScene));
+  const isBlockedByIncompleteMedia = currentSceneRequiresMediaCompletion && !hasCompletedSceneMedia(currentScene);
   const visitedContentSceneCount = Array.from(new Set(
     stateSnapshot.visited_scenes.filter((sceneId) => {
       const scene = sceneMap.get(sceneId);
@@ -2460,12 +2571,67 @@ export default function InteractiveBookPlayer({
   const totalContentSceneCount = manifest.scenes.filter((scene) => scene.type !== 'timeline').length;
   const canCompleteFromTimeline = currentScene.type !== 'timeline' || visitedContentSceneCount >= totalContentSceneCount;
   const activeInteractionHasChoices = (activeInteraction?.interaction.choices?.length ?? 0) > 0;
+  const hasInteractionFeedback = Boolean(interactionFeedback || interactionFeedbackImage);
   const canContinueActiveInteraction = !activeInteraction
     ? false
-    : !activeInteractionHasChoices
+    : interactionRequiresRetry
+      || !activeInteractionHasChoices
       || Boolean(pendingInteractionTargetSceneId)
-      || ((!interactionRequiresRetry) && Boolean(interactionFeedback || interactionFeedbackImage));
-  const activeInteractionButtonLabel = pendingInteractionTargetSceneId ? 'Tiếp tục' : 'Đóng tương tác';
+      || hasInteractionFeedback;
+  const activeInteractionButtonLabel = interactionRequiresRetry
+    ? 'Thử lại'
+    : (pendingInteractionTargetSceneId || hasInteractionFeedback)
+      ? 'Tiếp tục'
+      : 'Đóng tương tác';
+
+  const handleGoToOverview = () => {
+    if (currentScene.id === entrySceneId) return;
+    transitionToScene(entrySceneId, 'return_to_overview');
+  };
+
+  const renderImmersiveInteractionOverlay = () => {
+    if (!activeInteraction || phase === 'completed') return null;
+    if (hasInteractionFeedback) return null;
+
+    const { interaction, interactionKey } = activeInteraction;
+    const choices = interaction.choices ?? [];
+    const prompt = getOptionalText(interaction.prompt) ?? getVisibleSceneTitle(currentScene) ?? 'Tương tác';
+    const subtitle = getOptionalText(interaction.data?.subtitle);
+
+    return (
+      <div className="pointer-events-none absolute inset-x-4 top-24 bottom-32 z-50 flex justify-center">
+        <div className="pointer-events-auto flex w-full max-w-3xl self-end overflow-hidden rounded-lg border border-amber-200 bg-white/95 text-slate-900 shadow-2xl backdrop-blur">
+          <div className="max-h-full w-full overflow-y-auto p-4">
+          <div className="space-y-2">
+            <div className="inline-flex rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">Tương tác</div>
+            <h3 className="text-xl font-semibold text-slate-950">{prompt}</h3>
+            {subtitle && <p className="text-sm leading-6 text-slate-600">{subtitle}</p>}
+          </div>
+          {choices.length > 0 ? (
+            <div className="mt-4 grid gap-2">
+              {choices.map((choice) => (
+                <button
+                  key={choice.id}
+                  type="button"
+                  className="w-full rounded-lg border border-amber-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:border-amber-400 hover:bg-amber-50"
+                  onClick={() => { void handleInteractionChoice(interaction, interactionKey, choice); }}
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-4">
+              <Button type="button" onClick={handleInteractionContinue}>
+                Tiếp tục
+              </Button>
+            </div>
+          )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (immersive) {
     return (
@@ -2510,9 +2676,13 @@ export default function InteractiveBookPlayer({
             </div>
           )}
 
-          {(activeInteraction || phase === 'completed') && (
-            <div className="absolute inset-x-4 bottom-24 z-40 mx-auto max-w-2xl">
-              {renderInteractionPanel()}
+          {renderImmersiveInteractionOverlay()}
+
+          {phase === 'completed' && (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/45 px-4 py-20">
+              <div className="w-full max-w-2xl">
+                {renderInteractionPanel()}
+              </div>
             </div>
           )}
 
@@ -2534,6 +2704,14 @@ export default function InteractiveBookPlayer({
                 <Button type="button" variant="secondary" onClick={handleBack} disabled={history.length <= 1}>
                   <ArrowLeft className="mr-1.5 h-4 w-4" /> Quay lại
                 </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleGoToOverview}
+                  disabled={isOverviewScene}
+                >
+                  Tổng quan
+                </Button>
                 {Boolean(getRenderableVideoUrl(currentScene)) && (
                   <Button
                     type="button"
@@ -2553,9 +2731,13 @@ export default function InteractiveBookPlayer({
                 )}
                 <Button
                   type="button"
-                  disabled={activeInteraction ? !canContinueActiveInteraction : (!defaultNext && !canCompleteFromTimeline)}
+                  disabled={activeInteraction ? !canContinueActiveInteraction : (isBlockedByIncompleteMedia || (!defaultNext && !canCompleteFromTimeline))}
                   onClick={() => {
                     if (activeInteraction) {
+                      if (interactionRequiresRetry) {
+                        handleRetryInteraction();
+                        return;
+                      }
                       handleInteractionContinue();
                       return;
                     }
@@ -2570,7 +2752,7 @@ export default function InteractiveBookPlayer({
                   {activeInteraction
                     ? activeInteractionButtonLabel
                     : defaultNext
-                      ? 'Cảnh tiếp theo'
+                      ? nextSceneButtonLabel
                       : canCompleteFromTimeline
                         ? 'Hoàn thành'
                         : 'Khám phá thêm'}
@@ -2672,15 +2854,14 @@ export default function InteractiveBookPlayer({
               <Button type="button" variant="secondary" onClick={handleBack} disabled={history.length <= 1}>
                 <ArrowLeft className="mr-1.5 h-4 w-4" /> Quay lại
               </Button>
-              {currentScene.id !== entrySceneId && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => transitionToScene(entrySceneId, 'return_to_overview')}
-                >
-                  Tổng quan
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleGoToOverview}
+                disabled={isOverviewScene}
+              >
+                Tổng quan
+              </Button>
               {Boolean(getRenderableVideoUrl(currentScene)) && (
                 <Button
                   type="button"
@@ -2701,7 +2882,7 @@ export default function InteractiveBookPlayer({
               {phase !== 'completed' && (
                 <Button
                   type="button"
-                  disabled={activeInteraction ? !canContinueActiveInteraction : (!defaultNext && !canCompleteFromTimeline)}
+                  disabled={activeInteraction ? !canContinueActiveInteraction : (isBlockedByIncompleteMedia || (!defaultNext && !canCompleteFromTimeline))}
                   onClick={() => {
                     if (activeInteraction) {
                       handleInteractionContinue();
@@ -2718,7 +2899,7 @@ export default function InteractiveBookPlayer({
                   {activeInteraction
                     ? activeInteractionButtonLabel
                     : defaultNext
-                      ? 'Cảnh tiếp theo'
+                      ? nextSceneButtonLabel
                       : canCompleteFromTimeline
                         ? 'Hoàn thành'
                         : 'Khám phá thêm'}
