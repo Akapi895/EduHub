@@ -35,6 +35,9 @@ export const interactiveBookService = {
   getBook: (materialId: string, view: 'draft' | 'published' = 'published') =>
     api.get(`/interactive-books/${materialId}`, { params: { view } }),
 
+  getReport: (materialId: string) =>
+    api.get(`/interactive-books/${materialId}/report`),
+
   startAttempt: (materialId: string, classId?: string) =>
     api.post(`/interactive-books/${materialId}/attempts/start`, { class_id: classId }),
 

@@ -50,11 +50,13 @@ class InteractiveBookAttemptStatus(str, Enum):
 
 class InteractiveBookSceneType(str, Enum):
     timeline = "timeline"
+    media = "media"
     slideshow = "slideshow"
     interactive_video = "interactive_video"
     branching = "branching"
     quiz = "quiz"
     hotspot_audio = "hotspot_audio"
+    connect_the_dots = "connect_the_dots"
     mini_game = "mini_game"
     vr_scene = "vr_scene"
 

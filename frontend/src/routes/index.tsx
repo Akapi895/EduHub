@@ -52,6 +52,8 @@ function withLazyShell(element: ReactNode) {
 export const routes: RouteObject[] = [
   { path: '/login', element: <Login /> },
   { path: '/register', element: <Register /> },
+  { path: '/student/interactive-books/:id', element: withLazyShell(<StudentInteractiveBook />) },
+  { path: '/student/interactive-books/:id/scenes/:sceneId', element: withLazyShell(<StudentInteractiveBook />) },
   {
     path: '/teacher',
     element: <DashboardLayout />,
@@ -86,8 +88,6 @@ export const routes: RouteObject[] = [
       { path: 'exam/:id', element: <StudentExam /> },
       { path: 'exams/:id', element: <StudentExam /> },
       { path: 'exams', element: <StudentExams /> },
-      { path: 'interactive-books/:id', element: withLazyShell(<StudentInteractiveBook />) },
-      { path: 'interactive-books/:id/scenes/:sceneId', element: withLazyShell(<StudentInteractiveBook />) },
       { path: 'inbox', element: <StudentInbox /> },
       { path: 'chatbot', element: <StudentChatbot /> },
       { path: 'settings', element: <StudentSettings /> },
