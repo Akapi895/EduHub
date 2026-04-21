@@ -102,9 +102,17 @@ export default function StudentInteractiveBook() {
 
   const isReviewOnly = attemptStatus === 'completed';
   const autosaveKey = `interactive_book_attempt_${bundle.attempt.id}`;
-  const initialSceneId = sceneId && validSceneIds.has(sceneId)
-    ? sceneId
-    : bundle.attempt.current_scene_id;
+  const initialSceneId = bundle.resume
+    ? (
+      sceneId && validSceneIds.has(sceneId)
+        ? sceneId
+        : bundle.attempt.current_scene_id
+    )
+    : (
+      bundle.attempt.current_scene_id && validSceneIds.has(bundle.attempt.current_scene_id)
+        ? bundle.attempt.current_scene_id
+        : bundle.manifest.entry_scene_id
+    );
 
   const buildScenePath = (nextSceneId: string) => {
     const basePath = nextSceneId === bundle.manifest.entry_scene_id

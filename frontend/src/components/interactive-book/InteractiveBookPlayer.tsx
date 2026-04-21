@@ -319,6 +319,20 @@ function getSceneText(scene: InteractiveScene): string {
   return '';
 }
 
+function getOptionalText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function getVisibleSceneTitle(scene: InteractiveScene): string | null {
+  return getOptionalText(scene.title);
+}
+
+function getVisibleSceneText(scene: InteractiveScene): string | null {
+  return getOptionalText(getSceneText(scene));
+}
+
 function getSceneList(scene: InteractiveScene, key: string): string[] {
   if (!scene.content || typeof scene.content !== 'object' || Array.isArray(scene.content)) {
     return [];
@@ -555,7 +569,7 @@ function getCompletionMessage(scoreSummary: ScoreSummary, maxScore: number) {
 
 function getTimelineCards(scene: InteractiveScene): Array<{
   id: string;
-  title: string;
+  title?: string;
   description?: string;
   target_scene_id: string;
   image_url?: string;
@@ -583,8 +597,8 @@ function getTimelineCards(scene: InteractiveScene): Array<{
   return cards
     .map((card, index) => ({
       id: card.id ?? `${card.target_scene_id}-${index}`,
-      title: card.title ?? card.target_scene_id,
-      description: card.description,
+      title: typeof card.title === 'string' ? card.title : undefined,
+      description: typeof card.description === 'string' ? card.description : undefined,
       target_scene_id: card.target_scene_id,
       image_url: card.image_url,
       order_index: Number(card.order_index ?? index),
@@ -757,6 +771,7 @@ export default function InteractiveBookPlayer({
   const maxScore = useMemo(() => estimateMaxScore(manifest), [manifest]);
   const currentScene = sceneMap.get(currentSceneId);
   const sceneIndex = manifest.scenes.findIndex((scene) => scene.id === currentSceneId);
+  const visibleSceneTitle = currentScene ? getVisibleSceneTitle(currentScene) : null;
   const slideImages = currentScene ? getSceneImageUrls(currentScene) : [];
   const backgroundAudioUrl = currentScene ? getAudioUrl(currentScene) : undefined;
   const backgroundAudioTrigger = getBackgroundAudioTrigger(currentScene);
@@ -1719,7 +1734,7 @@ export default function InteractiveBookPlayer({
   const renderSceneVisual = () => {
     if (!currentScene) return null;
 
-    const sceneText = getSceneText(currentScene);
+    const sceneText = getVisibleSceneText(currentScene);
 
     if (currentScene.type === 'timeline') {
       const cards = getTimelineCards(currentScene);
@@ -1743,15 +1758,18 @@ export default function InteractiveBookPlayer({
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {cards.map((card) => {
               const visited = stateSnapshot.visited_scenes.includes(card.target_scene_id);
+              const cardTitle = getOptionalText(card.title);
+              const cardDescription = getOptionalText(card.description);
               return (
                 <button
                   key={card.id}
                   type="button"
                   onClick={() => transitionToScene(card.target_scene_id, 'timeline_card_click', { card_id: card.id })}
+                  aria-label={cardTitle ?? `Mở nội dung ${card.order_index}`}
                   className="overflow-hidden rounded-3xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md"
                 >
                   {card.image_url ? (
-                    <img src={card.image_url} alt={card.title} className="h-48 w-full object-cover" />
+                    <img src={card.image_url} alt={cardTitle || 'Ảnh tổng quan'} className="h-48 w-full object-cover" />
                   ) : (
                     <div className="flex h-48 items-center justify-center bg-slate-100 text-slate-400">
                       Chưa có ảnh tổng quan
@@ -1759,13 +1777,13 @@ export default function InteractiveBookPlayer({
                   )}
                   <div className="space-y-2 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-base font-semibold text-slate-900">{card.title}</h3>
+                      {cardTitle && <h3 className="text-base font-semibold text-slate-900">{cardTitle}</h3>}
                       <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${visited ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
                         {visited ? 'Đã mở' : 'Chưa mở'}
                       </span>
                     </div>
-                    {card.description && (
-                      <p className="text-sm leading-6 text-slate-600">{card.description}</p>
+                    {cardDescription && (
+                      <p className="text-sm leading-6 text-slate-600">{cardDescription}</p>
                     )}
                   </div>
                 </button>
@@ -2101,6 +2119,8 @@ export default function InteractiveBookPlayer({
   const renderInteractionPanel = () => {
     const sceneType = currentScene ? getSceneTypeLabel(currentScene.type) : 'Cảnh';
     if (!currentScene) return null;
+    const sceneTitle = getVisibleSceneTitle(currentScene);
+    const sceneText = getVisibleSceneText(currentScene);
     if (phase === 'completed') {
       const completionMessage = getCompletionMessage(scoreSummary, Math.max(scoreSummary.max_score, maxScore));
       return (
@@ -2152,10 +2172,12 @@ export default function InteractiveBookPlayer({
             <div className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700">
               {sceneType}
             </div>
-            <h3 className="text-xl font-semibold text-slate-900">{currentScene.title || `Cảnh ${sceneIndex + 1}`}</h3>
-            <p className="text-sm leading-6 text-slate-600">
-              {getSceneText(currentScene) || 'Cảnh này đang dùng cấu hình mở rộng từ manifest.'}
-            </p>
+            {sceneTitle && <h3 className="text-xl font-semibold text-slate-900">{sceneTitle}</h3>}
+            {sceneText && (
+              <p className="text-sm leading-6 text-slate-600">
+                {sceneText}
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-slate-50 px-4 py-3">
@@ -2189,9 +2211,9 @@ export default function InteractiveBookPlayer({
       <div className="space-y-4 rounded-3xl border border-amber-200 bg-amber-50 p-5">
         <div className="space-y-2">
           <div className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-700">Tương tác</div>
-          <h3 className="text-xl font-semibold text-slate-900">{interaction.prompt || currentScene.title || 'Lời nhắc'}</h3>
+          <h3 className="text-xl font-semibold text-slate-900">{getOptionalText(interaction.prompt) ?? sceneTitle ?? 'Tương tác'}</h3>
           <p className="text-sm leading-6 text-slate-700">
-            {typeof interaction.data?.subtitle === 'string' ? interaction.data.subtitle : 'Hãy xử lý tương tác này trước khi tiếp tục luồng học.'}
+            {getOptionalText(interaction.data?.subtitle) ?? 'Hãy xử lý tương tác này trước khi tiếp tục luồng học.'}
           </p>
         </div>
         {choices.length > 0 ? (
@@ -2239,7 +2261,8 @@ export default function InteractiveBookPlayer({
 
   const renderImmersiveSceneVisual = () => {
     if (!currentScene) return null;
-    const sceneText = getSceneText(currentScene);
+    const sceneTitle = getVisibleSceneTitle(currentScene);
+    const sceneText = getVisibleSceneText(currentScene);
     const videoUrl = getRenderableVideoUrl(currentScene);
     const imageUrl = currentScene.type === 'connect_the_dots'
       ? getConnectDotsBackground(currentScene)
@@ -2258,23 +2281,30 @@ export default function InteractiveBookPlayer({
           <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black/40" />
           <div className="absolute inset-x-4 bottom-24 z-10 mx-auto max-w-5xl">
             <p className="text-sm font-semibold uppercase tracking-wide text-sky-200">{title}</p>
-            <h2 className="mt-2 text-3xl font-bold text-white">{currentScene.title || 'Tổng quan'}</h2>
+            {sceneTitle && <h2 className="mt-2 text-3xl font-bold text-white">{sceneTitle}</h2>}
             {sceneText && <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-100">{sceneText}</p>}
             <div className="mt-5 grid gap-3 md:grid-cols-3">
-              {cards.map((card) => (
-                <button
-                  key={card.id}
-                  type="button"
-                  onClick={() => transitionToScene(card.target_scene_id, 'timeline_card_click', { card_id: card.id })}
-                  className="overflow-hidden rounded-lg border border-white/20 bg-white/90 text-left shadow-lg transition hover:bg-white"
-                >
-                  {card.image_url && <img src={card.image_url} alt={card.title} className="h-28 w-full object-cover" />}
-                  <div className="p-3">
-                    <p className="text-sm font-semibold text-slate-900">{card.title}</p>
-                    {card.description && <p className="mt-1 line-clamp-2 text-xs text-slate-600">{card.description}</p>}
-                  </div>
-                </button>
-              ))}
+              {cards.map((card) => {
+                const cardTitle = getOptionalText(card.title);
+                const cardDescription = getOptionalText(card.description);
+                return (
+                  <button
+                    key={card.id}
+                    type="button"
+                    onClick={() => transitionToScene(card.target_scene_id, 'timeline_card_click', { card_id: card.id })}
+                    aria-label={cardTitle ?? `Mở nội dung ${card.order_index}`}
+                    className="overflow-hidden rounded-lg border border-white/20 bg-white/90 text-left shadow-lg transition hover:bg-white"
+                  >
+                    {card.image_url && <img src={card.image_url} alt={cardTitle || 'Ảnh tổng quan'} className="h-28 w-full object-cover" />}
+                    {(cardTitle || cardDescription) && (
+                      <div className="p-3">
+                        {cardTitle && <p className="text-sm font-semibold text-slate-900">{cardTitle}</p>}
+                        {cardDescription && <p className="mt-1 line-clamp-2 text-xs text-slate-600">{cardDescription}</p>}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -2489,7 +2519,7 @@ export default function InteractiveBookPlayer({
           {phase !== 'completed' && (
             <footer className="absolute inset-x-0 bottom-0 z-40 flex flex-col gap-3 bg-gradient-to-t from-black/85 to-transparent px-4 pb-4 pt-12 sm:flex-row sm:items-end sm:justify-between">
               <div className="min-w-0">
-                <p className="truncate text-lg font-semibold text-white">{currentScene.title || `Cảnh ${sceneIndex + 1}`}</p>
+                {visibleSceneTitle && <p className="truncate text-lg font-semibold text-white">{visibleSceneTitle}</p>}
                 <div className="mt-2 h-1.5 w-64 max-w-[70vw] overflow-hidden rounded-full bg-white/20">
                   <div className="h-full rounded-full bg-sky-400 transition-all" style={{ width: `${completionPercent}%` }} />
                 </div>
@@ -2630,10 +2660,14 @@ export default function InteractiveBookPlayer({
           </div>
 
           <div className="mt-6 flex flex-col gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <CirclePlay className="h-4 w-4" />
-              {currentScene.title || `Cảnh ${sceneIndex + 1}`}
-            </div>
+            {visibleSceneTitle ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500">
+                <CirclePlay className="h-4 w-4" />
+                {visibleSceneTitle}
+              </div>
+            ) : (
+              <div />
+            )}
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Button type="button" variant="secondary" onClick={handleBack} disabled={history.length <= 1}>
                 <ArrowLeft className="mr-1.5 h-4 w-4" /> Quay lại

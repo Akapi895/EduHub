@@ -682,20 +682,6 @@ def start_attempt(
             "resume": True,
         }
 
-    latest_attempt = interactive_book_crud.get_latest_attempt_for_student(
-        db,
-        interactive_book_id=interactive_book.id,
-        student_id=student.id,
-    )
-    if latest_attempt and latest_attempt.status == InteractiveBookAttemptStatus.completed:
-        return {
-            "material": _serialize_material(material),
-            "interactive_book": _serialize_book(interactive_book),
-            "attempt": _serialize_attempt(latest_attempt),
-            "manifest": latest_attempt.manifest_snapshot or manifest,
-            "resume": False,
-        }
-
     manifest = InteractiveBookManifest.model_validate(manifest).model_dump(mode="json")
     entry_scene_id = interactive_book.entry_scene_id or manifest["entry_scene_id"]
     state_snapshot = _default_state_snapshot(entry_scene_id)

@@ -296,9 +296,6 @@ export function validateInteractiveBookFlow(manifest: InteractiveBookManifest): 
     const hasPrimaryMedia = typeof content.video_url === 'string'
       || typeof content.image_url === 'string'
       || typeof content.poster_url === 'string';
-    if (!scene.title?.trim()) {
-      warnings.push(makeIssue('warning_missing_title', `${title} has no title.`, scene.id));
-    }
     if ((scene.type === 'quiz' || scene.type === 'branching') && !hasQuestionChoices) {
       warnings.push(makeIssue('warning_missing_question', `${title} has no choices or question interaction.`, scene.id));
     }
