@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, BookOpenText, Loader2 } from 'lucide-react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import InteractiveBookPlayer, {
   type PlayerCheckpointPayload,
   type PlayerEventPayload,
@@ -80,21 +80,21 @@ export default function StudentInteractiveBook() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
+        <Loader2 className="h-8 w-8 animate-spin text-sky-300" />
       </div>
     );
   }
 
   if (error || !bundle) {
     return (
-      <div className="space-y-4 rounded-[28px] border border-red-200 bg-red-50 p-6">
-        <p className="text-lg font-semibold text-red-900">Không thể mở sách tương tác</p>
-        <p className="text-sm text-red-700">{error || 'Dữ liệu từ backend không hợp lệ.'}</p>
-        <div>
-          <Link to="/student/library" className="text-sm font-medium text-red-800 underline">
-            Quay lại thư viện
-          </Link>
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4">
+        <div className="w-full max-w-lg rounded-lg border border-red-300 bg-red-50 p-6 text-red-900">
+          <p className="text-lg font-semibold">Không thể mở sách tương tác</p>
+          <p className="mt-2 text-sm text-red-700">{error || 'Dữ liệu từ backend không hợp lệ.'}</p>
+          <button type="button" onClick={handleBack} className="mt-4 text-sm font-semibold text-red-800 underline">
+            Quay lại
+          </button>
         </div>
       </div>
     );
@@ -121,54 +121,22 @@ export default function StudentInteractiveBook() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex items-start gap-3">
-          <button type="button" onClick={handleBack} className="mt-1 text-slate-400 hover:text-slate-700">
-            <ArrowLeft className="h-5 w-5" />
-          </button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{bundle.material.title}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {classId ? 'Đang học từ trong lớp học' : 'Đang học từ thư viện'} - phiên bản {bundle.interactive_book.manifest_version}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <BookOpenText className="h-5 w-5 text-sky-600" />
-          <div className="text-sm">
-            <p className="font-medium text-slate-900">
-              {bundle.resume ? 'Tiếp tục tiến trình' : isReviewOnly ? 'Xem lại lần học đã hoàn thành' : 'Bắt đầu lần học mới'}
-            </p>
-            <p className="text-slate-500">
-              Tiến độ hiện tại: {Math.round(bundle.attempt.completion_percent)}%
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {isReviewOnly && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Lần học này đã hoàn thành. Trình phát đang mở ở chế độ xem lại để giữ nguyên phiên bản manifest và kết quả cũ.
-        </div>
-      )}
-
-      <InteractiveBookPlayer
-        manifest={bundle.manifest}
-        title={bundle.material.title}
-        mode="student"
-        reviewOnly={isReviewOnly}
-        initialSceneId={initialSceneId}
-        initialStateSnapshot={bundle.attempt.state_snapshot}
-        initialScoreSummary={bundle.attempt.score_summary}
-        initialCompletionPercent={bundle.attempt.completion_percent}
-        autosaveKey={autosaveKey}
-        onCheckpoint={handleCheckpoint}
-        onComplete={handleComplete}
-        onLogEvents={handleLogEvents}
-        onSceneChange={handleSceneChange}
-      />
-    </div>
+    <InteractiveBookPlayer
+      manifest={bundle.manifest}
+      title={bundle.material.title}
+      mode="student"
+      immersive
+      reviewOnly={isReviewOnly}
+      initialSceneId={initialSceneId}
+      initialStateSnapshot={bundle.attempt.state_snapshot}
+      initialScoreSummary={bundle.attempt.score_summary}
+      initialCompletionPercent={bundle.attempt.completion_percent}
+      autosaveKey={autosaveKey}
+      onCheckpoint={handleCheckpoint}
+      onComplete={handleComplete}
+      onLogEvents={handleLogEvents}
+      onSceneChange={handleSceneChange}
+      onExit={handleBack}
+    />
   );
 }

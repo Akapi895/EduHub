@@ -47,6 +47,7 @@ export const SUBJECTS = [
 export const GRADES = ['Lớp 6', 'Lớp 7', 'Lớp 8', 'Lớp 9'] as const;
 
 export const INTERACTIVE_SCENE_TYPES = {
+  MEDIA: 'media',
   SLIDESHOW: 'slideshow',
   INTERACTIVE_VIDEO: 'interactive_video',
   BRANCHING: 'branching',

@@ -30,6 +30,32 @@ def _extract_transition_refs(value: Any) -> set[str]:
     return refs
 
 
+def _extract_content_transition_refs(scene_type: InteractiveBookSceneType, content: Any) -> set[str]:
+    refs: set[str] = set()
+    if not isinstance(content, dict):
+        return refs
+
+    layers = content.get("layers")
+    if isinstance(layers, list):
+        for layer in layers:
+            if not isinstance(layer, dict):
+                continue
+            action = layer.get("action")
+            if not isinstance(action, dict):
+                continue
+            for field in ("target_scene_id", "scene_id"):
+                value = action.get(field)
+                if isinstance(value, str) and value.strip():
+                    refs.add(value)
+
+    if scene_type == InteractiveBookSceneType.connect_the_dots:
+        value = content.get("success_target_scene_id")
+        if isinstance(value, str) and value.strip():
+            refs.add(value)
+
+    return refs
+
+
 class InteractiveAssetRef(BaseModel):
     id: str | None = None
     kind: str | None = None
@@ -127,6 +153,7 @@ class InteractiveBookManifest(BaseModel):
 
         for scene in self.scenes:
             refs = _extract_transition_refs(scene.next)
+            refs.update(_extract_content_transition_refs(scene.type, scene.content))
             for interaction in scene.interactions:
                 if interaction.target_scene_id:
                     refs.add(interaction.target_scene_id)

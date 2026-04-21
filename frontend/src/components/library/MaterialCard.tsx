@@ -28,7 +28,7 @@ const typeIcons: Record<string, React.ElementType> = {
 
 const typeBadge: Record<
   string,
-  { label: string; variant: 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' }
+  { label: string; variant: 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' | 'gray' }
 > = {
   book: { label: 'Sách', variant: 'blue' },
   exam: { label: 'Đề thi', variant: 'pink' },
@@ -37,6 +37,17 @@ const typeBadge: Record<
   document: { label: 'Tài liệu', variant: 'yellow' },
   interactive_book: { label: 'Sách tương tác', variant: 'purple' },
 };
+
+function getMaterialBadge(materialType: string | undefined) {
+  if (materialType && typeBadge[materialType]) {
+    return typeBadge[materialType];
+  }
+
+  return {
+    label: materialType ? materialType.replace(/_/g, ' ') : 'Khac',
+    variant: 'gray' as const,
+  };
+}
 
 interface MaterialCardProps {
   material: Material;
@@ -62,7 +73,7 @@ export default function MaterialCard({
   mode,
 }: MaterialCardProps) {
   const Icon = typeIcons[material.material_type] || FileText;
-  const badge = typeBadge[material.material_type];
+  const badge = getMaterialBadge(material.material_type);
   const isInteractiveBook = material.material_type === 'interactive_book';
   const [menuOpen, setMenuOpen] = useState(false);
   const [submenu, setSubmenu] = useState<'copy' | null>(null);

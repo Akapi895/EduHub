@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.crud import class_crud, interactive_book as interactive_book_crud, material as material_crud
 from app.models.class_model import ClassMaterial
 from app.models.interactive_book import (
     InteractiveBook,
     InteractiveBookAttempt,
+    InteractiveBookEvent,
     InteractiveBookMedia,
     InteractiveBookQuiz,
     InteractiveBookQuizOption,
@@ -35,18 +37,126 @@ from app.utils.enums import (
 )
 
 
+def _default_score_summary() -> dict[str, Any]:
+    return {
+        "attempted": 0,
+        "correct": 0,
+        "score": 0,
+        "total_score": 0,
+        "max_score": 0,
+        "correct_count": 0,
+        "wrong_count": 0,
+        "retry_count": 0,
+        "completed_scene_count": 0,
+        "branch_history": [],
+    }
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _to_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_score_summary(
+    value: Any,
+    *,
+    state_snapshot: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw = _coerce_dict(value)
+    snapshot = _coerce_dict(state_snapshot)
+    defaults = _default_score_summary()
+    branch_history = _coerce_list(raw.get("branch_history")) or _coerce_list(snapshot.get("branch_history"))
+    retry_history = _coerce_list(snapshot.get("retry_history"))
+    visited_scenes = [
+        item for item in _coerce_list(snapshot.get("visited_scenes")) if isinstance(item, str)
+    ]
+
+    attempted = _to_int(raw.get("attempted"), defaults["attempted"])
+    correct = _to_int(raw.get("correct"), defaults["correct"])
+    score = _to_float(raw.get("score"), defaults["score"])
+
+    normalized = {
+        **defaults,
+        **raw,
+        "attempted": attempted,
+        "correct": correct,
+        "score": score,
+        "total_score": _to_float(raw.get("total_score"), score),
+        "max_score": _to_float(raw.get("max_score"), defaults["max_score"]),
+        "correct_count": _to_int(raw.get("correct_count"), correct),
+        "wrong_count": _to_int(raw.get("wrong_count"), max(0, attempted - correct)),
+        "retry_count": _to_int(raw.get("retry_count"), len(retry_history)),
+        "completed_scene_count": _to_int(raw.get("completed_scene_count"), len(visited_scenes)),
+        "branch_history": branch_history,
+    }
+    return normalized
+
+
 def _default_state_snapshot(entry_scene_id: str) -> dict[str, Any]:
+    derived_score = _default_score_summary()
+    derived_score["completed_scene_count"] = 1
     return {
         "visited_scenes": [entry_scene_id],
         "branch_history": [],
         "interaction_results": [],
+        "retry_history": [],
         "media_progress": {},
-        "derived_score": {
-            "attempted": 0,
-            "correct": 0,
-            "score": 0,
-        },
+        "derived_score": derived_score,
     }
+
+
+def _normalize_state_snapshot(value: Any, entry_scene_id: str) -> dict[str, Any]:
+    raw = _coerce_dict(value)
+    visited_scenes = [
+        item for item in _coerce_list(raw.get("visited_scenes")) if isinstance(item, str)
+    ] or [entry_scene_id]
+    branch_history = [
+        item for item in _coerce_list(raw.get("branch_history")) if isinstance(item, dict)
+    ]
+    interaction_results = [
+        item for item in _coerce_list(raw.get("interaction_results")) if isinstance(item, dict)
+    ]
+    retry_history = [
+        item for item in _coerce_list(raw.get("retry_history")) if isinstance(item, dict)
+    ]
+    media_progress = {
+        key: _coerce_dict(item)
+        for key, item in _coerce_dict(raw.get("media_progress")).items()
+        if isinstance(key, str)
+    }
+
+    normalized = {
+        **raw,
+        "visited_scenes": visited_scenes,
+        "branch_history": branch_history,
+        "interaction_results": interaction_results,
+        "retry_history": retry_history,
+        "media_progress": media_progress,
+    }
+    normalized["derived_score"] = _normalize_score_summary(raw.get("derived_score"), state_snapshot=normalized)
+    return normalized
+
+
+def _ensure_scene_in_snapshot(state_snapshot: dict[str, Any], scene_id: str | None) -> dict[str, Any]:
+    if not scene_id:
+        return state_snapshot
+    visited_scenes = [
+        item for item in _coerce_list(state_snapshot.get("visited_scenes")) if isinstance(item, str)
+    ]
+    if scene_id not in visited_scenes:
+        visited_scenes.append(scene_id)
+    normalized = {**state_snapshot, "visited_scenes": visited_scenes}
+    normalized["derived_score"] = _normalize_score_summary(normalized.get("derived_score"), state_snapshot=normalized)
+    return normalized
 
 
 def _can_teacher_access_material(material: Material, teacher_id: str) -> bool:
@@ -92,6 +202,11 @@ def _serialize_book(interactive_book: InteractiveBook) -> dict[str, Any]:
 
 
 def _serialize_attempt(attempt: InteractiveBookAttempt) -> dict[str, Any]:
+    entry_scene_id = attempt.current_scene_id
+    if not entry_scene_id and attempt.interactive_book:
+        entry_scene_id = attempt.interactive_book.entry_scene_id
+    state_snapshot = _normalize_state_snapshot(attempt.state_snapshot, entry_scene_id or "")
+    score_summary = _normalize_score_summary(attempt.score_summary, state_snapshot=state_snapshot)
     return {
         "id": attempt.id,
         "interactive_book_id": attempt.interactive_book_id,
@@ -100,9 +215,9 @@ def _serialize_attempt(attempt: InteractiveBookAttempt) -> dict[str, Any]:
         "manifest_version": attempt.manifest_version,
         "status": attempt.status,
         "current_scene_id": attempt.current_scene_id,
-        "state_snapshot": attempt.state_snapshot,
+        "state_snapshot": state_snapshot,
         "completion_percent": attempt.completion_percent,
-        "score_summary": attempt.score_summary,
+        "score_summary": score_summary,
         "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
         "last_seen_at": attempt.last_seen_at.isoformat() if attempt.last_seen_at else None,
         "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None,
@@ -582,7 +697,9 @@ def start_attempt(
         }
 
     manifest = InteractiveBookManifest.model_validate(manifest).model_dump(mode="json")
-    state_snapshot = _default_state_snapshot(interactive_book.entry_scene_id or manifest["entry_scene_id"])
+    entry_scene_id = interactive_book.entry_scene_id or manifest["entry_scene_id"]
+    state_snapshot = _default_state_snapshot(entry_scene_id)
+    score_summary = _normalize_score_summary(state_snapshot["derived_score"], state_snapshot=state_snapshot)
     attempt = interactive_book_crud.create_attempt(
         db,
         interactive_book_id=interactive_book.id,
@@ -590,9 +707,9 @@ def start_attempt(
         class_id=class_id,
         manifest_version=interactive_book.manifest_version,
         manifest_snapshot=manifest,
-        current_scene_id=interactive_book.entry_scene_id or manifest["entry_scene_id"],
+        current_scene_id=entry_scene_id,
         state_snapshot=state_snapshot,
-        score_summary=state_snapshot["derived_score"],
+        score_summary=score_summary,
     )
     return {
         "material": _serialize_material(material),
@@ -618,13 +735,20 @@ def save_checkpoint(
     if attempt.status != InteractiveBookAttemptStatus.in_progress:
         raise HTTPException(status_code=400, detail="Attempt is not in progress")
 
+    entry_scene_id = data.current_scene_id or _coerce_dict(attempt.manifest_snapshot).get("entry_scene_id") or attempt.current_scene_id or ""
+    state_snapshot = _ensure_scene_in_snapshot(
+        _normalize_state_snapshot(data.state_snapshot, entry_scene_id),
+        data.current_scene_id,
+    )
+    score_summary = _normalize_score_summary(data.score_summary, state_snapshot=state_snapshot)
+
     attempt = interactive_book_crud.save_checkpoint(
         db,
         attempt=attempt,
         current_scene_id=data.current_scene_id,
-        state_snapshot=data.state_snapshot,
+        state_snapshot=state_snapshot,
         completion_percent=data.completion_percent,
-        score_summary=data.score_summary,
+        score_summary=score_summary,
     )
     return _serialize_attempt(attempt)
 
@@ -642,12 +766,216 @@ def complete_attempt(
     if attempt.student_id != student.id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    entry_scene_id = data.current_scene_id or _coerce_dict(attempt.manifest_snapshot).get("entry_scene_id") or attempt.current_scene_id or ""
+    state_snapshot = _ensure_scene_in_snapshot(
+        _normalize_state_snapshot(data.state_snapshot, entry_scene_id),
+        data.current_scene_id,
+    )
+    score_summary = _normalize_score_summary(data.score_summary, state_snapshot=state_snapshot)
+
     attempt = interactive_book_crud.complete_attempt(
         db,
         attempt=attempt,
         current_scene_id=data.current_scene_id,
-        state_snapshot=data.state_snapshot,
+        state_snapshot=state_snapshot,
         completion_percent=data.completion_percent,
-        score_summary=data.score_summary,
+        score_summary=score_summary,
     )
     return _serialize_attempt(attempt)
+
+
+def get_teacher_report(
+    db: Session,
+    *,
+    material_id: str,
+    teacher: User,
+) -> dict[str, Any]:
+    material = material_crud.get_by_id(db, material_id)
+    if not material or material.material_type != MaterialType.interactive_book:
+        raise HTTPException(status_code=404, detail="Interactive book not found")
+    if not _can_teacher_access_material(material, teacher.id):
+        raise HTTPException(status_code=403, detail="Ban khong co quyen xem bao cao nay")
+
+    interactive_book = interactive_book_crud.get_by_material_id(db, material_id)
+    if not interactive_book:
+        raise HTTPException(status_code=404, detail="Interactive book not found")
+
+    manifest = (
+        _resolve_runtime_manifest(
+            interactive_book,
+            view="published" if interactive_book.status == InteractiveBookStatus.published else "draft",
+        )
+        or interactive_book.draft_manifest
+        or interactive_book.published_manifest
+        or {"entry_scene_id": interactive_book.entry_scene_id or "", "scenes": []}
+    )
+    manifest = InteractiveBookManifest.model_validate(manifest).model_dump(mode="json")
+
+    attempts = (
+        db.query(InteractiveBookAttempt)
+        .options(
+            selectinload(InteractiveBookAttempt.student),
+            selectinload(InteractiveBookAttempt.class_),
+            selectinload(InteractiveBookAttempt.events),
+        )
+        .filter(InteractiveBookAttempt.interactive_book_id == interactive_book.id)
+        .order_by(InteractiveBookAttempt.started_at.desc())
+        .all()
+    )
+
+    scene_entries = [
+        scene for scene in _coerce_list(manifest.get("scenes")) if isinstance(scene, dict) and isinstance(scene.get("id"), str)
+    ]
+    scene_lookup = {scene["id"]: scene for scene in scene_entries}
+    choice_labels: dict[str, str] = {}
+    for scene in scene_entries:
+        for interaction in _coerce_list(scene.get("interactions")):
+            if not isinstance(interaction, dict):
+                continue
+            for choice in _coerce_list(interaction.get("choices")):
+                if isinstance(choice, dict) and isinstance(choice.get("id"), str):
+                    choice_labels[choice["id"]] = str(choice.get("label") or choice["id"])
+
+    scene_stats: dict[str, dict[str, Any]] = {
+        scene["id"]: {
+            "scene_id": scene["id"],
+            "scene_title": str(scene.get("title") or scene["id"]),
+            "scene_type": scene.get("type"),
+            "entered_count": 0,
+            "wrong_count": 0,
+            "retry_count": 0,
+            "completed_count": 0,
+            "choice_counts": {},
+        }
+        for scene in scene_entries
+    }
+
+    attempts_payload: list[dict[str, Any]] = []
+    recent_events: list[dict[str, Any]] = []
+    total_completion = 0.0
+    total_score = 0.0
+    total_wrong = 0
+    total_retry = 0
+    completed_attempts = 0
+    in_progress_attempts = 0
+
+    for attempt in attempts:
+        entry_scene_id = (
+            _coerce_dict(attempt.manifest_snapshot).get("entry_scene_id")
+            or attempt.current_scene_id
+            or manifest["entry_scene_id"]
+        )
+        state_snapshot = _ensure_scene_in_snapshot(
+            _normalize_state_snapshot(attempt.state_snapshot, str(entry_scene_id)),
+            attempt.current_scene_id,
+        )
+        score_summary = _normalize_score_summary(attempt.score_summary, state_snapshot=state_snapshot)
+
+        total_completion += float(attempt.completion_percent or 0)
+        total_score += float(score_summary["total_score"])
+        total_wrong += int(score_summary["wrong_count"])
+        total_retry += int(score_summary["retry_count"])
+        if attempt.status == InteractiveBookAttemptStatus.completed:
+            completed_attempts += 1
+        elif attempt.status == InteractiveBookAttemptStatus.in_progress:
+            in_progress_attempts += 1
+
+        attempts_payload.append(
+            {
+                "attempt_id": attempt.id,
+                "student_id": attempt.student_id,
+                "student_name": attempt.student.full_name if attempt.student else attempt.student_id,
+                "student_email": attempt.student.email if attempt.student else None,
+                "class_id": attempt.class_id,
+                "class_name": attempt.class_.name if attempt.class_ else None,
+                "status": attempt.status,
+                "current_scene_id": attempt.current_scene_id,
+                "completion_percent": attempt.completion_percent,
+                "score_summary": score_summary,
+                "visited_scene_count": len(_coerce_list(state_snapshot.get("visited_scenes"))),
+                "interaction_result_count": len(_coerce_list(state_snapshot.get("interaction_results"))),
+                "retry_history": _coerce_list(state_snapshot.get("retry_history")),
+                "branch_history": _coerce_list(state_snapshot.get("branch_history")),
+                "started_at": attempt.started_at.isoformat() if attempt.started_at else None,
+                "last_seen_at": attempt.last_seen_at.isoformat() if attempt.last_seen_at else None,
+                "completed_at": attempt.completed_at.isoformat() if attempt.completed_at else None,
+            }
+        )
+
+        for event in sorted(attempt.events, key=lambda item: item.created_at or datetime.min):
+            event_payload = _coerce_dict(event.payload)
+            recent_events.append(
+                {
+                    "id": event.id,
+                    "attempt_id": attempt.id,
+                    "student_name": attempt.student.full_name if attempt.student else attempt.student_id,
+                    "scene_id": event.scene_id,
+                    "event_type": event.event_type,
+                    "payload": event_payload or None,
+                    "created_at": event.created_at.isoformat() if event.created_at else None,
+                }
+            )
+
+            if not event.scene_id or event.scene_id not in scene_stats:
+                continue
+            stat = scene_stats[event.scene_id]
+            if event.event_type == "scene_entered":
+                stat["entered_count"] += 1
+            elif event.event_type in {"answer_wrong", "connect_dot_wrong_order"}:
+                stat["wrong_count"] += 1
+            elif event.event_type == "retry_clicked":
+                stat["retry_count"] += 1
+            elif event.event_type == "book_completed":
+                stat["completed_count"] += 1
+            elif event.event_type == "choice_selected":
+                choice_id = event_payload.get("choice_id")
+                if isinstance(choice_id, str) and choice_id:
+                    current = stat["choice_counts"].setdefault(
+                        choice_id,
+                        {
+                            "choice_id": choice_id,
+                            "label": choice_labels.get(choice_id, choice_id),
+                            "count": 0,
+                        },
+                    )
+                    current["count"] += 1
+
+    scene_stats_payload = []
+    for scene in scene_entries:
+        stat = scene_stats[scene["id"]]
+        choice_counts = sorted(
+            stat["choice_counts"].values(),
+            key=lambda item: (-int(item["count"]), str(item["label"])),
+        )
+        scene_stats_payload.append(
+            {
+                **stat,
+                "choice_counts": choice_counts,
+            }
+        )
+
+    attempt_count = len(attempts)
+    overview = {
+        "total_attempts": attempt_count,
+        "completed_attempts": completed_attempts,
+        "in_progress_attempts": in_progress_attempts,
+        "average_completion_percent": round(total_completion / attempt_count, 2) if attempt_count else 0,
+        "average_total_score": round(total_score / attempt_count, 2) if attempt_count else 0,
+        "average_wrong_count": round(total_wrong / attempt_count, 2) if attempt_count else 0,
+        "average_retry_count": round(total_retry / attempt_count, 2) if attempt_count else 0,
+    }
+
+    recent_events = sorted(
+        recent_events,
+        key=lambda item: item.get("created_at") or "",
+        reverse=True,
+    )[:80]
+
+    return {
+        "material_id": material.id,
+        "interactive_book_id": interactive_book.id,
+        "overview": overview,
+        "attempts": attempts_payload,
+        "scene_stats": scene_stats_payload,
+        "recent_events": recent_events,
+    }

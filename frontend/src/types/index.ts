@@ -199,11 +199,13 @@ export type InteractiveBookStatus = 'draft' | 'published' | 'archived';
 export type InteractiveAttemptStatus = 'in_progress' | 'completed' | 'abandoned';
 export type InteractiveSceneType =
   | 'timeline'
+  | 'media'
   | 'slideshow'
   | 'interactive_video'
   | 'branching'
   | 'quiz'
   | 'hotspot_audio'
+  | 'connect_the_dots'
   | 'mini_game'
   | 'vr_scene';
 export type InteractiveTrigger =
@@ -232,6 +234,74 @@ export interface InteractiveChoice {
   score_delta?: number;
 }
 
+export type InteractiveLayerType = 'text' | 'image' | 'video' | 'button' | 'hotspot' | 'question' | 'feedback';
+export type VisibilityRuleTrigger =
+  | 'always'
+  | 'on_scene_enter'
+  | 'after_delay'
+  | 'after_time'
+  | 'after_media_time'
+  | 'after_media_end'
+  | 'after_click'
+  | 'after_choice'
+  | 'after_event'
+  | 'on_scene_state'
+  | 'manual';
+
+export interface VisibilityRule {
+  trigger: VisibilityRuleTrigger;
+  delay_seconds?: number;
+  timecode?: number;
+  choice_id?: string;
+  interaction_id?: string;
+  layer_id?: string;
+  event_type?: string;
+  state_key?: string;
+  expected_value?: unknown;
+}
+
+export interface InteractiveLayer {
+  id: string;
+  type: InteractiveLayerType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  z_index?: number;
+  text?: string;
+  url?: string;
+  style?: Record<string, unknown>;
+  visibility_rule?: VisibilityRule;
+  action?: {
+    type?: 'go_to_scene' | 'open_interaction' | 'play_audio' | 'reveal_layer';
+    target_scene_id?: string;
+    scene_id?: string;
+    interaction_id?: string;
+    audio_url?: string;
+    target_layer_id?: string;
+  };
+}
+
+export interface ConnectTheDotsPoint {
+  id: string;
+  label?: string;
+  x: number;
+  y: number;
+  order: number;
+}
+
+export interface ConnectTheDotsContent {
+  text?: string;
+  image_url?: string;
+  background_image_url?: string;
+  points?: ConnectTheDotsPoint[];
+  success_target_scene_id?: string;
+  wrong_behavior?: 'stay_current_point' | 'restart_current_sequence' | 'restart_from_beginning';
+  complete_score?: number;
+  wrong_penalty?: number;
+  layers?: InteractiveLayer[];
+}
+
 export interface InteractiveInteraction {
   id?: string;
   type: string;
@@ -258,6 +328,124 @@ export interface InteractiveBookManifest {
   entry_scene_id: string;
   scenes: InteractiveScene[];
   metadata?: Record<string, unknown>;
+}
+
+export interface InteractiveScoreSummary {
+  attempted: number;
+  correct: number;
+  score: number;
+  total_score: number;
+  max_score: number;
+  correct_count: number;
+  wrong_count: number;
+  retry_count: number;
+  completed_scene_count: number;
+  branch_history: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface InteractiveBookReportOverview {
+  total_attempts: number;
+  completed_attempts: number;
+  in_progress_attempts: number;
+  average_completion_percent: number;
+  average_total_score: number;
+  average_wrong_count: number;
+  average_retry_count: number;
+}
+
+export interface InteractiveBookReportChoiceStat {
+  choice_id: string;
+  label?: string;
+  count: number;
+}
+
+export interface InteractiveBookReportSceneStat {
+  scene_id: string;
+  scene_title: string;
+  scene_type: InteractiveSceneType;
+  entered_count: number;
+  wrong_count: number;
+  retry_count: number;
+  completed_count: number;
+  choice_counts: InteractiveBookReportChoiceStat[];
+}
+
+export interface InteractiveBookReportAttempt {
+  attempt_id: string;
+  student_id: string;
+  student_name: string;
+  student_email?: string | null;
+  class_id?: string | null;
+  class_name?: string | null;
+  status: InteractiveAttemptStatus;
+  current_scene_id?: string | null;
+  completion_percent: number;
+  score_summary: Record<string, unknown>;
+  visited_scene_count: number;
+  interaction_result_count: number;
+  retry_history: Array<Record<string, unknown>>;
+  branch_history: Array<Record<string, unknown>>;
+  started_at?: string | null;
+  last_seen_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface InteractiveBookReportEvent {
+  id: string;
+  attempt_id: string;
+  student_name?: string | null;
+  scene_id?: string | null;
+  event_type: string;
+  payload?: Record<string, unknown> | null;
+  created_at?: string | null;
+}
+
+export interface InteractiveBookReport {
+  material_id: string;
+  interactive_book_id: string;
+  overview: InteractiveBookReportOverview;
+  attempts: InteractiveBookReportAttempt[];
+  scene_stats: InteractiveBookReportSceneStat[];
+  recent_events: InteractiveBookReportEvent[];
+}
+
+export type FlowIssueSeverity = 'blocking' | 'warning';
+export type FlowNodeStatus = 'reachable' | 'unreachable' | 'blocking' | 'loop';
+export type FlowEdgeKind = 'next' | 'implicit_next' | 'choice' | 'interaction' | 'layer' | 'connect_the_dots';
+
+export interface FlowValidationIssue {
+  id: string;
+  severity: FlowIssueSeverity;
+  code: string;
+  message: string;
+  sceneId?: string;
+  targetSceneId?: string;
+}
+
+export interface FlowGraphNode {
+  id: string;
+  title: string;
+  type: InteractiveSceneType;
+  status: FlowNodeStatus;
+}
+
+export interface FlowGraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  label: string;
+  kind: FlowEdgeKind;
+  valid: boolean;
+}
+
+export interface FlowValidationResult {
+  blockingErrors: FlowValidationIssue[];
+  warnings: FlowValidationIssue[];
+  nodes: FlowGraphNode[];
+  edges: FlowGraphEdge[];
+  reachableSceneIds: string[];
+  completionReachable: boolean;
 }
 
 export interface InteractiveBookMeta {

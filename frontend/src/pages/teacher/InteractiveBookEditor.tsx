@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowUpDown,
+  BarChart3,
   Copy,
   Eye,
+  GitBranch,
   ImagePlus,
   Info,
   Loader2,
@@ -21,6 +24,7 @@ import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import Modal from '@/components/common/Modal';
 import InteractiveBookPlayer from '@/components/interactive-book/InteractiveBookPlayer';
+import SceneLayerCanvas from '@/components/interactive-book/SceneLayerCanvas';
 import api from '@/services/api';
 import { classService } from '@/services/class.service';
 import { interactiveBookService } from '@/services/interactive-book.service';
@@ -30,12 +34,15 @@ import type {
   Class,
   InteractiveBookBundle,
   InteractiveBookManifest,
+  InteractiveBookReport,
   InteractiveChoice,
   InteractiveInteraction,
+  InteractiveLayer,
   InteractiveScene,
   InteractiveSceneType,
 } from '@/types';
 import { GRADES, SUBJECTS } from '@/utils/constants';
+import { validateInteractiveBookFlow } from '@/utils/interactiveBookFlow';
 
 const DEFAULT_MANIFEST = {
   title: 'Sách tương tác mới',
@@ -60,15 +67,24 @@ const DEFAULT_MANIFEST = {
 
 const DEFAULT_MANIFEST_TEXT = JSON.stringify(DEFAULT_MANIFEST, null, 2);
 
-const SCENE_TYPE_OPTIONS: Array<{ value: InteractiveSceneType; label: string; variant: 'blue' | 'purple' | 'mint' | 'yellow' | 'pink' }> = [
+type SceneMetaVariant = 'blue' | 'purple' | 'mint' | 'yellow' | 'pink' | 'gray';
+
+const SCENE_TYPE_META: Array<{ value: InteractiveSceneType; label: string; variant: SceneMetaVariant }> = [
   { value: 'timeline', label: 'Tổng quan', variant: 'blue' },
+  { value: 'media', label: 'Nội dung', variant: 'purple' },
   { value: 'interactive_video', label: 'Video tương tác', variant: 'purple' },
   { value: 'hotspot_audio', label: 'Điểm chạm + âm thanh', variant: 'pink' },
   { value: 'branching', label: 'Rẽ nhánh', variant: 'mint' },
   { value: 'quiz', label: 'Câu hỏi', variant: 'yellow' },
+  { value: 'connect_the_dots', label: 'Nối điểm', variant: 'mint' },
   { value: 'slideshow', label: 'Trình chiếu', variant: 'blue' },
-  { value: 'mini_game', label: 'Mini game', variant: 'purple' },
-  { value: 'vr_scene', label: 'VR', variant: 'mint' },
+];
+
+const SCENE_CREATION_OPTIONS: Array<{ value: InteractiveSceneType; label: string; variant: SceneMetaVariant }> = [
+  { value: 'timeline', label: 'Tổng quan', variant: 'blue' },
+  { value: 'media', label: 'Nội dung', variant: 'purple' },
+  { value: 'connect_the_dots', label: 'Nối điểm', variant: 'mint' },
+  { value: 'slideshow', label: 'Trình chiếu', variant: 'blue' },
 ];
 
 interface FormState {
@@ -84,6 +100,7 @@ interface FormState {
 type AssetTargetKey =
   | 'timeline_image'
   | 'scene_image'
+  | 'connect_dots_background'
   | 'slideshow_image'
   | 'video_url'
   | 'poster_url'
@@ -111,10 +128,12 @@ function createDefaultScene(sceneType: InteractiveSceneType, existingIds: Set<st
   const id = createSceneId(sceneType, existingIds);
   const titleByType: Record<InteractiveSceneType, string> = {
     timeline: 'Tổng quan câu chuyện',
+    media: 'Nội dung mới',
     interactive_video: 'Video tương tác mới',
     hotspot_audio: 'Điểm chạm và âm thanh mới',
     branching: 'Cảnh rẽ nhánh mới',
     quiz: 'Câu hỏi mới',
+    connect_the_dots: 'Nối điểm mới',
     slideshow: 'Trình chiếu mới',
     mini_game: 'Mini game mới',
     vr_scene: 'Cảnh VR mới',
@@ -129,8 +148,26 @@ function createDefaultScene(sceneType: InteractiveSceneType, existingIds: Set<st
         content: {
           text: 'Trang tổng quan để dẫn người học vào từng sự kiện.',
           image_url: '',
+          background_audio_trigger: 'on_enter',
           sync_from_scenes: true,
         },
+      };
+    case 'media':
+      return {
+        id,
+        type: 'media',
+        title: titleByType.media,
+        content: {
+          text: 'Mô tả ngắn cho nội dung này.',
+          media_kind: 'image',
+          image_url: '',
+          video_url: '',
+          poster_url: '',
+          background_audio_url: '',
+          background_audio_trigger: 'on_enter',
+          question_enabled: false,
+        },
+        interactions: [],
       };
     case 'interactive_video':
       return {
@@ -236,7 +273,28 @@ function createDefaultScene(sceneType: InteractiveSceneType, existingIds: Set<st
           text: 'Cảnh này dùng để trình chiếu một hoặc nhiều hình ảnh.',
           image_url: '',
           background_audio_url: '',
+          background_audio_trigger: 'on_enter',
           images: [],
+        },
+      };
+    case 'connect_the_dots':
+      return {
+        id,
+        type: 'connect_the_dots',
+        title: titleByType.connect_the_dots,
+        content: {
+          text: 'Học sinh nối các điểm theo đúng thứ tự để mở nhánh tiếp theo.',
+          image_url: '',
+          background_image_url: '',
+          points: [
+            { id: `${id}-point-1`, label: '1', x: 25, y: 50, order: 1 },
+            { id: `${id}-point-2`, label: '2', x: 50, y: 35, order: 2 },
+            { id: `${id}-point-3`, label: '3', x: 75, y: 55, order: 3 },
+          ],
+          success_target_scene_id: '',
+          wrong_behavior: 'stay_current_point',
+          complete_score: 1,
+          wrong_penalty: 0,
         },
       };
     case 'mini_game':
@@ -316,6 +374,93 @@ function ensureInteractions(scene: InteractiveScene): InteractiveInteraction[] {
   return scene.interactions;
 }
 
+function getSceneLayers(scene: InteractiveScene): InteractiveLayer[] {
+  const content = ensureContentRecord(scene);
+  return Array.isArray(content.layers)
+    ? content.layers.filter((item): item is InteractiveLayer => Boolean(item) && typeof item === 'object' && typeof (item as InteractiveLayer).id === 'string')
+    : [];
+}
+
+function setSceneLayers(scene: InteractiveScene, layers: InteractiveLayer[]) {
+  ensureContentRecord(scene).layers = layers;
+}
+
+function getConnectDotsPoints(scene: InteractiveScene) {
+  const content = ensureContentRecord(scene);
+  return Array.isArray(content.points)
+    ? content.points
+      .filter((item): item is { id: string; label?: string; x: number; y: number; order: number } =>
+        Boolean(item) && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string',
+      )
+      .map((point, index) => ({
+        id: point.id,
+        label: typeof point.label === 'string' ? point.label : String(index + 1),
+        x: Number.isFinite(Number(point.x)) ? Number(point.x) : 50,
+        y: Number.isFinite(Number(point.y)) ? Number(point.y) : 50,
+        order: Number.isFinite(Number(point.order)) ? Number(point.order) : index + 1,
+      }))
+      .sort((left, right) => left.order - right.order)
+    : [];
+}
+
+function createDefaultLayer(type: InteractiveLayer['type'], index: number): InteractiveLayer {
+  const base = {
+    id: `layer-${type}-${Date.now()}-${index + 1}`,
+    type,
+    x: 12 + index * 4,
+    y: 12 + index * 4,
+    width: type === 'button' ? 22 : type === 'image' ? 24 : 30,
+    height: type === 'button' ? 10 : type === 'image' ? 20 : 14,
+    z_index: index + 1,
+  };
+
+  if (type === 'button') {
+    return {
+      ...base,
+      text: 'Đi tiếp',
+      action: { type: 'go_to_scene', target_scene_id: '' },
+      visibility_rule: { trigger: 'always' },
+    };
+  }
+
+  return {
+    ...base,
+    text: type === 'text' ? 'Nhập chữ trên canvas' : type === 'image' ? 'Ảnh overlay' : type,
+    visibility_rule: { trigger: 'always' },
+  };
+}
+
+function summarizeVisibilityRule(layer: InteractiveLayer): string {
+  const rule = layer.visibility_rule;
+  if (!rule) return 'Hiện ngay';
+  switch (rule.trigger) {
+    case 'always':
+    case 'on_scene_enter':
+      return 'Hiện ngay';
+    case 'after_delay':
+    case 'after_time':
+      return `Hiện sau ${Number(rule.delay_seconds ?? rule.timecode ?? 0)} giây`;
+    case 'after_media_time':
+      return `Hiện khi media tới giây ${Number(rule.timecode ?? 0)}`;
+    case 'after_media_end':
+      return 'Hiện sau khi media kết thúc';
+    case 'after_click':
+      return rule.interaction_id || rule.layer_id
+        ? `Hiện sau click ${rule.interaction_id ?? rule.layer_id}`
+        : 'Hiện sau khi có click trong scene';
+    case 'after_choice':
+      return rule.choice_id ? `Hiện sau lựa chọn ${rule.choice_id}` : 'Hiện sau khi học sinh chọn đáp án';
+    case 'after_event':
+      return rule.event_type ? `Hiện sau event ${rule.event_type}` : 'Hiện sau event';
+    case 'manual':
+      return 'Chỉ hiện khi button reveal gọi tới';
+    case 'on_scene_state':
+      return rule.state_key ? `Hiện khi state ${rule.state_key} khớp điều kiện` : 'Hiện theo scene state';
+    default:
+      return 'Hiện ngay';
+  }
+}
+
 function getSceneText(scene: InteractiveScene): string {
   if (typeof scene.content === 'string') return scene.content;
   if (!scene.content || typeof scene.content !== 'object' || Array.isArray(scene.content)) return '';
@@ -341,6 +486,16 @@ function getBooleanFromContent(scene: InteractiveScene, key: string): boolean {
   return Boolean(content[key]);
 }
 
+type BackgroundAudioTrigger = 'on_enter' | 'on_slide_change' | 'manual';
+
+function getBackgroundAudioTrigger(scene: InteractiveScene): BackgroundAudioTrigger {
+  const trigger = getStringFromContent(scene, 'background_audio_trigger');
+  if (trigger === 'on_enter' || trigger === 'on_slide_change' || trigger === 'manual') {
+    return trigger;
+  }
+  return 'on_enter';
+}
+
 function getSceneNext(scene: InteractiveScene): string {
   if (typeof scene.next === 'string') return scene.next;
   if (scene.next && typeof scene.next === 'object' && !Array.isArray(scene.next)) {
@@ -359,6 +514,141 @@ function getFirstMatchingInteraction(
   return found ?? null;
 }
 
+function isUnifiedMediaScene(sceneOrType: InteractiveScene | InteractiveSceneType | null | undefined): boolean {
+  const sceneType = typeof sceneOrType === 'string' ? sceneOrType : sceneOrType?.type;
+  return sceneType === 'media'
+    || sceneType === 'interactive_video'
+    || sceneType === 'hotspot_audio'
+    || sceneType === 'branching'
+    || sceneType === 'quiz';
+}
+
+function getSceneMediaKind(scene: InteractiveScene): 'image' | 'video' {
+  const explicitKind = getStringFromContent(scene, 'media_kind');
+  if (explicitKind === 'image' || explicitKind === 'video') {
+    return explicitKind;
+  }
+  if (scene.type === 'interactive_video') {
+    return 'video';
+  }
+  return getStringFromContent(scene, 'video_url') ? 'video' : 'image';
+}
+
+function createDefaultQuestionInteraction(sceneId: string): InteractiveInteraction {
+  return {
+    id: `${sceneId}-question`,
+    type: 'multiple_choice',
+    trigger: 'on_enter',
+    prompt: 'Câu hỏi sau khi nghe xong âm thanh',
+    choices: [
+      { id: `${sceneId}-choice-1`, label: 'Lựa chọn 1', is_correct: false, retry: true, feedback: 'Chưa đúng, hãy thử lại.' },
+      { id: `${sceneId}-choice-2`, label: 'Lựa chọn 2', is_correct: true, score_delta: 1, feedback: 'Chính xác.' },
+    ],
+  };
+}
+
+function getQuestionInteraction(scene: InteractiveScene): InteractiveInteraction | null {
+  const interactions = scene.interactions ?? [];
+  const content = scene.content && typeof scene.content === 'object' && !Array.isArray(scene.content)
+    ? scene.content as Record<string, unknown>
+    : {};
+  const configuredId = typeof content.question_interaction_id === 'string' ? content.question_interaction_id : '';
+  if (configuredId) {
+    const configured = interactions.find((interaction) => interaction.id === configuredId);
+    if (configured) return configured;
+  }
+
+  if (scene.type === 'hotspot_audio') {
+    const hotspot = interactions.find((interaction) => interaction.type === 'hotspot');
+    const followUpId = typeof hotspot?.data?.follow_up_interaction_id === 'string'
+      ? hotspot.data.follow_up_interaction_id
+      : '';
+    if (followUpId) {
+      const followUpInteraction = interactions.find((interaction) => interaction.id === followUpId);
+      if (followUpInteraction) return followUpInteraction;
+    }
+  }
+
+  return interactions.find((interaction) => (interaction.choices?.length ?? 0) > 0)
+    ?? interactions.find((interaction) => (
+      interaction.type === 'quiz'
+      || interaction.type === 'multiple_choice'
+      || interaction.type === 'branching_prompt'
+    ))
+    ?? null;
+}
+
+function convertLegacySceneToUnifiedMedia(scene: InteractiveScene) {
+  if (!isUnifiedMediaScene(scene) || scene.type === 'media') return;
+
+  const previousType = scene.type;
+  const content = ensureContentRecord(scene);
+  const questionInteraction = getQuestionInteraction(scene);
+
+  content.media_kind = getSceneMediaKind(scene);
+  if (typeof content.background_audio_trigger !== 'string') {
+    content.background_audio_trigger = 'on_enter';
+  }
+  if (previousType === 'hotspot_audio') {
+    const hotspot = getFirstMatchingInteraction(scene, (interaction) => interaction.type === 'hotspot');
+    const hotspotAudioUrl = typeof hotspot?.data?.audio_url === 'string' ? hotspot.data.audio_url : '';
+    if (!getStringFromContent(scene, 'background_audio_url') && hotspotAudioUrl) {
+      content.background_audio_url = hotspotAudioUrl;
+    }
+  }
+
+  scene.interactions = questionInteraction ? [questionInteraction] : [];
+  content.question_enabled = Boolean(questionInteraction);
+  if (questionInteraction?.id) {
+    content.question_interaction_id = questionInteraction.id;
+  } else {
+    delete content.question_interaction_id;
+  }
+  scene.type = 'media';
+}
+
+function isQuestionEnabled(scene: InteractiveScene): boolean {
+  const content = scene.content && typeof scene.content === 'object' && !Array.isArray(scene.content)
+    ? scene.content as Record<string, unknown>
+    : {};
+  if (typeof content.question_enabled === 'boolean') {
+    return content.question_enabled;
+  }
+  return Boolean(getQuestionInteraction(scene));
+}
+
+function ensureQuestionInteraction(scene: InteractiveScene): InteractiveInteraction {
+  convertLegacySceneToUnifiedMedia(scene);
+  const content = ensureContentRecord(scene);
+  const existing = getQuestionInteraction(scene);
+  if (existing) {
+    content.question_enabled = true;
+    if (existing.id) {
+      content.question_interaction_id = existing.id;
+    }
+    return existing;
+  }
+
+  const interaction = createDefaultQuestionInteraction(scene.id);
+  ensureInteractions(scene).push(interaction);
+  content.question_enabled = true;
+  content.question_interaction_id = interaction.id;
+  return interaction;
+}
+
+function disableQuestionInteraction(scene: InteractiveScene) {
+  convertLegacySceneToUnifiedMedia(scene);
+  const content = ensureContentRecord(scene);
+  const existing = getQuestionInteraction(scene);
+  if (existing?.id) {
+    scene.interactions = (scene.interactions ?? []).filter((interaction) => interaction.id !== existing.id);
+  } else {
+    scene.interactions = [];
+  }
+  content.question_enabled = false;
+  delete content.question_interaction_id;
+}
+
 function inferSceneImage(scene: InteractiveScene): string {
   const directImage = getStringFromContent(scene, 'image_url')
     || getStringFromContent(scene, 'poster_url')
@@ -373,30 +663,27 @@ function inferSceneImage(scene: InteractiveScene): string {
 
 function getAssetTargetsForScene(scene: InteractiveScene | null): Array<{ key: AssetTargetKey; label: string }> {
   if (!scene) return [];
+  if (isUnifiedMediaScene(scene)) {
+    return getSceneMediaKind(scene) === 'video'
+      ? [
+        { key: 'video_url', label: 'Dùng làm video chính' },
+        { key: 'poster_url', label: 'Dùng làm ảnh poster' },
+        { key: 'background_audio', label: 'Dùng làm âm thanh nền' },
+      ]
+      : [
+        { key: 'scene_image', label: 'Dùng làm ảnh chính' },
+        { key: 'background_audio', label: 'Dùng làm âm thanh nền' },
+      ];
+  }
   switch (scene.type) {
     case 'timeline':
       return [
         { key: 'timeline_image', label: 'Dùng làm ảnh tổng quan' },
         { key: 'background_audio', label: 'Dùng làm âm thanh nền' },
       ];
-    case 'interactive_video':
+    case 'connect_the_dots':
       return [
-        { key: 'video_url', label: 'Dùng làm video chính' },
-        { key: 'poster_url', label: 'Dùng làm ảnh poster' },
-        { key: 'background_audio', label: 'Dùng làm âm thanh nền' },
-      ];
-    case 'hotspot_audio':
-      return [
-        { key: 'scene_image', label: 'Dùng làm ảnh nền' },
-        { key: 'background_audio', label: 'Dùng làm âm thanh nền' },
-        { key: 'hotspot_audio', label: 'Dùng làm lời thoại hotspot' },
-      ];
-    case 'branching':
-    case 'quiz':
-      return [
-        { key: 'scene_image', label: 'Dùng làm ảnh minh họa' },
-        { key: 'video_url', label: 'Dùng làm video của cảnh' },
-        { key: 'poster_url', label: 'Dùng làm ảnh poster' },
+        { key: 'connect_dots_background', label: 'Dùng làm ảnh nền nối điểm' },
         { key: 'background_audio', label: 'Dùng làm âm thanh nền' },
       ];
     case 'slideshow':
@@ -419,6 +706,7 @@ function isAssetCompatibleWithTarget(kind: UploadedAssetItem['kind'], target: As
   switch (target) {
     case 'timeline_image':
     case 'scene_image':
+    case 'connect_dots_background':
     case 'slideshow_image':
     case 'poster_url':
       return kind === 'image';
@@ -440,6 +728,8 @@ function summarizeScene(scene: InteractiveScene): string {
   switch (scene.type) {
     case 'timeline':
       return 'Trang tổng quan dẫn vào các sự kiện.';
+    case 'media':
+      return 'Cảnh nội dung dùng ảnh hoặc video, có thể chèn text trực tiếp trên canvas.';
     case 'interactive_video':
       return 'Một cảnh dùng video hoặc GIF.';
     case 'hotspot_audio':
@@ -448,6 +738,8 @@ function summarizeScene(scene: InteractiveScene): string {
       return 'Cảnh có các nhánh lựa chọn.';
     case 'quiz':
       return 'Cảnh dùng câu hỏi trắc nghiệm.';
+    case 'connect_the_dots':
+      return 'Scene nối điểm theo thứ tự.';
     default:
       return 'Chưa có mô tả cho cảnh này.';
   }
@@ -500,7 +792,7 @@ function stringifyManifest(manifest: InteractiveBookManifest): string {
 }
 
 function sceneTypeMeta(sceneType: InteractiveSceneType) {
-  return SCENE_TYPE_OPTIONS.find((option) => option.value === sceneType)
+  return SCENE_TYPE_META.find((option) => option.value === sceneType)
     ?? { value: sceneType, label: sceneType, variant: 'gray' as const };
 }
 
@@ -530,6 +822,22 @@ function collectManifestWarnings(manifest: InteractiveBookManifest): string[] {
 
     if (scene.type === 'interactive_video' && !getStringFromContent(scene, 'video_url')) {
       warnings.push(`${sceneLabel}: chưa có video.`);
+    }
+
+    if (scene.type === 'media') {
+      const mediaKind = getSceneMediaKind(scene);
+      if (mediaKind === 'video' && !getStringFromContent(scene, 'video_url')) {
+        warnings.push(`${sceneLabel}: chưa có video.`);
+      }
+      if (mediaKind === 'image' && !getStringFromContent(scene, 'image_url')) {
+        warnings.push(`${sceneLabel}: chưa có ảnh.`);
+      }
+      if (isQuestionEnabled(scene)) {
+        const interaction = getQuestionInteraction(scene);
+        if (!interaction || !Array.isArray(interaction.choices) || interaction.choices.length === 0) {
+          warnings.push(`${sceneLabel}: đã bật câu hỏi nhưng chưa có lựa chọn.`);
+        }
+      }
     }
 
     if (scene.type === 'hotspot_audio') {
@@ -591,8 +899,9 @@ export default function InteractiveBookEditor() {
   const [assetLibrary, setAssetLibrary] = useState<UploadedAssetItem[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedSceneId, setSelectedSceneId] = useState('timeline');
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [showAdvancedJson, setShowAdvancedJson] = useState(false);
-  const [newSceneType, setNewSceneType] = useState<InteractiveSceneType>('interactive_video');
+  const [newSceneType, setNewSceneType] = useState<InteractiveSceneType>('media');
   const [linkEditorByField, setLinkEditorByField] = useState<Record<string, boolean>>({});
   const [draggingSceneId, setDraggingSceneId] = useState<string | null>(null);
   const [showAssignToClass, setShowAssignToClass] = useState(false);
@@ -601,6 +910,9 @@ export default function InteractiveBookEditor() {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedChapterId, setSelectedChapterId] = useState('');
   const [assigningToClass, setAssigningToClass] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [report, setReport] = useState<InteractiveBookReport | null>(null);
   const [form, setForm] = useState<FormState>({
     title: '',
     description: '',
@@ -655,6 +967,40 @@ export default function InteractiveBookEditor() {
   }, [id, navigate, user?.id]);
 
   useEffect(() => {
+    if (!id || !bundle || readOnly) {
+      setReport(null);
+      setReportError(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadReport = async () => {
+      setReportLoading(true);
+      setReportError(null);
+      try {
+        const response = await interactiveBookService.getReport(id);
+        if (!cancelled) {
+          setReport(response.data.data as InteractiveBookReport);
+        }
+      } catch (error: any) {
+        if (!cancelled) {
+          setReport(null);
+          setReportError(error.response?.data?.message || 'Không thể tải báo cáo attempts.');
+        }
+      } finally {
+        if (!cancelled) {
+          setReportLoading(false);
+        }
+      }
+    };
+
+    void loadReport();
+    return () => {
+      cancelled = true;
+    };
+  }, [bundle, id, readOnly]);
+
+  useEffect(() => {
     if (!showAssignToClass) return;
     classService.getClasses()
       .then((response) => setClassOptions(response.data.data || []))
@@ -694,6 +1040,10 @@ export default function InteractiveBookEditor() {
     [previewManifest, selectedSceneId],
   );
 
+  useEffect(() => {
+    setSelectedLayerId(null);
+  }, [selectedSceneId]);
+
   const previewKey = useMemo(() => {
     if (!previewManifest) return 'preview-empty';
     return `${bundle?.material.id ?? 'new'}:${previewManifest.entry_scene_id}:${previewManifest.scenes.map((scene) => scene.id).join(',')}:${manifestText.length}`;
@@ -717,19 +1067,28 @@ export default function InteractiveBookEditor() {
     [previewManifest],
   );
 
+  const flowValidation = useMemo(
+    () => (previewManifest ? validateInteractiveBookFlow(previewManifest) : null),
+    [previewManifest],
+  );
+
+  const blockingFlowErrors = flowValidation?.blockingErrors ?? [];
+  const flowWarnings = flowValidation?.warnings ?? [];
+  const hasBlockingFlowErrors = blockingFlowErrors.length > 0;
+
   const canAddTimeline = useMemo(
     () => !previewManifest?.scenes.some((scene) => scene.type === 'timeline'),
     [previewManifest],
   );
 
   const availableSceneTypes = useMemo(
-    () => SCENE_TYPE_OPTIONS.filter((option) => option.value !== 'timeline' || canAddTimeline),
+    () => SCENE_CREATION_OPTIONS.filter((option) => option.value !== 'timeline' || canAddTimeline),
     [canAddTimeline],
   );
 
   useEffect(() => {
     if (!availableSceneTypes.some((option) => option.value === newSceneType)) {
-      setNewSceneType(availableSceneTypes[0]?.value ?? 'interactive_video');
+      setNewSceneType(availableSceneTypes[0]?.value ?? 'media');
     }
   }, [availableSceneTypes, newSceneType]);
 
@@ -758,6 +1117,13 @@ export default function InteractiveBookEditor() {
     return response.data.data.url as string;
   };
 
+  const getUploadErrorMessage = (error: any, fallback: string) => (
+    error?.response?.data?.detail
+    || error?.response?.data?.message
+    || error?.message
+    || fallback
+  );
+
   const setLinkEditorVisible = (fieldKey: string, visible: boolean) => {
     setLinkEditorByField((current) => ({ ...current, [fieldKey]: visible }));
   };
@@ -781,8 +1147,8 @@ export default function InteractiveBookEditor() {
         ...current.filter((item) => item.url !== url),
       ]);
       setLinkEditorVisible(fieldKey, false);
-    } catch {
-      alert('Không thể tải tư liệu.');
+    } catch (error: any) {
+      alert(getUploadErrorMessage(error, 'Không thể tải tư liệu.'));
     } finally {
       setUploadingFieldKey(null);
     }
@@ -804,16 +1170,29 @@ export default function InteractiveBookEditor() {
   const applyAssetToSelectedScene = (url: string, target: AssetTargetKey) => {
     if (!selectedScene || readOnly) return;
     updateSelectedScene((scene) => {
+      if (isUnifiedMediaScene(scene) && target !== 'hotspot_audio') {
+        convertLegacySceneToUnifiedMedia(scene);
+      }
       const content = ensureContentRecord(scene);
       switch (target) {
         case 'timeline_image':
         case 'scene_image':
+          if (scene.type === 'media') {
+            content.media_kind = 'image';
+          }
+          content.image_url = url;
+          break;
+        case 'connect_dots_background':
+          content.background_image_url = url;
           content.image_url = url;
           break;
         case 'slideshow_image':
           appendSlideshowImage(scene, url);
           break;
         case 'video_url':
+          if (scene.type === 'media') {
+            content.media_kind = 'video';
+          }
           content.video_url = url;
           break;
         case 'poster_url':
@@ -907,6 +1286,13 @@ export default function InteractiveBookEditor() {
       const scene = draft.scenes.find((item) => item.id === selectedSceneId);
       if (!scene) return;
       updater(scene, draft);
+    });
+  };
+
+  const updateSelectedUnifiedMediaScene = (updater: (scene: InteractiveScene, manifest: InteractiveBookManifest) => void) => {
+    updateSelectedScene((scene, manifest) => {
+      convertLegacySceneToUnifiedMedia(scene);
+      updater(scene, manifest);
     });
   };
 
@@ -1047,6 +1433,10 @@ export default function InteractiveBookEditor() {
         throw new Error('Manifest cần có entry_scene_id và danh sách scenes[].');
       }
       const syncedManifest = syncTimelineCards(parsed as InteractiveBookManifest);
+      const validation = validateInteractiveBookFlow(syncedManifest);
+      if (validation.blockingErrors.length > 0) {
+        throw new Error(`Flow chưa hợp lệ: ${validation.blockingErrors.map((issue) => issue.message).join(' | ')}`);
+      }
       setManifestError(null);
       return syncedManifest;
     } catch (error: any) {
@@ -1196,6 +1586,268 @@ export default function InteractiveBookEditor() {
     } finally {
       setAssigningToClass(false);
     }
+  };
+
+  const renderFlowGraph = () => {
+    if (!flowValidation) return null;
+    const nodeTone: Record<string, string> = {
+      reachable: 'border-emerald-300 bg-emerald-50 text-emerald-950',
+      loop: 'border-violet-300 bg-violet-50 text-violet-950',
+      blocking: 'border-red-300 bg-red-50 text-red-950',
+      unreachable: 'border-amber-300 bg-amber-50 text-amber-950',
+    };
+
+    return (
+      <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <GitBranch className="h-5 w-5 text-sky-600" />
+              <h3 className="text-sm font-semibold text-slate-900">Graph View và Flow Safety</h3>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Graph này kiểm tra đường đi từ entry đến completion và chặn dead-end loop trước khi lưu.
+            </p>
+          </div>
+          <div className={`rounded-full px-3 py-1 text-xs font-semibold ${
+            hasBlockingFlowErrors ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
+          }`}>
+            {hasBlockingFlowErrors ? `${blockingFlowErrors.length} lỗi P0` : 'Flow hợp lệ'}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0">
+            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+              {flowValidation.nodes.map((node) => (
+                <button
+                  key={node.id}
+                  type="button"
+                  onClick={() => setSelectedSceneId(node.id)}
+                  className={`rounded-2xl border px-3 py-3 text-left transition hover:-translate-y-0.5 ${nodeTone[node.status]}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase">{node.status}</span>
+                    <span className="text-xs opacity-70">{node.type}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold">{node.title}</p>
+                  <p className="mt-1 break-all text-xs opacity-70">{node.id}</p>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 max-h-48 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Edges</p>
+              <div className="mt-2 space-y-1 text-xs text-slate-600">
+                {flowValidation.edges.length === 0 ? (
+                  <p>No edges detected.</p>
+                ) : flowValidation.edges.map((edge) => (
+                  <button
+                    key={edge.id}
+                    type="button"
+                    onClick={() => setSelectedSceneId(edge.from)}
+                    className={`block w-full rounded-xl px-2 py-1 text-left ${edge.valid ? 'hover:bg-white' : 'bg-red-50 text-red-700'}`}
+                  >
+                    <span className="font-semibold">{edge.from}</span>
+                    {' -> '}
+                    <span className="font-semibold">{edge.to}</span>
+                    <span className="ml-2 text-slate-400">({edge.kind}: {edge.label})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {blockingFlowErrors.length > 0 && (
+              <div className="rounded-2xl border border-red-200 bg-red-50 p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-red-900">
+                  <AlertTriangle className="h-4 w-4" />
+                  Blocking errors
+                </div>
+                <div className="mt-2 space-y-2">
+                  {blockingFlowErrors.map((issue) => (
+                    <button
+                      key={issue.id}
+                      type="button"
+                      onClick={() => issue.sceneId && setSelectedSceneId(issue.sceneId)}
+                      className="block w-full rounded-xl bg-white px-3 py-2 text-left text-xs text-red-800"
+                    >
+                      {issue.message}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {flowWarnings.length > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                <p className="text-sm font-semibold text-amber-900">Warnings</p>
+                <div className="mt-2 space-y-2">
+                  {flowWarnings.slice(0, 6).map((issue) => (
+                    <button
+                      key={issue.id}
+                      type="button"
+                      onClick={() => issue.sceneId && setSelectedSceneId(issue.sceneId)}
+                      className="block w-full rounded-xl bg-white px-3 py-2 text-left text-xs text-amber-900"
+                    >
+                      {issue.message}
+                    </button>
+                  ))}
+                  {flowWarnings.length > 6 && (
+                    <p className="text-xs text-amber-800">+{flowWarnings.length - 6} warnings khác.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReportPanel = () => {
+    if (!id || readOnly) return null;
+
+    return (
+      <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-sky-600" />
+              <h3 className="text-sm font-semibold text-slate-900">Evidence và Attempts</h3>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Báo cáo này tổng hợp progress, wrong count, retry count và branch history từ dữ liệu attempt/event hiện có.
+            </p>
+          </div>
+          {report && (
+            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              {report.overview.total_attempts} attempts
+            </div>
+          )}
+        </div>
+
+        {reportLoading ? (
+          <div className="mt-4 flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <Loader2 className="h-4 w-4 animate-spin" /> Đang tải báo cáo attempts...
+          </div>
+        ) : reportError ? (
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {reportError}
+          </div>
+        ) : !report || report.overview.total_attempts === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+            Chưa có attempt nào cho sách này. Báo cáo sẽ xuất hiện sau khi học sinh bắt đầu học.
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Hoàn thành</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{report.overview.completed_attempts}/{report.overview.total_attempts}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Điểm trung bình</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{report.overview.average_total_score}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Wrong trung bình</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{report.overview.average_wrong_count}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs uppercase tracking-wide text-slate-400">Retry trung bình</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">{report.overview.average_retry_count}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+              <div className="rounded-2xl border border-slate-200">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-900">Attempts gần nhất</p>
+                </div>
+                <div className="max-h-80 overflow-auto">
+                  {report.attempts.map((attempt) => (
+                    <div key={attempt.attempt_id} className="grid gap-3 border-b border-slate-100 px-4 py-3 md:grid-cols-[minmax(0,1.2fr)_repeat(4,minmax(0,0.8fr))]">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{attempt.student_name}</p>
+                        <p className="text-xs text-slate-500">
+                          {attempt.status} • {attempt.class_name || 'Không gắn lớp'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Điểm</p>
+                        <p className="text-sm font-medium text-slate-900">{String(attempt.score_summary.total_score ?? 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Wrong</p>
+                        <p className="text-sm font-medium text-slate-900">{String(attempt.score_summary.wrong_count ?? 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Retry</p>
+                        <p className="text-sm font-medium text-slate-900">{String(attempt.score_summary.retry_count ?? 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">Progress</p>
+                        <p className="text-sm font-medium text-slate-900">{attempt.completion_percent}%</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200">
+                <div className="border-b border-slate-200 px-4 py-3">
+                  <p className="text-sm font-semibold text-slate-900">Scene statistics</p>
+                </div>
+                <div className="max-h-80 overflow-auto px-4 py-3">
+                  <div className="space-y-3">
+                    {report.scene_stats.map((sceneStat) => (
+                      <div key={sceneStat.scene_id} className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{sceneStat.scene_title}</p>
+                            <p className="text-xs text-slate-500">{sceneStat.scene_type}</p>
+                          </div>
+                          <p className="text-xs text-slate-500">{sceneStat.scene_id}</p>
+                        </div>
+                        <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                          <div className="rounded-xl bg-white px-2 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Enter</p>
+                            <p className="text-sm font-semibold text-slate-900">{sceneStat.entered_count}</p>
+                          </div>
+                          <div className="rounded-xl bg-white px-2 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Wrong</p>
+                            <p className="text-sm font-semibold text-slate-900">{sceneStat.wrong_count}</p>
+                          </div>
+                          <div className="rounded-xl bg-white px-2 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Retry</p>
+                            <p className="text-sm font-semibold text-slate-900">{sceneStat.retry_count}</p>
+                          </div>
+                          <div className="rounded-xl bg-white px-2 py-2">
+                            <p className="text-[11px] uppercase tracking-wide text-slate-400">Complete</p>
+                            <p className="text-sm font-semibold text-slate-900">{sceneStat.completed_count}</p>
+                          </div>
+                        </div>
+                        {sceneStat.choice_counts.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {sceneStat.choice_counts.map((choice) => (
+                              <span key={`${sceneStat.scene_id}:${choice.choice_id}`} className="rounded-full bg-white px-3 py-1 text-xs text-slate-700">
+                                {choice.label || choice.choice_id}: {choice.count}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const renderChoiceEditor = (
@@ -1368,6 +2020,823 @@ export default function InteractiveBookEditor() {
     );
   };
 
+  const renderCanvasLayerEditor = (scene: InteractiveScene) => {
+    const layers = getSceneLayers(scene);
+    const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) ?? null;
+    const sceneChoices = (scene.interactions ?? []).flatMap((interaction) =>
+      (interaction.choices ?? []).map((choice) => ({
+        id: choice.id,
+        label: `${interaction.prompt || interaction.id || 'Choice'} • ${choice.label}`,
+      })),
+    );
+
+    const updateLayer = (layerId: string, updater: (layer: InteractiveLayer) => void) => {
+      updateSelectedScene((currentScene) => {
+        const nextLayers = getSceneLayers(currentScene).map((layer) => ({ ...layer, action: layer.action ? { ...layer.action } : undefined }));
+        const targetLayer = nextLayers.find((layer) => layer.id === layerId);
+        if (!targetLayer) return;
+        updater(targetLayer);
+        setSceneLayers(currentScene, nextLayers);
+      });
+    };
+
+    const addLayer = (type: InteractiveLayer['type']) => {
+      updateSelectedScene((currentScene) => {
+        const nextLayers = getSceneLayers(currentScene);
+        const layer = createDefaultLayer(type, nextLayers.length);
+        setSceneLayers(currentScene, [...nextLayers, layer]);
+        setSelectedLayerId(layer.id);
+      });
+    };
+
+    const removeLayer = (layerId: string) => {
+      updateSelectedScene((currentScene) => {
+        setSceneLayers(currentScene, getSceneLayers(currentScene).filter((layer) => layer.id !== layerId));
+      });
+      setSelectedLayerId(null);
+    };
+
+    return (
+      <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Canvas layers</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Kéo thả layer trên canvas. Tọa độ chỉ được commit vào manifest khi thả chuột.
+            </p>
+          </div>
+          {!readOnly && (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="secondary" size="sm" onClick={() => addLayer('text')}>
+                Thêm text
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => addLayer('image')}>
+                Thêm ảnh
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => addLayer('button')}>
+                Thêm button
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <SceneLayerCanvas
+          layers={layers}
+          backgroundUrl={inferSceneImage(scene)}
+          selectedLayerId={selectedLayerId}
+          disabled={readOnly}
+          onSelectLayer={setSelectedLayerId}
+          onCommitLayerPosition={(layerId, position) => updateLayer(layerId, (layer) => {
+            layer.x = position.x;
+            layer.y = position.y;
+          })}
+        />
+
+        {selectedLayer ? (
+          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+            <Input
+              label="Nội dung layer"
+              value={selectedLayer.text ?? ''}
+              disabled={readOnly}
+              onChange={(event) => updateLayer(selectedLayer.id, (layer) => { layer.text = event.target.value; })}
+            />
+            <Input
+              label="Z-index"
+              type="number"
+              value={String(selectedLayer.z_index ?? 1)}
+              disabled={readOnly}
+              onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                layer.z_index = Number(event.target.value) || 1;
+              })}
+            />
+            <Input
+              label="Width (%)"
+              type="number"
+              value={String(selectedLayer.width)}
+              disabled={readOnly}
+              onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                layer.width = Number(event.target.value) || layer.width;
+              })}
+            />
+            <Input
+              label="Height (%)"
+              type="number"
+              value={String(selectedLayer.height)}
+              disabled={readOnly}
+              onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                layer.height = Number(event.target.value) || layer.height;
+              })}
+            />
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-700">Visibility rule</label>
+              <div className="grid gap-3 md:grid-cols-2">
+                <select
+                  value={selectedLayer.visibility_rule?.trigger ?? 'always'}
+                  disabled={readOnly}
+                  onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                    layer.visibility_rule = { trigger: event.target.value as NonNullable<InteractiveLayer['visibility_rule']>['trigger'] };
+                  })}
+                  className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+                >
+                  <option value="always">Hiện ngay</option>
+                  <option value="after_delay">Hiện sau delay</option>
+                  <option value="after_click">Hiện sau click</option>
+                  <option value="after_choice">Hiện sau chọn đáp án</option>
+                  <option value="after_media_time">Hiện khi media tới giây</option>
+                  <option value="after_media_end">Hiện sau khi media kết thúc</option>
+                  <option value="after_event">Hiện sau event</option>
+                  <option value="manual">Manual reveal</option>
+                </select>
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  {summarizeVisibilityRule(selectedLayer)}
+                </div>
+              </div>
+
+              {(selectedLayer.visibility_rule?.trigger === 'after_delay' || selectedLayer.visibility_rule?.trigger === 'after_time') && (
+                <div className="mt-3">
+                  <Input
+                    label="Delay (giây)"
+                    type="number"
+                    value={String(selectedLayer.visibility_rule?.delay_seconds ?? selectedLayer.visibility_rule?.timecode ?? 0)}
+                    disabled={readOnly}
+                    onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                      layer.visibility_rule = {
+                        ...(layer.visibility_rule ?? { trigger: 'after_delay' }),
+                        trigger: 'after_delay',
+                        delay_seconds: Number(event.target.value) || 0,
+                      };
+                    })}
+                  />
+                </div>
+              )}
+
+              {selectedLayer.visibility_rule?.trigger === 'after_click' && (
+                <div className="mt-3">
+                  <Input
+                    label="ID layer/hotspot kích hoạt"
+                    value={selectedLayer.visibility_rule?.interaction_id ?? selectedLayer.visibility_rule?.layer_id ?? ''}
+                    disabled={readOnly}
+                    onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                      layer.visibility_rule = {
+                        ...(layer.visibility_rule ?? { trigger: 'after_click' }),
+                        trigger: 'after_click',
+                        interaction_id: event.target.value,
+                      };
+                    })}
+                    placeholder="Để trống nếu chỉ cần bất kỳ click trong scene"
+                  />
+                </div>
+              )}
+
+              {selectedLayer.visibility_rule?.trigger === 'after_choice' && (
+                <div className="mt-3">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Lựa chọn kích hoạt</label>
+                  <select
+                    value={selectedLayer.visibility_rule?.choice_id ?? ''}
+                    disabled={readOnly}
+                    onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                      layer.visibility_rule = {
+                        ...(layer.visibility_rule ?? { trigger: 'after_choice' }),
+                        trigger: 'after_choice',
+                        choice_id: event.target.value,
+                      };
+                    })}
+                    className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+                  >
+                    <option value="">Bất kỳ lựa chọn nào</option>
+                    {sceneChoices.map((choice) => (
+                      <option key={choice.id} value={choice.id}>{choice.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {selectedLayer.visibility_rule?.trigger === 'after_media_time' && (
+                <div className="mt-3">
+                  <Input
+                    label="Mốc media (giây)"
+                    type="number"
+                    value={String(selectedLayer.visibility_rule?.timecode ?? 0)}
+                    disabled={readOnly}
+                    onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                      layer.visibility_rule = {
+                        ...(layer.visibility_rule ?? { trigger: 'after_media_time' }),
+                        trigger: 'after_media_time',
+                        timecode: Number(event.target.value) || 0,
+                      };
+                    })}
+                  />
+                </div>
+              )}
+
+              {selectedLayer.visibility_rule?.trigger === 'after_event' && (
+                <div className="mt-3">
+                  <Input
+                    label="Event type"
+                    value={selectedLayer.visibility_rule?.event_type ?? ''}
+                    disabled={readOnly}
+                    onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                      layer.visibility_rule = {
+                        ...(layer.visibility_rule ?? { trigger: 'after_event' }),
+                        trigger: 'after_event',
+                        event_type: event.target.value,
+                      };
+                    })}
+                    placeholder="Ví dụ: retry_clicked"
+                  />
+                </div>
+              )}
+            </div>
+            {selectedLayer.type === 'image' && (
+              <div className="md:col-span-2">
+                {renderMediaField({
+                  fieldKey: `${scene.id}:${selectedLayer.id}:image-layer`,
+                  label: 'Ảnh của layer',
+                  url: selectedLayer.url ?? '',
+                  accept: 'image/*',
+                  subDir: 'interactive-books',
+                  kind: 'image',
+                  disabled: readOnly,
+                  onChange: (url) => updateLayer(selectedLayer.id, (layer) => { layer.url = url; }),
+                })}
+              </div>
+            )}
+            {selectedLayer.type === 'button' && (
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Hành động của button</label>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <select
+                    value={selectedLayer.action?.type ?? 'go_to_scene'}
+                    disabled={readOnly}
+                    onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                      layer.action = { ...(layer.action ?? {}), type: event.target.value as NonNullable<InteractiveLayer['action']>['type'] };
+                    })}
+                    className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+                  >
+                    <option value="go_to_scene">Đi tới scene</option>
+                    <option value="open_interaction">Mở interaction</option>
+                    <option value="reveal_layer">Hiện layer khác</option>
+                    <option value="play_audio">Phát audio</option>
+                  </select>
+                  <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    Button hiện hỗ trợ chuyển cảnh, bật interaction, reveal layer hoặc phát audio.
+                  </div>
+                </div>
+
+                {(selectedLayer.action?.type ?? 'go_to_scene') === 'go_to_scene' && (
+                  <div className="mt-3">
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Scene đích</label>
+                    <select
+                      value={selectedLayer.action?.target_scene_id ?? ''}
+                      disabled={readOnly}
+                      onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                        layer.action = { ...(layer.action ?? { type: 'go_to_scene' }), type: 'go_to_scene', target_scene_id: event.target.value };
+                      })}
+                      className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+                    >
+                      <option value="">Không đổi scene</option>
+                      {previewManifest?.scenes
+                        .filter((item) => item.id !== selectedSceneId)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.title || item.id}
+                          </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {selectedLayer.action?.type === 'open_interaction' && (
+                  <div className="mt-3">
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Interaction cần mở</label>
+                    <select
+                      value={selectedLayer.action?.interaction_id ?? ''}
+                      disabled={readOnly}
+                      onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                        layer.action = { ...(layer.action ?? { type: 'open_interaction' }), type: 'open_interaction', interaction_id: event.target.value };
+                      })}
+                      className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+                    >
+                      <option value="">Chọn interaction</option>
+                      {(scene.interactions ?? []).map((interaction, index) => (
+                        <option key={interaction.id ?? index} value={interaction.id ?? ''}>
+                          {interaction.prompt || interaction.id || `Interaction ${index + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {selectedLayer.action?.type === 'reveal_layer' && (
+                  <div className="mt-3">
+                    <label className="mb-1 block text-sm font-medium text-slate-700">Layer cần hiện</label>
+                    <select
+                      value={selectedLayer.action?.target_layer_id ?? ''}
+                      disabled={readOnly}
+                      onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                        layer.action = { ...(layer.action ?? { type: 'reveal_layer' }), type: 'reveal_layer', target_layer_id: event.target.value };
+                      })}
+                      className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+                    >
+                      <option value="">Chọn layer</option>
+                      {layers
+                        .filter((item) => item.id !== selectedLayer.id)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.text || item.id}
+                          </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {selectedLayer.action?.type === 'play_audio' && (
+                  <div className="mt-3">
+                    <Input
+                      label="URL audio"
+                      value={selectedLayer.action?.audio_url ?? ''}
+                      disabled={readOnly}
+                      onChange={(event) => updateLayer(selectedLayer.id, (layer) => {
+                        layer.action = { ...(layer.action ?? { type: 'play_audio' }), type: 'play_audio', audio_url: event.target.value };
+                      })}
+                      placeholder="https://..."
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+            {!readOnly && (
+              <div className="md:col-span-2">
+                <Button type="button" variant="ghost" size="sm" className="text-red-600" onClick={() => removeLayer(selectedLayer.id)}>
+                  Xóa layer
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500">
+            Chọn một layer trên canvas để sửa text, kích thước, z-index hoặc target của button.
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  const renderBackgroundAudioTriggerField = (
+    scene: InteractiveScene,
+    onChange: (trigger: BackgroundAudioTrigger) => void,
+  ) => {
+    const currentTrigger = getBackgroundAudioTrigger(scene);
+    const options: Array<{ value: BackgroundAudioTrigger; label: string; description: string }> = [
+      {
+        value: 'on_enter',
+        label: 'Tự động khi mở nội dung',
+        description: 'Hệ thống thử phát ngay khi scene mở.',
+      },
+      ...(scene.type === 'slideshow'
+        ? [{
+          value: 'on_slide_change' as const,
+          label: 'Khi chuyển slide',
+          description: 'Mỗi lần đổi slide sẽ phát lại âm thanh nền.',
+        }]
+        : []),
+      {
+        value: 'manual',
+        label: 'Khi người dùng bấm',
+        description: 'Không tự phát. Người học phải bấm nút phát.',
+      },
+    ];
+
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+        <label className="mb-2 block text-sm font-medium text-slate-700">Thời điểm phát âm thanh nền</label>
+        <div className="grid gap-3">
+          {options.map((option) => (
+            <label key={`${scene.id}:${option.value}`} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+              <input
+                type="radio"
+                name={`background-audio-trigger-${scene.id}`}
+                checked={currentTrigger === option.value}
+                disabled={readOnly}
+                onChange={() => onChange(option.value)}
+              />
+              <span>
+                <span className="block font-medium text-slate-900">{option.label}</span>
+                <span className="mt-1 block text-xs text-slate-500">{option.description}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderUnifiedMediaEditor = (scene: InteractiveScene) => {
+    const mediaKind = getSceneMediaKind(scene);
+    const questionEnabled = isQuestionEnabled(scene);
+    const questionInteraction = getQuestionInteraction(scene);
+    const imageUrl = getStringFromContent(scene, 'image_url');
+    const videoUrl = getStringFromContent(scene, 'video_url');
+    const posterUrl = getStringFromContent(scene, 'poster_url');
+    const backgroundAudioUrl = getStringFromContent(scene, 'background_audio_url');
+
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <label className="mb-2 block text-sm font-medium text-slate-700">Loại nội dung chính</label>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name={`media-kind-${scene.id}`}
+                  checked={mediaKind === 'image'}
+                  disabled={readOnly}
+                  onChange={() => updateSelectedUnifiedMediaScene((currentScene) => {
+                    ensureContentRecord(currentScene).media_kind = 'image';
+                  })}
+                />
+                Dùng ảnh
+              </label>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name={`media-kind-${scene.id}`}
+                  checked={mediaKind === 'video'}
+                  disabled={readOnly}
+                  onChange={() => updateSelectedUnifiedMediaScene((currentScene) => {
+                    ensureContentRecord(currentScene).media_kind = 'video';
+                  })}
+                />
+                Dùng video
+              </label>
+            </div>
+            <p className="mt-3 text-sm text-slate-500">
+              Canvas phía trên vẫn dùng để chèn text, ghi chú hoặc nút trực tiếp lên nội dung.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {renderMediaField({
+              fieldKey: `${scene.id}:background-audio`,
+              label: 'Âm thanh nền',
+              url: backgroundAudioUrl,
+              accept: 'audio/*',
+              subDir: 'interactive-books',
+              kind: 'audio',
+              disabled: readOnly,
+              onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
+                ensureContentRecord(currentScene).background_audio_url = url;
+              }),
+            })}
+            {renderBackgroundAudioTriggerField(scene, (trigger) => updateSelectedUnifiedMediaScene((currentScene) => {
+              ensureContentRecord(currentScene).background_audio_trigger = trigger;
+            }))}
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {mediaKind === 'video'
+            ? renderMediaField({
+              fieldKey: `${scene.id}:video`,
+              label: 'Video chính',
+              url: videoUrl,
+              accept: 'video/*',
+              subDir: 'interactive-books',
+              kind: 'video',
+              disabled: readOnly,
+              onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
+                const content = ensureContentRecord(currentScene);
+                content.media_kind = 'video';
+                content.video_url = url;
+              }),
+            })
+            : renderMediaField({
+              fieldKey: `${scene.id}:image`,
+              label: 'Ảnh chính',
+              url: imageUrl,
+              accept: 'image/*',
+              subDir: 'interactive-books',
+              kind: 'image',
+              disabled: readOnly,
+              onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
+                const content = ensureContentRecord(currentScene);
+                content.media_kind = 'image';
+                content.image_url = url;
+              }),
+            })}
+
+          {mediaKind === 'video'
+            ? (
+              <div className="space-y-4">
+                {renderMediaField({
+                  fieldKey: `${scene.id}:poster`,
+                  label: 'Ảnh poster',
+                  url: posterUrl,
+                  accept: 'image/*',
+                  subDir: 'interactive-books',
+                  kind: 'image',
+                  disabled: readOnly,
+                  onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
+                    ensureContentRecord(currentScene).poster_url = url;
+                  }),
+                })}
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={getBooleanFromContent(scene, 'autoplay')}
+                    disabled={readOnly}
+                    onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
+                      ensureContentRecord(currentScene).autoplay = event.target.checked;
+                    })}
+                  />
+                  Tự phát video khi vào cảnh
+                </label>
+              </div>
+            )
+            : (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                Ảnh chính sẽ hiển thị toàn màn hình. Giáo viên có thể chèn text hoặc ghi chú bằng canvas ở phía trên.
+              </div>
+            )}
+        </div>
+
+        <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={questionEnabled}
+            disabled={readOnly}
+            onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
+              if (event.target.checked) {
+                ensureQuestionInteraction(currentScene);
+              } else {
+                disableQuestionInteraction(currentScene);
+              }
+            })}
+          />
+          Đặt câu hỏi cho học sinh sau khi nghe xong âm thanh
+        </label>
+
+        {questionEnabled && (
+          <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Câu hỏi sau khi nghe xong âm thanh</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Phần này chỉ xuất hiện khi giáo viên bật tùy chọn câu hỏi. Nếu cảnh có audio hoặc video, câu hỏi sẽ mở sau khi media kết thúc.
+              </p>
+            </div>
+            <Input
+              label="Câu hỏi trắc nghiệm"
+              value={questionInteraction?.prompt ?? ''}
+              disabled={readOnly}
+              onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
+                const interaction = ensureQuestionInteraction(currentScene);
+                interaction.prompt = event.target.value;
+              })}
+            />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                label="Thông điệp mặc định khi trả lời sai"
+                value={typeof questionInteraction?.data?.wrong_feedback_message === 'string' ? questionInteraction.data.wrong_feedback_message : ''}
+                disabled={readOnly}
+                onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
+                  const interaction = ensureQuestionInteraction(currentScene);
+                  interaction.data = { ...(interaction.data ?? {}), wrong_feedback_message: event.target.value };
+                })}
+                placeholder="Ví dụ: Câu trả lời này chưa đúng."
+              />
+              <Input
+                label="Thông điệp mặc định khi trả lời đúng"
+                value={typeof questionInteraction?.data?.correct_feedback_message === 'string' ? questionInteraction.data.correct_feedback_message : ''}
+                disabled={readOnly}
+                onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
+                  const interaction = ensureQuestionInteraction(currentScene);
+                  interaction.data = { ...(interaction.data ?? {}), correct_feedback_message: event.target.value };
+                })}
+                placeholder="Ví dụ: Chính xác, em tiếp tục nhé."
+              />
+            </div>
+            {renderChoiceEditor(scene, questionInteraction, 'Cảnh này chưa có lựa chọn cho câu hỏi.')}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderConnectDotsEditor = (scene: InteractiveScene, content: Record<string, unknown>) => {
+    const points = getConnectDotsPoints(scene);
+    const backgroundUrl = typeof content.background_image_url === 'string' && content.background_image_url
+      ? content.background_image_url
+      : getStringFromContent(scene, 'image_url');
+
+    const updatePoint = (
+      pointId: string,
+      updater: (point: { id: string; label?: string; x: number; y: number; order: number }) => void,
+    ) => {
+      updateSelectedScene((currentScene) => {
+        const nextPoints = getConnectDotsPoints(currentScene).map((point) => ({ ...point }));
+        const targetPoint = nextPoints.find((point) => point.id === pointId);
+        if (!targetPoint) return;
+        updater(targetPoint);
+        ensureContentRecord(currentScene).points = nextPoints.sort((left, right) => left.order - right.order);
+      });
+    };
+
+    const addPointAt = (x: number, y: number) => {
+      if (readOnly) return;
+      updateSelectedScene((currentScene) => {
+        const nextPoints = getConnectDotsPoints(currentScene);
+        ensureContentRecord(currentScene).points = [
+          ...nextPoints,
+          {
+            id: `${currentScene.id}-point-${Date.now()}`,
+            label: String(nextPoints.length + 1),
+            x,
+            y,
+            order: nextPoints.length + 1,
+          },
+        ];
+      });
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          {renderMediaField({
+            fieldKey: `${scene.id}:connect-dots-background`,
+            label: 'Ảnh nền nối điểm',
+            url: backgroundUrl,
+            accept: 'image/*',
+            subDir: 'interactive-books',
+            kind: 'image',
+            disabled: readOnly,
+            onChange: (url) => updateSelectedScene((currentScene) => {
+              const currentContent = ensureContentRecord(currentScene);
+              currentContent.background_image_url = url;
+              currentContent.image_url = url;
+            }),
+          })}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Scene sau khi hoàn thành</label>
+            <select
+              value={typeof content.success_target_scene_id === 'string' ? content.success_target_scene_id : ''}
+              disabled={readOnly}
+              onChange={(event) => updateSelectedScene((currentScene) => {
+                ensureContentRecord(currentScene).success_target_scene_id = event.target.value;
+              })}
+              className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+            >
+              <option value="">Dừng ở scene này / nút tiếp theo mặc định</option>
+              {previewManifest?.scenes
+                .filter((item) => item.id !== scene.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title || item.id}
+                  </option>
+              ))}
+            </select>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <Input
+                label="Điểm hoàn thành"
+                type="number"
+                value={String(content.complete_score ?? 1)}
+                disabled={readOnly}
+                onChange={(event) => updateSelectedScene((currentScene) => {
+                  ensureContentRecord(currentScene).complete_score = Number(event.target.value) || 0;
+                })}
+              />
+              <Input
+                label="Phạt khi sai"
+                type="number"
+                value={String(content.wrong_penalty ?? 0)}
+                disabled={readOnly}
+                onChange={(event) => updateSelectedScene((currentScene) => {
+                  ensureContentRecord(currentScene).wrong_penalty = Number(event.target.value) || 0;
+                })}
+              />
+            </div>
+            <div className="mt-3">
+              <label className="mb-1 block text-sm font-medium text-slate-700">Hành vi khi bấm sai thứ tự</label>
+              <select
+                value={typeof content.wrong_behavior === 'string' ? content.wrong_behavior : 'stay_current_point'}
+                disabled={readOnly}
+                onChange={(event) => updateSelectedScene((currentScene) => {
+                  ensureContentRecord(currentScene).wrong_behavior = event.target.value;
+                })}
+                className="w-full rounded-2xl border border-border px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
+              >
+                <option value="stay_current_point">Giữ nguyên tiến độ hiện tại</option>
+                <option value="restart_current_sequence">Quay lại chuỗi hiện tại</option>
+                <option value="restart_from_beginning">Làm lại từ đầu</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Canvas nối điểm</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Click vào ảnh để thêm điểm. Học sinh phải chọn đúng theo thứ tự order.
+              </p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+              {points.length} điểm
+            </span>
+          </div>
+
+          <div
+            className="relative mt-4 aspect-video overflow-hidden rounded-2xl border border-slate-200 bg-white"
+            onClick={(event) => {
+              if (readOnly) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = ((event.clientX - rect.left) / Math.max(1, rect.width)) * 100;
+              const y = ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100;
+              addPointAt(Math.round(x), Math.round(y));
+            }}
+          >
+            {backgroundUrl ? (
+              <img src={backgroundUrl} alt="Connect dots background" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-sm text-slate-400">
+                Chưa có ảnh nền. Tải ảnh trước khi đặt điểm.
+              </div>
+            )}
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <polyline
+                points={points.map((point) => `${point.x},${point.y}`).join(' ')}
+                fill="none"
+                stroke="rgb(14 165 233)"
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+            {points.map((point) => (
+              <div
+                key={point.id}
+                className="absolute flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-sky-500 text-sm font-bold text-white shadow"
+                style={{ left: `${point.x}%`, top: `${point.y}%` }}
+              >
+                {point.label || point.order}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {points.map((point) => (
+              <div key={point.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 md:grid-cols-[1fr_90px_90px_90px_auto]">
+                <Input
+                  label="Label"
+                  value={point.label ?? ''}
+                  disabled={readOnly}
+                  onChange={(event) => updatePoint(point.id, (draftPoint) => { draftPoint.label = event.target.value; })}
+                />
+                <Input
+                  label="X"
+                  type="number"
+                  value={String(point.x)}
+                  disabled={readOnly}
+                  onChange={(event) => updatePoint(point.id, (draftPoint) => { draftPoint.x = Number(event.target.value) || 0; })}
+                />
+                <Input
+                  label="Y"
+                  type="number"
+                  value={String(point.y)}
+                  disabled={readOnly}
+                  onChange={(event) => updatePoint(point.id, (draftPoint) => { draftPoint.y = Number(event.target.value) || 0; })}
+                />
+                <Input
+                  label="Order"
+                  type="number"
+                  value={String(point.order)}
+                  disabled={readOnly}
+                  onChange={(event) => updatePoint(point.id, (draftPoint) => { draftPoint.order = Number(event.target.value) || 1; })}
+                />
+                {!readOnly && (
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600"
+                      onClick={() => updateSelectedScene((currentScene) => {
+                        ensureContentRecord(currentScene).points = getConnectDotsPoints(currentScene).filter((item) => item.id !== point.id);
+                      })}
+                    >
+                      Xóa
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderSceneEditor = () => {
     if (!selectedScene || !previewManifest) {
       return (
@@ -1386,10 +2855,7 @@ export default function InteractiveBookEditor() {
     const implicitNextSceneId = getImplicitNextSceneId(previewManifest, selectedScene.id);
     const resolvedNextSceneId = nextSceneId || implicitNextSceneId;
     const isTimeline = selectedScene.type === 'timeline';
-    const timecodeInteraction = getFirstMatchingInteraction(selectedScene, (interaction) => interaction.trigger === 'timecode');
-    const hotspotInteraction = getFirstMatchingInteraction(selectedScene, (interaction) => interaction.id === 'hotspot-1' || interaction.type === 'hotspot');
-    const hotspotQuizInteraction = getFirstMatchingInteraction(selectedScene, (interaction) => interaction.id === 'hotspot-quiz' || interaction.trigger === 'on_complete');
-    const branchingInteraction = getFirstMatchingInteraction(selectedScene, (interaction) => interaction.trigger === 'on_enter' || interaction.trigger === 'on_choice');
+    const isUnifiedMedia = isUnifiedMediaScene(selectedScene);
     const slideshowImages = Array.from(new Set([
       ...getStringListFromContent(selectedScene, 'images'),
       ...(
@@ -1495,6 +2961,10 @@ export default function InteractiveBookEditor() {
             />
           </div>
 
+          {!isTimeline && renderCanvasLayerEditor(selectedScene)}
+
+          {isUnifiedMedia && renderUnifiedMediaEditor(selectedScene)}
+
           {selectedScene.type === 'timeline' && (
             <>
               <div className="grid gap-4 md:grid-cols-2">
@@ -1560,344 +3030,27 @@ export default function InteractiveBookEditor() {
             </>
           )}
 
-          {selectedScene.type === 'interactive_video' && (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:video`,
-                  label: 'Video chính',
-                  url: getStringFromContent(selectedScene, 'video_url'),
-                  accept: 'video/*',
-                  subDir: 'interactive-books',
-                  kind: 'video',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).video_url = url;
-                  }),
-                })}
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:poster`,
-                  label: 'Ảnh poster',
-                  url: getStringFromContent(selectedScene, 'poster_url'),
-                  accept: 'image/*',
-                  subDir: 'interactive-books',
-                  kind: 'image',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).poster_url = url;
-                  }),
-                })}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:background-audio`,
-                  label: 'Âm thanh nền',
-                  url: getStringFromContent(selectedScene, 'background_audio_url'),
-                  accept: 'audio/*',
-                  subDir: 'interactive-books',
-                  kind: 'audio',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).background_audio_url = url;
-                  }),
-                })}
-                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={getBooleanFromContent(selectedScene, 'autoplay')}
-                    disabled={readOnly}
-                    onChange={(event) => updateSelectedScene((scene) => {
-                      ensureContentRecord(scene).autoplay = event.target.checked;
-                    })}
-                  />
-                  Tự phát video khi vào cảnh
-                </label>
-              </div>
-
-              {timecodeInteraction && (
-                <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">Lựa chọn xuất hiện giữa video</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Dùng cho cảnh kiểu “video dừng tại thời điểm X để học sinh chọn hướng xử lý”.
-                    </p>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <Input
-                      label="Thời điểm dừng video (giây)"
-                      type="number"
-                      value={String(timecodeInteraction.timecode ?? 0)}
-                      disabled={readOnly}
-                      onChange={(event) => updateSelectedScene((scene) => {
-                        const interactions = ensureInteractions(scene);
-                        const interaction = interactions.find((item) => item.id === timecodeInteraction.id);
-                        if (!interaction) return;
-                        interaction.timecode = Number(event.target.value) || 0;
-                      })}
-                    />
-                    <Input
-                      label="Câu hỏi trên màn hình"
-                      value={timecodeInteraction.prompt ?? ''}
-                      disabled={readOnly}
-                      onChange={(event) => updateSelectedScene((scene) => {
-                        const interactions = ensureInteractions(scene);
-                        const interaction = interactions.find((item) => item.id === timecodeInteraction.id);
-                        if (!interaction) return;
-                        interaction.prompt = event.target.value;
-                      })}
-                    />
-                  </div>
-                  {renderChoiceEditor(selectedScene, timecodeInteraction, 'Cảnh video này chưa có lựa chọn giữa video.')}
-                </div>
-              )}
-            </>
-          )}
-
-          {selectedScene.type === 'hotspot_audio' && (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:hotspot-image`,
-                  label: 'Ảnh nền của cảnh',
-                  url: getStringFromContent(selectedScene, 'image_url'),
-                  accept: 'image/*',
-                  subDir: 'interactive-books',
-                  kind: 'image',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).image_url = url;
-                  }),
-                })}
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:hotspot-background-audio`,
-                  label: 'Âm thanh nền',
-                  url: getStringFromContent(selectedScene, 'background_audio_url'),
-                  accept: 'audio/*',
-                  subDir: 'interactive-books',
-                  kind: 'audio',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).background_audio_url = url;
-                  }),
-                })}
-              </div>
-
-              <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Điểm chạm và lời thoại</p>
-                  <p className="mt-1 text-sm text-slate-500">Học sinh bấm vào điểm chạm trước, sau đó hệ thống mới mở câu hỏi.</p>
-                </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Input
-                    label="Tọa độ ngang (%)"
-                    type="number"
-                    value={String((hotspotInteraction?.data?.x as number | undefined) ?? 50)}
-                    disabled={readOnly}
-                    onChange={(event) => updateSelectedScene((scene) => {
-                      const interactions = ensureInteractions(scene);
-                      const interaction = interactions.find((item) => item.id === hotspotInteraction?.id);
-                      if (!interaction) return;
-                      interaction.data = { ...(interaction.data ?? {}), x: Number(event.target.value) || 0 };
-                    })}
-                  />
-                  <Input
-                    label="Tọa độ dọc (%)"
-                    type="number"
-                    value={String((hotspotInteraction?.data?.y as number | undefined) ?? 50)}
-                    disabled={readOnly}
-                    onChange={(event) => updateSelectedScene((scene) => {
-                      const interactions = ensureInteractions(scene);
-                      const interaction = interactions.find((item) => item.id === hotspotInteraction?.id);
-                      if (!interaction) return;
-                      interaction.data = { ...(interaction.data ?? {}), y: Number(event.target.value) || 0 };
-                    })}
-                  />
-                  <Input
-                    label="Lời gợi ý ngắn"
-                    value={typeof hotspotInteraction?.data?.subtitle === 'string' ? hotspotInteraction.data.subtitle : ''}
-                    disabled={readOnly}
-                    onChange={(event) => updateSelectedScene((scene) => {
-                      const interactions = ensureInteractions(scene);
-                      const interaction = interactions.find((item) => item.id === hotspotInteraction?.id);
-                      if (!interaction) return;
-                      interaction.data = { ...(interaction.data ?? {}), subtitle: event.target.value };
-                    })}
-                  />
-                </div>
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:hotspot-dialogue-audio`,
-                  label: 'Âm thanh lời thoại',
-                  url: typeof hotspotInteraction?.data?.audio_url === 'string' ? hotspotInteraction.data.audio_url : '',
-                  accept: 'audio/*',
-                  subDir: 'interactive-books',
-                  kind: 'audio',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    const interactions = ensureInteractions(scene);
-                    const interaction = interactions.find((item) => item.id === hotspotInteraction?.id);
-                    if (!interaction) return;
-                    interaction.data = { ...(interaction.data ?? {}), audio_url: url };
-                  }),
-                })}
-              </div>
-
-              <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Câu hỏi sau khi nghe xong âm thanh</p>
-                  <p className="mt-1 text-sm text-slate-500">Phần này được mở tự động sau khi hotspot audio kết thúc.</p>
-                </div>
-                <Input
-                  label="Câu hỏi trắc nghiệm"
-                  value={hotspotQuizInteraction?.prompt ?? ''}
-                  disabled={readOnly}
-                  onChange={(event) => updateSelectedScene((scene) => {
-                    const interactions = ensureInteractions(scene);
-                    const interaction = interactions.find((item) => item.id === hotspotQuizInteraction?.id);
-                    if (!interaction) return;
-                    interaction.prompt = event.target.value;
-                  })}
-                />
-                {renderChoiceEditor(selectedScene, hotspotQuizInteraction, 'Cảnh hotspot này chưa có câu hỏi nối tiếp.')}
-              </div>
-            </>
-          )}
-
-          {(selectedScene.type === 'branching' || selectedScene.type === 'quiz') && (
-            <>
-              <div className="grid gap-4 md:grid-cols-2">
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:image`,
-                  label: 'Ảnh minh họa',
-                  url: getStringFromContent(selectedScene, 'image_url'),
-                  accept: 'image/*',
-                  subDir: 'interactive-books',
-                  kind: 'image',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).image_url = url;
-                  }),
-                })}
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:video`,
-                  label: 'Video của cảnh',
-                  url: getStringFromContent(selectedScene, 'video_url'),
-                  accept: 'video/*',
-                  subDir: 'interactive-books',
-                  kind: 'video',
-                  description: 'Nếu có video, trình phát sẽ ưu tiên dùng video thay cho ảnh tĩnh.',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).video_url = url;
-                  }),
-                })}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:poster`,
-                  label: 'Ảnh poster cho video',
-                  url: getStringFromContent(selectedScene, 'poster_url'),
-                  accept: 'image/*',
-                  subDir: 'interactive-books',
-                  kind: 'image',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).poster_url = url;
-                  }),
-                })}
-                {renderMediaField({
-                  fieldKey: `${selectedScene.id}:background-audio`,
-                  label: 'Âm thanh nền hoặc lời dẫn',
-                  url: getStringFromContent(selectedScene, 'background_audio_url'),
-                  accept: 'audio/*',
-                  subDir: 'interactive-books',
-                  kind: 'audio',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).background_audio_url = url;
-                  }),
-                })}
-              </div>
-
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={getBooleanFromContent(selectedScene, 'wait_for_media_end')}
-                  disabled={readOnly}
-                  onChange={(event) => updateSelectedScene((scene) => {
-                    ensureContentRecord(scene).wait_for_media_end = event.target.checked;
-                  })}
-                />
-                Chỉ hiện câu hỏi sau khi video hoặc âm thanh của cảnh kết thúc
-              </label>
-
-              <p className="text-sm text-slate-500">
-                Nếu không bật tùy chọn này, câu hỏi sẽ hiện ngay khi vào cảnh. Nếu bật, người học xem xong media rồi mới thấy câu hỏi.
-              </p>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="Thông điệp mặc định khi trả lời sai"
-                  value={typeof branchingInteraction?.data?.wrong_feedback_message === 'string' ? branchingInteraction.data.wrong_feedback_message : ''}
-                  disabled={readOnly}
-                  onChange={(event) => updateSelectedScene((scene) => {
-                    const interactions = ensureInteractions(scene);
-                    const interaction = interactions.find((item) => item.id === branchingInteraction?.id);
-                    if (!interaction) return;
-                    interaction.data = { ...(interaction.data ?? {}), wrong_feedback_message: event.target.value };
-                  })}
-                  placeholder="Ví dụ: Câu trả lời này chưa đúng."
-                />
-                <Input
-                  label="Thông điệp mặc định khi trả lời đúng"
-                  value={typeof branchingInteraction?.data?.correct_feedback_message === 'string' ? branchingInteraction.data.correct_feedback_message : ''}
-                  disabled={readOnly}
-                  onChange={(event) => updateSelectedScene((scene) => {
-                    const interactions = ensureInteractions(scene);
-                    const interaction = interactions.find((item) => item.id === branchingInteraction?.id);
-                    if (!interaction) return;
-                    interaction.data = { ...(interaction.data ?? {}), correct_feedback_message: event.target.value };
-                  })}
-                  placeholder="Ví dụ: Chính xác, em tiếp tục nhé."
-                />
-              </div>
-
-              <div className="space-y-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-                <Input
-                  label="Câu hỏi hoặc lời dẫn"
-                  value={branchingInteraction?.prompt ?? ''}
-                  disabled={readOnly}
-                  onChange={(event) => updateSelectedScene((scene) => {
-                    const interactions = ensureInteractions(scene);
-                    const interaction = interactions.find((item) => item.id === branchingInteraction?.id);
-                    if (!interaction) return;
-                    interaction.prompt = event.target.value;
-                  })}
-                />
-                {renderChoiceEditor(
-                  selectedScene,
-                  branchingInteraction,
-                  'Cảnh này chưa có lựa chọn. Giáo viên có thể bổ sung trong phần JSON nâng cao nếu cần cấu trúc phức tạp hơn.',
-                )}
-              </div>
-            </>
-          )}
+          {selectedScene.type === 'connect_the_dots' && renderConnectDotsEditor(selectedScene, content)}
 
           {selectedScene.type === 'slideshow' && (
             <div className="space-y-4">
-              {renderMediaField({
-                fieldKey: `${selectedScene.id}:slideshow-audio`,
-                label: 'Âm thanh nền',
-                url: getStringFromContent(selectedScene, 'background_audio_url'),
-                accept: 'audio/*',
-                subDir: 'interactive-books',
-                kind: 'audio',
-                disabled: readOnly,
-                onChange: (url) => updateSelectedScene((scene) => {
-                  ensureContentRecord(scene).background_audio_url = url;
-                }),
-              })}
+              <div className="grid gap-4 md:grid-cols-2">
+                {renderMediaField({
+                  fieldKey: `${selectedScene.id}:slideshow-audio`,
+                  label: 'Âm thanh nền',
+                  url: getStringFromContent(selectedScene, 'background_audio_url'),
+                  accept: 'audio/*',
+                  subDir: 'interactive-books',
+                  kind: 'audio',
+                  disabled: readOnly,
+                  onChange: (url) => updateSelectedScene((scene) => {
+                    ensureContentRecord(scene).background_audio_url = url;
+                  }),
+                })}
+                {renderBackgroundAudioTriggerField(selectedScene, (trigger) => updateSelectedScene((scene) => {
+                  ensureContentRecord(scene).background_audio_trigger = trigger;
+                }))}
+              </div>
 
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -2051,10 +3204,10 @@ export default function InteractiveBookEditor() {
               </Button>
               {!readOnly && (
                 <>
-                  <Button type="button" variant="secondary" onClick={handleSaveDraft} isLoading={saving}>
+                  <Button type="button" variant="secondary" onClick={handleSaveDraft} isLoading={saving} disabled={hasBlockingFlowErrors}>
                     <Save className="mr-1.5 h-4 w-4" /> Lưu bản nháp
                   </Button>
-                  <Button type="button" onClick={handlePublish} isLoading={publishing}>
+                  <Button type="button" onClick={handlePublish} isLoading={publishing} disabled={hasBlockingFlowErrors}>
                     <Rocket className="mr-1.5 h-4 w-4" /> Phát hành
                   </Button>
                 </>
@@ -2293,6 +3446,9 @@ export default function InteractiveBookEditor() {
                   </div>
                 </div>
 
+                {renderFlowGraph()}
+                {renderReportPanel()}
+
                 <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex items-start gap-3">
                     <Info className="mt-0.5 h-5 w-5 shrink-0 text-slate-400" />
@@ -2428,8 +3584,8 @@ export default function InteractiveBookEditor() {
                       try {
                         const url = await uploadFile(file, 'thumbnails');
                         setForm((current) => ({ ...current, thumbnail_url: url }));
-                      } catch {
-                        alert('Không thể tải ảnh bìa.');
+                      } catch (error: any) {
+                        alert(getUploadErrorMessage(error, 'Không thể tải ảnh bìa.'));
                       } finally {
                         setUploadingThumbnail(false);
                         event.target.value = '';
@@ -2459,8 +3615,8 @@ export default function InteractiveBookEditor() {
                           },
                           ...current.filter((item) => item.url !== url),
                         ]);
-                      } catch {
-                        alert('Không thể tải tư liệu.');
+                      } catch (error: any) {
+                        alert(getUploadErrorMessage(error, 'Không thể tải tư liệu.'));
                       } finally {
                         setUploadingAsset(false);
                         event.target.value = '';

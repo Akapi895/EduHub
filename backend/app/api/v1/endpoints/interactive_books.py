@@ -80,6 +80,20 @@ def get_interactive_book(
     )
 
 
+@router.get("/interactive-books/{material_id}/report")
+def get_interactive_book_report(
+    material_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    payload = interactive_book_service.get_teacher_report(
+        db,
+        material_id=material_id,
+        teacher=teacher,
+    )
+    return ok(data=payload)
+
+
 @router.post("/interactive-books/{material_id}/attempts/start")
 def start_interactive_book_attempt(
     material_id: str,

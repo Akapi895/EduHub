@@ -10,6 +10,8 @@ ALLOWED_MIME_TYPES = {
     "image/jpeg", "image/png", "image/gif", "image/webp",
     "application/pdf",
     "video/mp4", "video/webm",
+    "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave",
+    "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/aac", "audio/flac", "audio/x-flac",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -55,7 +57,7 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
 
     # Determine resource_type based on content type
     resource_type = "auto"
-    if file.content_type and file.content_type.startswith("video/"):
+    if file.content_type and (file.content_type.startswith("video/") or file.content_type.startswith("audio/")):
         resource_type = "video"
 
     try:
