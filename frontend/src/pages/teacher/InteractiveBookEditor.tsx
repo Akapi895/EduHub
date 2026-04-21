@@ -772,10 +772,10 @@ function syncTimelineCards(manifest: InteractiveBookManifest): InteractiveBookMa
     const existing = cardByTarget.get(scene.id) ?? {};
     return {
       id: typeof existing.id === 'string' ? existing.id : `card-${scene.id}`,
-      title: typeof existing.title === 'string' && existing.title.trim() ? existing.title : (scene.title || `Sự kiện ${index + 1}`),
+      title: typeof existing.title === 'string' ? existing.title : '',
       description: typeof existing.description === 'string' && existing.description.trim()
         ? existing.description
-        : summarizeScene(scene),
+        : '',
       target_scene_id: scene.id,
       image_url: typeof existing.image_url === 'string' && existing.image_url.trim()
         ? existing.image_url
@@ -813,9 +813,6 @@ function collectManifestWarnings(manifest: InteractiveBookManifest): string[] {
   manifest.scenes.forEach((scene, index) => {
     const sceneLabel = scene.title || `Cảnh ${index + 1}`;
     const nextSceneId = getSceneNext(scene);
-    if (!scene.title?.trim()) {
-      warnings.push(`${sceneLabel}: chưa có tên sự kiện.`);
-    }
     if (nextSceneId && !sceneIds.includes(nextSceneId)) {
       warnings.push(`${sceneLabel}: cảnh tiếp theo "${nextSceneId}" không tồn tại.`);
     }
