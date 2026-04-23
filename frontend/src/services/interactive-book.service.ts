@@ -8,7 +8,6 @@ export const interactiveBookService = {
     thumbnail_url?: string;
     subject?: string;
     grade?: string;
-    is_system?: boolean;
     folder_id?: string;
     estimated_duration?: number;
     manifest: InteractiveBookManifest;
@@ -22,7 +21,6 @@ export const interactiveBookService = {
       thumbnail_url?: string;
       subject?: string;
       grade?: string;
-      is_system?: boolean;
       folder_id?: string;
       estimated_duration?: number;
       manifest?: InteractiveBookManifest;

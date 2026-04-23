@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Send, Loader2 } from 'lucide-react';
 import Button from '@/components/common/Button';
 import { examService } from '@/services/exam.service';
+import { showErrorToast } from '@/store/toast.store';
 import type { Exam, Question, Answer, Submission, SubmissionAnswer } from '@/types';
 
 import ExamStartScreen from './exam/ExamStartScreen';
@@ -139,7 +140,7 @@ export default function StudentExam() {
         // Attempts remaining – show history with start button
         setPhase('history');
       } catch (err: any) {
-        alert(err.response?.data?.message || 'Không thể tải bài thi');
+        showErrorToast(err.response?.data?.message || 'Không thể tải bài thi');
         navigate('/student/classes');
       } finally {
         setLoading(false);
@@ -197,7 +198,7 @@ export default function StudentExam() {
       const mySubs = await examService.getMySubmissions(id);
       setPastSubmissions(mySubs.data.data.submissions || []);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Nộp bài thất bại');
+      showErrorToast(err.response?.data?.message || 'Nộp bài thất bại');
     } finally {
       setSubmitting(false);
     }
@@ -234,7 +235,7 @@ export default function StudentExam() {
       setDeadline(computeDeadline(exam, submission.started_at));
       setPhase('taking');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Không thể bắt đầu lượt làm mới');
+      showErrorToast(err.response?.data?.message || 'Không thể bắt đầu lượt làm mới');
     }
   };
 
@@ -251,7 +252,7 @@ export default function StudentExam() {
       setShowCorrect(canShowAnswers());
       setPhase('review');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Không thể xem bài làm');
+      showErrorToast(err.response?.data?.message || 'Không thể xem bài làm');
     }
   };
 

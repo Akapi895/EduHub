@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
+import { showErrorToast } from '@/store/toast.store';
 
 export default function CreateExam() {
   const { classId } = useParams();
@@ -31,7 +32,7 @@ export default function CreateExam() {
       // Navigate to exam detail to add questions
       navigate(`/teacher/exams/${newExam.id}`);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Tạo bài kiểm tra thất bại');
+      showErrorToast(err.response?.data?.message || 'Tạo bài kiểm tra thất bại');
     } finally {
       setCreating(false);
     }

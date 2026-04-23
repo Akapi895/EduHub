@@ -5,6 +5,7 @@ import Button from '@/components/common/Button';
 import UploadMaterialModal from '@/components/library/UploadMaterialModal';
 import { libraryService } from '@/services/library.service';
 import { classService } from '@/services/class.service';
+import { showErrorToast } from '@/store/toast.store';
 import type { Material } from '@/types';
 
 type TabKey = 'system' | 'personal' | 'upload';
@@ -70,7 +71,7 @@ export default function AddMaterialToChapterModal({
       onAdded();
       onClose();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Thêm tài liệu thất bại');
+      showErrorToast(err.response?.data?.message || 'Thêm tài liệu thất bại');
     } finally {
       setAdding(null);
     }

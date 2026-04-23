@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
+import ToastViewport from '@/components/common/ToastViewport';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 
@@ -17,6 +18,7 @@ export default function DashboardLayout() {
         <Navbar
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
+        <ToastViewport />
         <main className="p-6">
           <Outlet />
         </main>

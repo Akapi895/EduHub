@@ -63,3 +63,10 @@ class MaterialOut(BaseModel):
     estimated_duration: int | None = None
 
     model_config = {"from_attributes": True}
+
+
+class MaterialFileAccessOut(BaseModel):
+    preview_kind: str
+    preview_url: str | None = None
+    download_url: str | None = None
+    thumbnail_url: str | None = None

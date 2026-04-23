@@ -1,8 +1,14 @@
-"""File upload utilities — Cloudinary backend."""
+"""File upload utilities for Cloudinary-backed assets."""
+
+from dataclasses import dataclass
+from pathlib import PurePosixPath
+import re
+from urllib.parse import urlsplit
 
 import cloudinary
 import cloudinary.uploader
-from fastapi import UploadFile, HTTPException
+from cloudinary.utils import cloudinary_url, private_download_url
+from fastapi import HTTPException, UploadFile
 
 from app.core.config import settings
 
@@ -17,8 +23,14 @@ ALLOWED_MIME_TYPES = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 MAX_FILE_SIZE_MB = 50
+CLOUDINARY_HOST = "res.cloudinary.com"
 
-# Configure Cloudinary once at import time
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
+VIDEO_EXTENSIONS = {"mp4", "webm"}
+AUDIO_EXTENSIONS = {"mp3", "wav", "ogg", "m4a", "aac", "flac"}
+SIGNED_DOWNLOAD_EXTENSIONS = {"pdf", "docx", "pptx", "xlsx"}
+
+
 cloudinary.config(
     cloud_name=settings.cloudinary_cloud_name,
     api_key=settings.cloudinary_api_key,
@@ -27,19 +39,166 @@ cloudinary.config(
 )
 
 
-async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
-    """Upload a file to Cloudinary and return the public URL.
+@dataclass(frozen=True)
+class UploadedAssetInfo:
+    url: str
+    resource_type: str
+    content_type: str | None
+    file_extension: str | None
+    thumbnail_url: str | None
 
-    Args:
-        file:    The FastAPI UploadFile object.
-        sub_dir: Cloudinary folder (e.g. "materials", "avatars").
 
-    Returns:
-        The Cloudinary secure URL of the uploaded file.
+@dataclass(frozen=True)
+class ParsedCloudinaryAsset:
+    resource_type: str
+    version: int | None
+    public_id: str
+    download_public_id: str
+    format: str | None
 
-    Raises:
-        HTTPException 400 if the file type is not allowed or file is too large.
-    """
+
+def get_file_extension(file_url: str | None) -> str | None:
+    if not file_url:
+        return None
+    path = urlsplit(file_url).path
+    suffix = PurePosixPath(path).suffix.lower().lstrip(".")
+    return suffix or None
+
+
+def infer_file_preview_kind(file_url: str | None, *, material_type: str | None = None) -> str:
+    extension = get_file_extension(file_url)
+    if material_type == "video" or extension in VIDEO_EXTENSIONS:
+        return "video"
+    if extension in IMAGE_EXTENSIONS:
+        return "image"
+    if extension in AUDIO_EXTENSIONS:
+        return "audio"
+    if extension == "pdf":
+        return "pdf"
+    return "none"
+
+
+def _requires_signed_delivery(file_url: str | None) -> bool:
+    return get_file_extension(file_url) in SIGNED_DOWNLOAD_EXTENSIONS
+
+
+def _infer_resource_type(file: UploadFile) -> str:
+    content_type = (file.content_type or "").lower()
+    extension = get_file_extension(file.filename or "")
+    if content_type.startswith("video/") or content_type.startswith("audio/"):
+        return "video"
+    if content_type == "application/pdf" or extension == "pdf":
+        # Keep PDFs as image assets so Cloudinary can render page thumbnails.
+        return "image"
+    if content_type.startswith("image/") or extension in IMAGE_EXTENSIONS:
+        return "image"
+    return "raw"
+
+
+def parse_cloudinary_asset_url(file_url: str | None) -> ParsedCloudinaryAsset | None:
+    if not file_url:
+        return None
+
+    parsed = urlsplit(file_url)
+    if parsed.netloc != CLOUDINARY_HOST:
+        return None
+
+    segments = [segment for segment in parsed.path.split("/") if segment]
+    if len(segments) < 5 or "upload" not in segments:
+        return None
+
+    resource_type = segments[1]
+    upload_index = segments.index("upload")
+    version_index = next(
+        (index for index in range(upload_index + 1, len(segments)) if re.fullmatch(r"v\d+", segments[index])),
+        None,
+    )
+    if version_index is None or version_index >= len(segments) - 1:
+        return None
+
+    public_path = "/".join(segments[version_index + 1:])
+    extension = get_file_extension(public_path)
+    if resource_type in {"image", "video"} and extension:
+        public_id = public_path[: -(len(extension) + 1)]
+        download_public_id = public_id
+    else:
+        public_id = public_path
+        download_public_id = public_path
+
+    return ParsedCloudinaryAsset(
+        resource_type=resource_type,
+        version=int(segments[version_index][1:]),
+        public_id=public_id,
+        download_public_id=download_public_id,
+        format=extension,
+    )
+
+
+def infer_material_thumbnail_url(file_url: str | None, *, material_type: str | None = None) -> str | None:
+    preview_kind = infer_file_preview_kind(file_url, material_type=material_type)
+    if preview_kind == "image":
+        return file_url
+    if preview_kind != "pdf":
+        return None
+
+    parsed_asset = parse_cloudinary_asset_url(file_url)
+    if not parsed_asset or parsed_asset.resource_type != "image":
+        return None
+
+    generated_url, _ = cloudinary_url(
+        parsed_asset.public_id,
+        resource_type="image",
+        format="jpg",
+        page=1,
+        version=parsed_asset.version,
+        secure=True,
+    )
+    return generated_url
+
+
+def build_material_access_urls(
+    file_url: str | None,
+    *,
+    material_type: str | None = None,
+    download_name: str | None = None,
+) -> dict[str, str | None]:
+    if not file_url:
+        return {"preview_kind": "none", "preview_url": None, "download_url": None}
+
+    preview_kind = infer_file_preview_kind(file_url, material_type=material_type)
+    preview_url = file_url if preview_kind != "none" else None
+    download_url = file_url
+
+    if _requires_signed_delivery(file_url):
+        parsed_asset = parse_cloudinary_asset_url(file_url)
+        if parsed_asset and parsed_asset.format:
+            shared_options = {
+                "resource_type": parsed_asset.resource_type,
+                "type": "upload",
+            }
+            inline_url = private_download_url(
+                parsed_asset.download_public_id,
+                parsed_asset.format,
+                **shared_options,
+            )
+            if preview_kind == "pdf":
+                preview_url = inline_url
+            download_url = private_download_url(
+                parsed_asset.download_public_id,
+                parsed_asset.format,
+                attachment=download_name,
+                **shared_options,
+            )
+
+    return {
+        "preview_kind": preview_kind,
+        "preview_url": preview_url,
+        "download_url": download_url,
+    }
+
+
+async def save_upload_file(file: UploadFile, sub_dir: str = "") -> UploadedAssetInfo:
+    """Upload a file to Cloudinary and return normalized metadata."""
     if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=400,
@@ -54,11 +213,7 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
         )
 
     folder = f"eduhub/{sub_dir}" if sub_dir else "eduhub"
-
-    # Determine resource_type based on content type
-    resource_type = "auto"
-    if file.content_type and (file.content_type.startswith("video/") or file.content_type.startswith("audio/")):
-        resource_type = "video"
+    resource_type = _infer_resource_type(file)
 
     try:
         result = cloudinary.uploader.upload(
@@ -68,7 +223,14 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> str:
             use_filename=True,
             unique_filename=True,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(exc)}") from exc
 
-    return result["secure_url"]
+    file_url = result["secure_url"]
+    return UploadedAssetInfo(
+        url=file_url,
+        resource_type=result.get("resource_type", resource_type),
+        content_type=file.content_type,
+        file_extension=get_file_extension(file.filename or file_url),
+        thumbnail_url=infer_material_thumbnail_url(file_url),
+    )

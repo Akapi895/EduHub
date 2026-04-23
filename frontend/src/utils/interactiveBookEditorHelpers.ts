@@ -64,7 +64,6 @@ export interface FormState {
   grade: string;
   thumbnail_url: string;
   estimated_duration: string;
-  is_system: boolean;
 }
 
 export type AssetTargetKey =

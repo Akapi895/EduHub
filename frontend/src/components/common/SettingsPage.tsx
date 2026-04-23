@@ -3,6 +3,7 @@ import { Camera, Save, Loader2 } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { useAuthStore } from '@/store/auth.store';
+import { showErrorToast, showSuccessToast, showWarningToast } from '@/store/toast.store';
 import { userService } from '@/services/user.service';
 import api from '@/services/api';
 
@@ -43,7 +44,7 @@ export default function SettingsPage({ showBio = false }: SettingsPageProps) {
       updateUser(res.data.data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Upload avatar thất bại';
-      alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || message);
+      showErrorToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message || message);
     } finally {
       setUploadingAvatar(false);
     }
@@ -61,10 +62,10 @@ export default function SettingsPage({ showBio = false }: SettingsPageProps) {
       }
       const res = await userService.updateProfile(payload);
       updateUser(res.data.data);
-      alert('Cập nhật thành công!');
+      showSuccessToast('Cập nhật thành công!');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Cập nhật thất bại';
-      alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || message);
+      showErrorToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message || message);
     } finally {
       setSaving(false);
     }
@@ -72,7 +73,7 @@ export default function SettingsPage({ showBio = false }: SettingsPageProps) {
 
   const handleChangePassword = async () => {
     if (password.new_password !== password.confirm) {
-      alert('Mật khẩu xác nhận không khớp');
+      showWarningToast('Mật khẩu xác nhận không khớp');
       return;
     }
     setChangingPw(true);
@@ -81,11 +82,11 @@ export default function SettingsPage({ showBio = false }: SettingsPageProps) {
         current_password: password.current,
         new_password: password.new_password,
       });
-      alert('Đổi mật khẩu thành công!');
+      showSuccessToast('Đổi mật khẩu thành công!');
       setPassword({ current: '', new_password: '', confirm: '' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Đổi mật khẩu thất bại';
-      alert((err as { response?: { data?: { message?: string } } })?.response?.data?.message || message);
+      showErrorToast((err as { response?: { data?: { message?: string } } })?.response?.data?.message || message);
     } finally {
       setChangingPw(false);
     }

@@ -89,6 +89,13 @@ export interface MaterialViewStudent {
   viewed_at?: string;
 }
 
+export interface MaterialFileAccess {
+  preview_kind: 'none' | 'pdf' | 'image' | 'video' | 'audio';
+  preview_url?: string | null;
+  download_url?: string | null;
+  thumbnail_url?: string | null;
+}
+
 // ====== Exam ======
 export interface Exam {
   id: string;

@@ -25,6 +25,7 @@ interface InteractiveBookStepReviewProps {
   manifestError: string | null;
   saving?: boolean;
   publishing?: boolean;
+  saveActionLabel?: string;
   canAssignToClass?: boolean;
   reportLoading?: boolean;
   reportError?: string | null;
@@ -33,7 +34,7 @@ interface InteractiveBookStepReviewProps {
   onSelectScene: (sceneId: string) => void;
   onToggleAdvancedTools: () => void;
   onManifestTextChange: (text: string) => void;
-  onSaveDraft: () => void;
+  onSavePersonal: () => void;
   onPublish: () => void;
   onOpenAssignToClass: () => void;
 }
@@ -50,6 +51,7 @@ export default function InteractiveBookStepReview({
   manifestError,
   saving,
   publishing,
+  saveActionLabel = 'Lưu vào thư viện cá nhân',
   canAssignToClass,
   reportLoading,
   reportError,
@@ -58,7 +60,7 @@ export default function InteractiveBookStepReview({
   onSelectScene,
   onToggleAdvancedTools,
   onManifestTextChange,
-  onSaveDraft,
+  onSavePersonal,
   onPublish,
   onOpenAssignToClass,
 }: InteractiveBookStepReviewProps) {
@@ -73,7 +75,7 @@ export default function InteractiveBookStepReview({
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Kiểm tra trước khi phát hành</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Rà lỗi, xem thử đúng trải nghiệm của học sinh rồi mới lưu nháp hoặc phát hành.
+              Rà lỗi, xem thử đúng trải nghiệm của học sinh rồi lưu vào thư viện cá nhân hoặc phát hành cho học sinh.
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 px-4 py-3 text-right">
@@ -183,8 +185,8 @@ export default function InteractiveBookStepReview({
           <div className="mt-4 flex flex-wrap gap-3">
             {!readOnly && (
               <>
-                <Button type="button" variant="secondary" onClick={onSaveDraft} isLoading={saving} disabled={hasBlockingFlowErrors}>
-                  <Save className="mr-1.5 h-4 w-4" /> Lưu bản nháp
+                <Button type="button" variant="secondary" onClick={onSavePersonal} isLoading={saving}>
+                  <Save className="mr-1.5 h-4 w-4" /> {saveActionLabel}
                 </Button>
                 <Button type="button" onClick={onPublish} isLoading={publishing} disabled={hasBlockingFlowErrors}>
                   <Rocket className="mr-1.5 h-4 w-4" /> Phát hành

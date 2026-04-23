@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
-  Copy,
   Eye,
   Loader2,
   PlusCircle,
@@ -22,6 +21,7 @@ import api from '@/services/api';
 import { classService } from '@/services/class.service';
 import { interactiveBookService } from '@/services/interactive-book.service';
 import { useAuthStore } from '@/store/auth.store';
+import { showErrorToast, showWarningToast } from '@/store/toast.store';
 import type {
   Chapter,
   Class,
@@ -67,7 +67,6 @@ export default function InteractiveBookEditor() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [togglingSystemLibrary, setTogglingSystemLibrary] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   const [bundle, setBundle] = useState<InteractiveBookBundle | null>(null);
   const [manifestText, setManifestText] = useState(DEFAULT_MANIFEST_TEXT);
@@ -99,7 +98,6 @@ export default function InteractiveBookEditor() {
     grade: GRADES[0] ?? '',
     thumbnail_url: '',
     estimated_duration: '10',
-    is_system: false,
   });
 
   const syncFormFromBundle = (payload: InteractiveBookBundle) => {
@@ -110,7 +108,6 @@ export default function InteractiveBookEditor() {
       grade: payload.material.grade ?? GRADES[0] ?? '',
       thumbnail_url: payload.material.thumbnail_url ?? '',
       estimated_duration: String(payload.interactive_book.estimated_duration ?? 10),
-      is_system: payload.material.is_system,
     });
   };
 
@@ -122,7 +119,7 @@ export default function InteractiveBookEditor() {
         const draftRes = await interactiveBookService.getBook(id, 'draft');
         const payload = draftRes.data.data as InteractiveBookBundle;
         setBundle(payload);
-        setReadOnly(false);
+        setReadOnly(payload.material.is_system || payload.material.created_by !== user?.id);
         syncFormFromBundle(payload);
         setManifestText(stringifyManifest(payload.manifest));
       } catch {
@@ -130,11 +127,11 @@ export default function InteractiveBookEditor() {
           const publishedRes = await interactiveBookService.getBook(id, 'published');
           const payload = publishedRes.data.data as InteractiveBookBundle;
           setBundle(payload);
-          setReadOnly(payload.material.created_by !== user?.id);
+          setReadOnly(payload.material.is_system || payload.material.created_by !== user?.id);
           syncFormFromBundle(payload);
           setManifestText(stringifyManifest(payload.manifest));
         } catch (error: any) {
-          alert(error.response?.data?.message || 'Không thể tải sách tương tác');
+          showErrorToast(error.response?.data?.message || 'Không thể tải sách tương tác');
           navigate('/teacher/library/personal');
         }
       } finally {
@@ -350,7 +347,7 @@ export default function InteractiveBookEditor() {
 
   const openPreviewMode = () => {
     if (!previewManifest) {
-      alert('Manifest hiện chưa hợp lệ nên chưa thể xem thử.');
+      showWarningToast('Manifest hiện chưa hợp lệ nên chưa thể xem thử.');
       return;
     }
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -404,7 +401,7 @@ export default function InteractiveBookEditor() {
       ]);
       setLinkEditorVisible(fieldKey, false);
     } catch (error: any) {
-      alert(getUploadErrorMessage(error, 'Không thể tải tư liệu.'));
+      showErrorToast(getUploadErrorMessage(error, 'Không thể tải tư liệu.'));
     } finally {
       setUploadingFieldKey(null);
     }
@@ -537,7 +534,7 @@ export default function InteractiveBookEditor() {
   const removeSelectedScene = () => {
     if (!selectedScene || !previewManifest || readOnly) return;
     if (previewManifest.scenes.length <= 1) {
-      alert('Sách cần ít nhất một cảnh. Không thể xóa cảnh cuối cùng.');
+      showWarningToast('Sách cần ít nhất một cảnh. Không thể xóa cảnh cuối cùng.');
       return;
     }
     const sceneLabel = selectedScene.title || selectedScene.id;
@@ -591,7 +588,7 @@ export default function InteractiveBookEditor() {
     });
   };
 
-  const parseManifestOrThrow = () => {
+  const parseManifestOrThrow = ({ requirePublishReady = false }: { requirePublishReady?: boolean } = {}) => {
     try {
       const parsed = JSON.parse(manifestText) as unknown;
       if (!isManifestCandidate(parsed)) {
@@ -599,7 +596,7 @@ export default function InteractiveBookEditor() {
       }
       const syncedManifest = parsed as InteractiveBookManifest;
       const validation = validateInteractiveBookFlow(syncedManifest);
-      if (validation.blockingErrors.length > 0) {
+      if (requirePublishReady && validation.blockingErrors.length > 0) {
         throw new Error(`Flow chưa hợp lệ: ${validation.blockingErrors.map((issue) => issue.message).join(' | ')}`);
       }
       setManifestError(null);
@@ -611,8 +608,11 @@ export default function InteractiveBookEditor() {
     }
   };
 
-  const persistDraft = async (formOverrides: Partial<FormState> = {}) => {
-    const manifest = parseManifestOrThrow();
+  const persistPersonalCopy = async (
+    formOverrides: Partial<FormState> = {},
+    options: { requirePublishReady?: boolean } = {},
+  ) => {
+    const manifest = parseManifestOrThrow({ requirePublishReady: options.requirePublishReady });
     const nextForm = { ...form, ...formOverrides };
     manifest.title = nextForm.title.trim() || manifest.title;
 
@@ -623,7 +623,6 @@ export default function InteractiveBookEditor() {
       grade: nextForm.grade || undefined,
       thumbnail_url: nextForm.thumbnail_url || undefined,
       estimated_duration: Number(nextForm.estimated_duration) || undefined,
-      is_system: nextForm.is_system,
       manifest,
     };
 
@@ -638,7 +637,7 @@ export default function InteractiveBookEditor() {
     }
 
     if (!id) {
-      throw new Error('Không tìm thấy mã sách để lưu bản nháp.');
+      throw new Error('Không tìm thấy mã sách để lưu vào thư viện cá nhân.');
     }
 
     const response = await interactiveBookService.updateDraft(id, requestPayload);
@@ -649,14 +648,15 @@ export default function InteractiveBookEditor() {
     return payload;
   };
 
-  const handleSaveDraft = async () => {
+  const handleSavePersonal = async () => {
     try {
       setSaving(true);
       setMessage(null);
-      await persistDraft();
-      setMessage(isNew || !id ? 'Đã tạo bản nháp sách tương tác.' : 'Đã lưu thay đổi bản nháp.');
+      const payload = await persistPersonalCopy();
+      const createdNewMaterial = !id && Boolean(payload?.material.id);
+      setMessage(createdNewMaterial ? 'Đã lưu sách tương tác vào thư viện cá nhân.' : 'Đã cập nhật sách tương tác trong thư viện cá nhân.');
     } catch (error: any) {
-      alert(error.response?.data?.message || error.message || 'Không thể lưu bản nháp.');
+      showErrorToast(error.response?.data?.message || error.message || 'Không thể lưu vào thư viện cá nhân.');
     } finally {
       setSaving(false);
     }
@@ -671,7 +671,7 @@ export default function InteractiveBookEditor() {
       setPublishing(true);
       setMessage(null);
       try {
-        const draftPayload = await persistDraft();
+        const draftPayload = await persistPersonalCopy({}, { requirePublishReady: true });
         const response = await interactiveBookService.publishBook(draftPayload.material.id);
         const payload = response.data.data as InteractiveBookBundle;
         setBundle(payload);
@@ -679,7 +679,7 @@ export default function InteractiveBookEditor() {
         setManifestText(stringifyManifest(payload.manifest));
         setMessage('Đã phát hành sách tương tác.');
       } catch (error: any) {
-        alert(error.response?.data?.message || 'Không thể phát hành sách tương tác.');
+        showErrorToast(error.response?.data?.message || 'Không thể phát hành sách tương tác.');
       } finally {
         setPublishing(false);
       }
@@ -688,7 +688,7 @@ export default function InteractiveBookEditor() {
     setPublishing(true);
     setMessage(null);
     try {
-      await persistDraft();
+      await persistPersonalCopy({}, { requirePublishReady: true });
       const response = await interactiveBookService.publishBook(id);
       const payload = response.data.data as InteractiveBookBundle;
       setBundle(payload);
@@ -696,37 +696,19 @@ export default function InteractiveBookEditor() {
       setManifestText(stringifyManifest(payload.manifest));
       setMessage('Đã phát hành sách tương tác.');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Không thể phát hành sách tương tác.');
+      showErrorToast(error.response?.data?.message || 'Không thể phát hành sách tương tác.');
     } finally {
       setPublishing(false);
     }
   };
 
-  const handleToggleSystemLibrary = async (nextIsSystem: boolean) => {
-    if (readOnly) return;
-    setTogglingSystemLibrary(true);
-    setMessage(null);
-    try {
-      await persistDraft({ is_system: nextIsSystem });
-      setMessage(
-        nextIsSystem
-          ? 'Đã đưa sách tương tác vào thư viện hệ thống.'
-          : 'Đã gỡ sách tương tác khỏi thư viện hệ thống.',
-      );
-    } catch (error: any) {
-      alert(error.response?.data?.message || 'Không thể cập nhật trạng thái thư viện hệ thống.');
-    } finally {
-      setTogglingSystemLibrary(false);
-    }
-  };
-
   const handleOpenAssignToClass = () => {
     if (!bundle) {
-      alert('Hãy lưu bản nháp sách tương tác trước khi gán vào lớp.');
+      showWarningToast('Hãy lưu sách tương tác vào thư viện cá nhân trước khi gán vào lớp.');
       return;
     }
     if (bundle.interactive_book.status !== 'published') {
-      alert('Hãy phát hành sách tương tác trước khi gán vào lớp học.');
+      showWarningToast('Hãy phát hành sách tương tác trước khi gán vào lớp học.');
       return;
     }
     setSelectedClassId('');
@@ -747,7 +729,7 @@ export default function InteractiveBookEditor() {
       setSelectedChapterId('');
       setMessage('Đã gán sách tương tác vào lớp học.');
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Không thể gán sách tương tác vào lớp.');
+      showErrorToast(error.response?.data?.message || 'Không thể gán sách tương tác vào lớp.');
     } finally {
       setAssigningToClass(false);
     }
@@ -759,7 +741,7 @@ export default function InteractiveBookEditor() {
       const url = await uploadFile(file, 'thumbnails');
       setForm((current) => ({ ...current, thumbnail_url: url }));
     } catch (error: any) {
-      alert(getUploadErrorMessage(error, 'Không thể tải ảnh bìa.'));
+      showErrorToast(getUploadErrorMessage(error, 'Không thể tải ảnh bìa.'));
     } finally {
       setUploadingThumbnail(false);
     }
@@ -778,7 +760,7 @@ export default function InteractiveBookEditor() {
         ...current.filter((item) => item.url !== url),
       ]);
     } catch (error: any) {
-      alert(getUploadErrorMessage(error, 'Không thể tải tư liệu.'));
+      showErrorToast(getUploadErrorMessage(error, 'Không thể tải tư liệu.'));
     } finally {
       setUploadingAsset(false);
     }
@@ -894,7 +876,8 @@ export default function InteractiveBookEditor() {
           setManifestText(text);
           if (manifestError) setManifestError(null);
         }}
-        onSaveDraft={handleSaveDraft}
+        saveActionLabel="Lưu vào thư viện cá nhân"
+        onSavePersonal={handleSavePersonal}
         onPublish={handlePublish}
         onOpenAssignToClass={handleOpenAssignToClass}
       />
@@ -971,7 +954,7 @@ export default function InteractiveBookEditor() {
         <div className="min-w-0 flex-1 space-y-6">
           {readOnly && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Bạn đang xem bản đã phát hành ở chế độ chỉ đọc vì đây không phải bản nháp của bạn.
+              Bạn đang xem bản chỉ đọc vì đây là bản đã chia sẻ lên thư viện chung hoặc không phải bản cá nhân của bạn.
             </div>
           )}
 
@@ -998,31 +981,12 @@ export default function InteractiveBookEditor() {
                 >
                   <PlusCircle className="mr-1.5 h-4 w-4" /> Gán vào lớp
                 </Button>
-                {!readOnly && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => { void handleToggleSystemLibrary(!form.is_system); }}
-                    isLoading={togglingSystemLibrary}
-                  >
-                    {form.is_system ? 'Gỡ khỏi thư viện hệ thống' : 'Đưa vào thư viện hệ thống'}
-                  </Button>
-                )}
                 <Button type="button" variant="secondary" onClick={openPreviewMode}>
                   <Eye className="mr-1.5 h-4 w-4" /> Xem thử
                 </Button>
-                <Button type="button" variant="secondary" onClick={() => {
-                  if (!window.confirm('Nạp mẫu sẽ thay nội dung hiện tại trong trình biên soạn. Bạn có muốn tiếp tục không?')) {
-                    return;
-                  }
-                  setManifestText(DEFAULT_MANIFEST_TEXT);
-                  setActiveStep('scenes');
-                }}>
-                  <Copy className="mr-1.5 h-4 w-4" /> Nạp mẫu
-                </Button>
                 {!readOnly && (
-                  <Button type="button" variant="secondary" onClick={handleSaveDraft} isLoading={saving} disabled={hasBlockingFlowErrors}>
-                    <Save className="mr-1.5 h-4 w-4" /> Lưu bản nháp
+                  <Button type="button" variant="secondary" onClick={handleSavePersonal} isLoading={saving}>
+                    <Save className="mr-1.5 h-4 w-4" /> Lưu
                   </Button>
                 )}
                 {!readOnly && activeStep === 'review' && (

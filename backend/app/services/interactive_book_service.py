@@ -516,6 +516,8 @@ def get_accessible_book(
         raise HTTPException(status_code=403, detail="Ban khong co quyen xem sach nay")
 
     if view == "draft":
+        if material.is_system:
+            raise HTTPException(status_code=403, detail="Ban chi co the chinh sua ban ca nhan cua sach nay")
         if material.created_by != current_user.id:
             raise HTTPException(status_code=403, detail="Chi chu so huu moi duoc xem ban nhap")
         if not draft_manifest:
@@ -537,7 +539,7 @@ def create_interactive_book(db: Session, *, teacher: User, data: InteractiveBook
         material_type=MaterialType.interactive_book,
         subject=data.subject,
         grade=data.grade,
-        is_system=data.is_system,
+        is_system=False,
         folder_id=data.folder_id,
         created_by=teacher.id,
     )
@@ -574,6 +576,8 @@ def update_draft(
     material = material_crud.get_by_id(db, material_id)
     if not material or material.material_type != MaterialType.interactive_book:
         raise HTTPException(status_code=404, detail="Interactive book not found")
+    if material.is_system:
+        raise HTTPException(status_code=400, detail="Hay sua ban ca nhan thay vi sua truc tiep ban thu vien chung")
     if material.created_by != teacher.id:
         raise HTTPException(status_code=403, detail="Chi chu so huu moi duoc sua")
 
@@ -581,7 +585,7 @@ def update_draft(
     if not interactive_book:
         raise HTTPException(status_code=404, detail="Interactive book not found")
 
-    update_fields = data.model_dump(exclude_unset=True, exclude={"manifest", "estimated_duration"})
+    update_fields = data.model_dump(exclude_unset=True, exclude={"manifest", "estimated_duration", "is_system"})
     for field, value in update_fields.items():
         setattr(material, field, value)
 
@@ -607,6 +611,8 @@ def publish_book(db: Session, *, material_id: str, teacher: User) -> dict[str, A
     material = material_crud.get_by_id(db, material_id)
     if not material or material.material_type != MaterialType.interactive_book:
         raise HTTPException(status_code=404, detail="Interactive book not found")
+    if material.is_system:
+        raise HTTPException(status_code=400, detail="Hay phat hanh ban ca nhan roi moi day len thu vien chung")
     if material.created_by != teacher.id:
         raise HTTPException(status_code=403, detail="Chi chu so huu moi duoc publish")
 

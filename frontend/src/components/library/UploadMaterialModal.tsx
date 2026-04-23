@@ -1,10 +1,16 @@
-import { useState, useRef } from 'react';
+import { useRef, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
-import Modal from '@/components/common/Modal';
+
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
-import { SUBJECTS, GRADES } from '@/utils/constants';
+import Modal from '@/components/common/Modal';
 import api from '@/services/api';
+import { GRADES, SUBJECTS } from '@/utils/constants';
+
+interface UploadedFilePayload {
+  url: string;
+  thumbnail_url?: string;
+}
 
 interface UploadMaterialModalProps {
   isOpen: boolean;
@@ -39,8 +45,8 @@ export default function UploadMaterialModal({
   const [uploading, setUploading] = useState(false);
   const thumbnailInputRef = useRef<HTMLInputElement>(null);
 
-  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleThumbnailChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
     setThumbnailFile(file);
     const reader = new FileReader();
@@ -51,30 +57,43 @@ export default function UploadMaterialModal({
   const removeThumbnail = () => {
     setThumbnailFile(null);
     setThumbnailPreview(null);
-    if (thumbnailInputRef.current) thumbnailInputRef.current.value = '';
+    if (thumbnailInputRef.current) {
+      thumbnailInputRef.current.value = '';
+    }
   };
 
-  const uploadFile = async (file: File, subDir: string): Promise<string> => {
+  const uploadFile = async (file: File, subDir: string): Promise<UploadedFilePayload> => {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await api.post(`/upload?sub_dir=${subDir}`, formData, {
+    const response = await api.post(`/upload?sub_dir=${subDir}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
-    return res.data.data.url;
+    return response.data.data as UploadedFilePayload;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetForm = () => {
+    setTitle('');
+    setDescription('');
+    removeThumbnail();
+    setDocFile(null);
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setUploading(true);
     try {
       let thumbnail_url: string | undefined;
       let file_url: string | undefined;
 
-      if (thumbnailFile) {
-        thumbnail_url = await uploadFile(thumbnailFile, 'thumbnails');
-      }
       if (docFile) {
-        file_url = await uploadFile(docFile, 'materials');
+        const uploadedDocument = await uploadFile(docFile, 'materials');
+        file_url = uploadedDocument.url;
+        thumbnail_url = uploadedDocument.thumbnail_url;
+      }
+
+      if (thumbnailFile) {
+        const uploadedThumbnail = await uploadFile(thumbnailFile, 'thumbnails');
+        thumbnail_url = uploadedThumbnail.url;
       }
 
       await onSubmit({
@@ -88,13 +107,9 @@ export default function UploadMaterialModal({
         folder_id: folderId,
       });
 
-      // Reset form
-      setTitle('');
-      setDescription('');
-      removeThumbnail();
-      setDocFile(null);
+      resetForm();
     } catch {
-      // error handled by parent
+      // Parent handles request errors.
     } finally {
       setUploading(false);
     }
@@ -106,29 +121,29 @@ export default function UploadMaterialModal({
         <Input
           label="Tên tài liệu"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(event) => setTitle(event.target.value)}
           placeholder="Nhập tên tài liệu"
           required
         />
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Mô tả</label>
           <textarea
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(event) => setDescription(event.target.value)}
             placeholder="Mô tả ngắn gọn"
             rows={3}
-            className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none transition-all resize-none"
+            className="w-full resize-none rounded-xl border border-border px-4 py-2.5 outline-none transition-all focus:border-primary focus:ring-2 focus:ring-blue-300"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Loại</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Loại</label>
             <select
               value={materialType}
-              onChange={(e) => setMaterialType(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none"
+              onChange={(event) => setMaterialType(event.target.value)}
+              className="w-full rounded-xl border border-border px-4 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
             >
               <option value="book">Sách</option>
               <option value="exam">Đề thi</option>
@@ -137,61 +152,68 @@ export default function UploadMaterialModal({
               <option value="document">Tài liệu</option>
             </select>
           </div>
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Môn học</label>
             <select
               value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none"
+              onChange={(event) => setSubject(event.target.value)}
+              className="w-full rounded-xl border border-border px-4 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
             >
-              {SUBJECTS.map((s) => (
-                <option key={s} value={s}>{s}</option>
+              {SUBJECTS.map((item) => (
+                <option key={item} value={item}>{item}</option>
               ))}
             </select>
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Khối lớp</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Khối lớp</label>
           <select
             value={grade}
-            onChange={(e) => setGrade(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none"
+            onChange={(event) => setGrade(event.target.value)}
+            className="w-full rounded-xl border border-border px-4 py-2.5 outline-none focus:border-primary focus:ring-2 focus:ring-blue-300"
           >
-            {GRADES.map((g) => (
-              <option key={g} value={g}>{g}</option>
+            {GRADES.map((item) => (
+              <option key={item} value={item}>{item}</option>
             ))}
           </select>
         </div>
 
-        {/* Thumbnail */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh thumbnail</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Ảnh thumbnail</label>
+          {!thumbnailPreview && (
+            <p className="mb-2 text-xs text-gray-500">
+              Có thể bỏ trống. Hệ thống sẽ tự tạo thumbnail khi file hỗ trợ, ví dụ lấy trang đầu của PDF.
+            </p>
+          )}
+
           {thumbnailPreview ? (
-            <div className="relative w-full h-40 rounded-xl overflow-hidden border border-border">
+            <div className="relative h-40 w-full overflow-hidden rounded-xl border border-border">
               <img
                 src={thumbnailPreview}
                 alt="Thumbnail preview"
-                className="w-full h-full object-cover"
+                className="h-full w-full object-cover"
               />
               <button
                 type="button"
                 onClick={removeThumbnail}
-                className="absolute top-2 right-2 w-7 h-7 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white"
+                className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
               >
-                <X className="w-4 h-4 text-gray-600" />
+                <X className="h-4 w-4 text-gray-600" />
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={() => thumbnailInputRef.current?.click()}
-              className="w-full h-32 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-primary hover:text-primary transition-colors"
+              className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 text-gray-400 transition-colors hover:border-primary hover:text-primary"
             >
-              <ImagePlus className="w-8 h-8" />
+              <ImagePlus className="h-8 w-8" />
               <span className="text-sm">Chọn ảnh thumbnail</span>
             </button>
           )}
+
           <input
             ref={thumbnailInputRef}
             type="file"
@@ -201,13 +223,12 @@ export default function UploadMaterialModal({
           />
         </div>
 
-        {/* Document file */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Chọn file tài liệu</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Chọn file tài liệu</label>
           <input
             type="file"
-            onChange={(e) => setDocFile(e.target.files?.[0] || null)}
-            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-primary-lighter file:text-primary hover:file:bg-primary-light"
+            onChange={(event) => setDocFile(event.target.files?.[0] || null)}
+            className="w-full text-sm text-gray-500 file:mr-4 file:rounded-xl file:border-0 file:bg-primary-lighter file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary hover:file:bg-primary-light"
           />
         </div>
 

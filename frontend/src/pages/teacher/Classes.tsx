@@ -8,6 +8,7 @@ import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
 import { useDebounce } from '@/hooks/useDebounce';
 import api from '@/services/api';
+import { showErrorToast } from '@/store/toast.store';
 import type { Class } from '@/types';
 
 export default function TeacherClasses() {
@@ -89,7 +90,7 @@ export default function TeacherClasses() {
         fetchClasses();
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Tạo lớp thất bại');
+      showErrorToast(err.response?.data?.message || 'Tạo lớp thất bại');
     } finally {
       setCreating(false);
     }

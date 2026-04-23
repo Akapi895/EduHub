@@ -7,6 +7,8 @@ import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
 import { libraryService } from '@/services/library.service';
+import { useAuthStore } from '@/store/auth.store';
+import { showErrorToast, showSuccessToast } from '@/store/toast.store';
 import { useDebounce } from '@/hooks/useDebounce';
 import { SUBJECTS } from '@/utils/constants';
 import type { Material, Folder as FolderType } from '@/types';
@@ -27,6 +29,7 @@ interface Props {
 }
 
 export default function TeacherLibrary({ mode = 'personal' }: Props) {
+  const user = useAuthStore((state) => state.user);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [folders, setFolders] = useState<FolderType[]>([]);
   const [currentFolder, setCurrentFolder] = useState<FolderType | null>(null);
@@ -100,7 +103,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       setNewFolderName('');
       fetchFolders();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Tạo thư mục thất bại');
+      showErrorToast(err.response?.data?.message || 'Tạo thư mục thất bại');
     } finally {
       setCreatingFolder(false);
     }
@@ -116,7 +119,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       fetchFolders();
       fetchMaterials();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Xóa thư mục thất bại');
+      showErrorToast(err.response?.data?.message || 'Xóa thư mục thất bại');
     }
   };
 
@@ -131,7 +134,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       fetchMaterials();
       fetchFolders();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Tạo bản sao thất bại');
+      showErrorToast(err.response?.data?.message || 'Tạo bản sao thất bại');
     }
   };
 
@@ -147,7 +150,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       fetchMaterials();
       fetchFolders();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Thao tác thất bại');
+      showErrorToast(err.response?.data?.message || 'Thao tác thất bại');
     }
   };
 
@@ -156,16 +159,27 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       await libraryService.copyMaterial(materialId, { folder_id: folderId });
       fetchFolders();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Tạo bản sao thất bại');
+      showErrorToast(err.response?.data?.message || 'Tạo bản sao thất bại');
     }
   };
 
   const handleShare = async (materialId: string) => {
     try {
       await libraryService.shareMaterial(materialId);
-      alert('Đã chia sẻ tài liệu vào thư viện hệ thống');
+      fetchMaterials();
+      showSuccessToast('Đã đẩy tài liệu lên thư viện chung. Nếu tài liệu đã tồn tại ở đó, hệ thống đã cập nhật bản chia sẻ.');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Chia sẻ thất bại');
+      showErrorToast(err.response?.data?.message || 'Đẩy tài liệu lên thư viện chung thất bại');
+    }
+  };
+
+  const handleUnshare = async (materialId: string) => {
+    try {
+      await libraryService.unshareMaterial(materialId);
+      fetchMaterials();
+      showSuccessToast('Đã gỡ tài liệu khỏi thư viện chung.');
+    } catch (err: any) {
+      showErrorToast(err.response?.data?.message || 'Gỡ tài liệu khỏi thư viện chung thất bại');
     }
   };
 
@@ -177,7 +191,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       fetchMaterials();
       fetchFolders();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Xóa tài liệu thất bại');
+      showErrorToast(err.response?.data?.message || 'Xóa tài liệu thất bại');
     }
   };
 
@@ -187,9 +201,9 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       await libraryService.saveMaterial(saveMaterialId, { folder_id: saveFolderId || undefined });
       setSaveMaterialId(null);
       setSaveFolderId('');
-      alert('Đã lưu tài liệu về thư viện cá nhân');
+      showSuccessToast('Đã lưu tài liệu về thư viện cá nhân');
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lưu tài liệu thất bại');
+      showErrorToast(err.response?.data?.message || 'Lưu tài liệu thất bại');
     }
   };
 
@@ -333,8 +347,12 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
               onRemoveFromFolder={isPersonal && currentFolder ? handleRemoveFromFolder : undefined}
               onCopy={isPersonal ? handleCopy : undefined}
               onShare={isPersonal ? handleShare : undefined}
+              onUnshare={isSystem ? handleUnshare : undefined}
               onDelete={isPersonal ? (id) => setDeleteTarget(id) : undefined}
               onSave={isSystem ? (id) => { setSaveMaterialId(id); setSaveFolderId(''); } : undefined}
+              canSave={!isSystem || material.shared_by !== user?.id}
+              canUnshare={isSystem && material.shared_by === user?.id}
+              shareLabel="Đẩy lên thư viện chung"
               mode={mode}
             />
           ))}
@@ -362,7 +380,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
               fetchMaterials();
               if (currentFolder) fetchFolders();
             } catch (err: any) {
-              alert(err.response?.data?.message || 'Thêm tài liệu thất bại');
+              showErrorToast(err.response?.data?.message || 'Thêm tài liệu thất bại');
             }
           }}
         />

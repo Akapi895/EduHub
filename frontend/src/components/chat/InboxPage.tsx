@@ -8,6 +8,7 @@ import { chatService } from '@/services/chat.service';
 import type { Conversation, Message } from '@/types';
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
+import { showErrorToast } from '@/store/toast.store';
 import { useDebounce } from '@/hooks/useDebounce';
 
 interface Contact {
@@ -125,7 +126,7 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
       setMessages((prev) => [...prev, res.data.data]);
       fetchConversations();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Gửi tin nhắn thất bại');
+      showErrorToast(err.response?.data?.message || 'Gửi tin nhắn thất bại');
     }
   };
 
@@ -152,7 +153,7 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
       const msgRes = await chatService.getMessages(conv.id);
       setMessages(msgRes.data.data || []);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Không thể tạo cuộc trò chuyện');
+      showErrorToast(err.response?.data?.message || 'Không thể tạo cuộc trò chuyện');
     }
   };
 

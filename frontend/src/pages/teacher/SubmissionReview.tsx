@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, XCircle, Loader2, Save } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
 import { examService } from '@/services/exam.service';
+import { showErrorToast, showWarningToast } from '@/store/toast.store';
 import { formatDateTime } from '@/utils/helpers';
 import type { Question, Submission, SubmissionAnswer } from '@/types';
 
@@ -41,7 +42,7 @@ export default function TeacherSubmissionReview() {
   const handleGrade = async (answerId: string, maxPoints: number) => {
     const val = parseFloat(gradeInputs[answerId] ?? '');
     if (isNaN(val) || val < 0 || val > maxPoints) {
-      alert(`Điểm phải từ 0 đến ${maxPoints}`);
+      showWarningToast(`Điểm phải từ 0 đến ${maxPoints}`);
       return;
     }
     setSaving((s) => ({ ...s, [answerId]: true }));
@@ -55,7 +56,7 @@ export default function TeacherSubmissionReview() {
         status: data.submission_status,
       } : s);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Chấm điểm thất bại');
+      showErrorToast(err.response?.data?.message || 'Chấm điểm thất bại');
     } finally {
       setSaving((s) => ({ ...s, [answerId]: false }));
     }

@@ -8,6 +8,7 @@ import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
+import { showErrorToast } from '@/store/toast.store';
 import type { Class, Chapter, Exam, User } from '@/types';
 
 type Tab = 'materials' | 'exams' | 'students' | 'settings';
@@ -208,7 +209,7 @@ export default function TeacherClassDetail() {
                     await classService.removeStudent(id!, studentId);
                     fetchClassData();
                   } catch (err: any) {
-                    alert(err.response?.data?.message || 'Xóa học sinh thất bại');
+                    showErrorToast(err.response?.data?.message || 'Xóa học sinh thất bại');
                   }
                 }}
               />
@@ -239,7 +240,7 @@ export default function TeacherClassDetail() {
                       await classService.updateClass(id!, editForm);
                       await fetchClassData();
                     } catch (err: any) {
-                      alert(err.response?.data?.message || 'Cập nhật thất bại');
+                      showErrorToast(err.response?.data?.message || 'Cập nhật thất bại');
                     } finally {
                       setSaving(false);
                     }
@@ -256,7 +257,7 @@ export default function TeacherClassDetail() {
                       await classService.deleteClass(id!);
                       navigate('/teacher/classes');
                     } catch (err: any) {
-                      alert(err.response?.data?.message || 'Xóa lớp thất bại');
+                      showErrorToast(err.response?.data?.message || 'Xóa lớp thất bại');
                     }
                   }}
                   className="!text-red-600 !border-red-200 hover:!bg-red-50"
@@ -288,7 +289,7 @@ export default function TeacherClassDetail() {
                 const res = await classService.getChapters(id!);
                 setChapters(res.data.data || []);
               } catch (err: any) {
-                alert(err.response?.data?.message || 'Thêm chương thất bại');
+                showErrorToast(err.response?.data?.message || 'Thêm chương thất bại');
               }
             }} disabled={!newChapter}>
               Thêm

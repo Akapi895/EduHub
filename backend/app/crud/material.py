@@ -147,6 +147,18 @@ def create(db: Session, *, data: MaterialCreate, created_by: str) -> Material:
     return material
 
 
+def get_system_share(db: Session, *, source_id: str, shared_by: str) -> Material | None:
+    return (
+        db.query(Material)
+        .filter(
+            Material.source_id == source_id,
+            Material.is_system == True,  # noqa: E712
+            Material.shared_by == shared_by,
+        )
+        .first()
+    )
+
+
 def update(db: Session, *, material: Material, data: MaterialUpdate) -> Material:
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(material, field, value)
@@ -157,7 +169,7 @@ def update(db: Session, *, material: Material, data: MaterialUpdate) -> Material
 
 def copy_material(db: Session, *, source: Material, created_by: str,
                   folder_id: str | None = None, is_system: bool = False,
-                  shared_by: str | None = None) -> Material:
+                  shared_by: str | None = None, commit: bool = True) -> Material:
     """Create a reference copy of a material, linking back via source_id."""
     m = Material(
         title=source.title,
@@ -174,29 +186,28 @@ def copy_material(db: Session, *, source: Material, created_by: str,
         source_id=source.id,
     )
     db.add(m)
-    db.commit()
-    db.refresh(m)
+    if commit:
+        db.commit()
+        db.refresh(m)
+    else:
+        db.flush()
     return m
 
 
-def delete(db: Session, *, material: Material) -> None:
-    """Delete a material and cascade to all derived copies, class links, and views."""
-    # Collect all IDs to delete (original + transitive copies via source_id)
-    ids_to_delete: list[str] = [material.id]
-    frontier = [material.id]
-    while frontier:
-        child_ids = [
-            r[0] for r in db.query(Material.id)
-            .filter(Material.source_id.in_(frontier)).all()
-        ]
-        if not child_ids:
-            break
-        ids_to_delete.extend(child_ids)
-        frontier = child_ids
-    # Bulk delete related records, then materials
-    db.query(MaterialView).filter(MaterialView.material_id.in_(ids_to_delete)).delete(synchronize_session=False)
-    db.query(ClassMaterial).filter(ClassMaterial.material_id.in_(ids_to_delete)).delete(synchronize_session=False)
-    db.query(Material).filter(Material.id.in_(ids_to_delete)).delete(synchronize_session=False)
+def detach_direct_copies(db: Session, *, material_id: str) -> None:
+    db.query(Material).filter(Material.source_id == material_id).update(
+        {Material.source_id: None},
+        synchronize_session=False,
+    )
+
+
+def delete_exact(db: Session, *, material: Material, preserve_descendants: bool = True) -> None:
+    """Delete only the requested material and optionally keep derived copies alive."""
+    if preserve_descendants:
+        detach_direct_copies(db, material_id=material.id)
+    db.query(MaterialView).filter(MaterialView.material_id == material.id).delete(synchronize_session=False)
+    db.query(ClassMaterial).filter(ClassMaterial.material_id == material.id).delete(synchronize_session=False)
+    db.delete(material)
     db.commit()
 
 

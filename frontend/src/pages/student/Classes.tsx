@@ -6,6 +6,7 @@ import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
+import { showErrorToast } from '@/store/toast.store';
 import { useDebounce } from '@/hooks/useDebounce';
 import type { Class } from '@/types';
 
@@ -51,7 +52,7 @@ export default function StudentClasses() {
       setClassCode('');
       fetchClasses();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Tham gia lớp thất bại');
+      showErrorToast(err.response?.data?.message || 'Tham gia lớp thất bại');
     } finally {
       setJoining(false);
     }

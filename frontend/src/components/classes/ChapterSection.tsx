@@ -7,6 +7,7 @@ import Modal from '@/components/common/Modal';
 import Button from '@/components/common/Button';
 import { classService } from '@/services/class.service';
 import { libraryService } from '@/services/library.service';
+import { showErrorToast } from '@/store/toast.store';
 import { getMaterialRoute } from '@/utils/materialRoutes';
 import AddMaterialToChapterModal from './AddMaterialToChapterModal';
 
@@ -55,7 +56,7 @@ export default function ChapterSection({ chapter, classId, onMaterialAdded, onCh
       await classService.removeMaterial(classId, classMaterialId);
       onMaterialAdded?.();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Gỡ tài liệu thất bại');
+      showErrorToast(err.response?.data?.message || 'Gỡ tài liệu thất bại');
     } finally {
       setConfirmRemove(null);
     }
@@ -66,7 +67,7 @@ export default function ChapterSection({ chapter, classId, onMaterialAdded, onCh
       await classService.deleteChapter(classId, chapter.id);
       onChapterDeleted?.();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Xóa chương thất bại');
+      showErrorToast(err.response?.data?.message || 'Xóa chương thất bại');
     } finally {
       setConfirmDeleteChapter(false);
     }

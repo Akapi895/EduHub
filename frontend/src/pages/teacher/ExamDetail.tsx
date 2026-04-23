@@ -5,6 +5,7 @@ import QuestionEditor from '@/components/exam/QuestionEditor';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
 import { examService } from '@/services/exam.service';
+import { showErrorToast, showSuccessToast } from '@/store/toast.store';
 import { formatDate } from '@/utils/helpers';
 import type { Question, Exam, Submission } from '@/types';
 import { generateId } from '@/utils/helpers';
@@ -97,7 +98,7 @@ export default function TeacherExamDetail() {
       });
       setQuestions([...questions, res.data.data]);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Thêm câu hỏi thất bại');
+      showErrorToast(err.response?.data?.message || 'Thêm câu hỏi thất bại');
     }
   };
 
@@ -110,7 +111,7 @@ export default function TeacherExamDetail() {
       await examService.deleteQuestion(qId);
       setQuestions(questions.filter((q) => q.id !== qId));
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Xóa câu hỏi thất bại');
+      showErrorToast(err.response?.data?.message || 'Xóa câu hỏi thất bại');
     }
   };
 
@@ -133,10 +134,10 @@ export default function TeacherExamDetail() {
         }
         await examService.updateQuestion(q.id, payload);
       }
-      alert('Đã lưu thành công!');
+      showSuccessToast('Đã lưu thành công!');
       fetchExamData();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lưu thất bại');
+      showErrorToast(err.response?.data?.message || 'Lưu thất bại');
     } finally {
       setSaving(false);
     }

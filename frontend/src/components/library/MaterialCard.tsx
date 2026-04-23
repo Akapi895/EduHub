@@ -56,9 +56,13 @@ interface MaterialCardProps {
   onRemoveFromFolder?: (materialId: string) => void;
   onCopy?: (materialId: string, folderId: string) => void;
   onShare?: (materialId: string) => void;
+  onUnshare?: (materialId: string) => void;
   onSave?: (materialId: string) => void;
   onDelete?: (materialId: string) => void;
   mode?: 'personal' | 'system';
+  shareLabel?: string;
+  canSave?: boolean;
+  canUnshare?: boolean;
 }
 
 export default function MaterialCard({
@@ -68,13 +72,16 @@ export default function MaterialCard({
   onRemoveFromFolder,
   onCopy,
   onShare,
+  onUnshare,
   onSave,
   onDelete,
   mode,
+  shareLabel = 'Đẩy lên thư viện chung',
+  canSave = true,
+  canUnshare = false,
 }: MaterialCardProps) {
   const Icon = typeIcons[material.material_type] || FileText;
   const badge = getMaterialBadge(material.material_type);
-  const isInteractiveBook = material.material_type === 'interactive_book';
   const [menuOpen, setMenuOpen] = useState(false);
   const [submenu, setSubmenu] = useState<'copy' | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -95,11 +102,11 @@ export default function MaterialCard({
     e.dataTransfer.effectAllowed = 'copyMove';
   };
 
-  const hasMenu = folders || onShare || onSave || onDelete;
+  const hasMenu = folders || onShare || onUnshare || onSave || onDelete;
 
   return (
     <div
-      draggable={Boolean(folders) && !isInteractiveBook}
+      draggable={Boolean(folders)}
       onDragStart={handleDragStart}
       onClick={onClick}
       className="group relative cursor-pointer overflow-hidden rounded-card bg-white shadow-md transition-all duration-200 hover:scale-[1.02] hover:shadow-lg"
@@ -146,7 +153,7 @@ export default function MaterialCard({
                   </button>
                 )}
 
-                {!isInteractiveBook && folders && folders.length > 0 && onCopy && (
+                {folders && folders.length > 0 && onCopy && (
                   <button
                     className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-gray-50"
                     onClick={(e) => {
@@ -173,7 +180,7 @@ export default function MaterialCard({
                     </button>
                   ))}
 
-                {mode === 'personal' && onShare && !isInteractiveBook && (
+                {mode === 'personal' && onShare && (
                   <button
                     className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-gray-50"
                     onClick={(e) => {
@@ -182,11 +189,24 @@ export default function MaterialCard({
                       setMenuOpen(false);
                     }}
                   >
-                    <Share2 className="h-4 w-4" /> Chia sẻ vào thư viện chung
+                    <Share2 className="h-4 w-4" /> {shareLabel}
                   </button>
                 )}
 
-                {mode === 'system' && onSave && !isInteractiveBook && (
+                {mode === 'system' && canUnshare && onUnshare && (
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-gray-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnshare(material.id);
+                      setMenuOpen(false);
+                    }}
+                  >
+                    <Share2 className="h-4 w-4" /> Gỡ khỏi thư viện chung
+                  </button>
+                )}
+
+                {mode === 'system' && canSave && onSave && (
                   <button
                     className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-gray-50"
                     onClick={(e) => {
@@ -230,10 +250,10 @@ export default function MaterialCard({
           <span>{material.subject}</span>
           <span>{formatDate(material.created_at)}</span>
         </div>
-        {isInteractiveBook && (
+        {material.material_type === 'interactive_book' && (
           <div className="mt-2 space-y-1">
             <p className="text-xs text-purple-600">
-              {material.interactive_status === 'published' ? 'Đã phát hành' : 'Bản nháp'}
+              {material.interactive_status === 'published' ? 'Đã phát hành' : 'Chưa phát hành'}
               {material.estimated_duration ? ` • ${material.estimated_duration} phút` : ''}
             </p>
             <p className="text-xs font-medium text-slate-500">

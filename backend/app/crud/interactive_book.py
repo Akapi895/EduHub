@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -56,6 +57,56 @@ def update_draft(
         interactive_book.estimated_duration = estimated_duration
     db.commit()
     db.refresh(interactive_book)
+    return interactive_book
+
+
+def clone_book(
+    db: Session,
+    *,
+    source: InteractiveBook,
+    material_id: str,
+    created_by: str,
+    commit: bool = True,
+) -> InteractiveBook:
+    interactive_book = InteractiveBook(
+        material_id=material_id,
+        created_by=created_by,
+        status=source.status,
+        draft_manifest=deepcopy(source.draft_manifest),
+        published_manifest=deepcopy(source.published_manifest),
+        manifest_version=source.manifest_version,
+        entry_scene_id=source.entry_scene_id,
+        estimated_duration=source.estimated_duration,
+        published_at=source.published_at,
+    )
+    db.add(interactive_book)
+    if commit:
+        db.commit()
+        db.refresh(interactive_book)
+    else:
+        db.flush()
+    return interactive_book
+
+
+def sync_book_snapshot(
+    db: Session,
+    *,
+    interactive_book: InteractiveBook,
+    source: InteractiveBook,
+    commit: bool = True,
+) -> InteractiveBook:
+    interactive_book.status = source.status
+    interactive_book.draft_manifest = deepcopy(source.draft_manifest)
+    interactive_book.published_manifest = deepcopy(source.published_manifest)
+    interactive_book.manifest_version = source.manifest_version
+    interactive_book.entry_scene_id = source.entry_scene_id
+    interactive_book.estimated_duration = source.estimated_duration
+    interactive_book.published_at = source.published_at
+    if commit:
+        db.commit()
+        db.refresh(interactive_book)
+    else:
+        db.flush()
     return interactive_book
 
 

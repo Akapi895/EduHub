@@ -111,15 +111,9 @@ export default function InteractiveBookStepGeneral({
             />
           </div>
 
-          <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
-            <input
-              type="checkbox"
-              checked={form.is_system}
-              disabled={readOnly}
-              onChange={(event) => onFormChange({ is_system: event.target.checked })}
-            />
-            Đưa sách này vào thư viện hệ thống
-          </label>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Mọi lần lưu ở trình biên soạn này đều cập nhật trực tiếp vào thư viện cá nhân của giáo viên. Nếu cần chia sẻ cho đồng nghiệp, hãy thực hiện từ thư viện sau khi hoàn tất nội dung.
+          </div>
         </div>
       </div>
     </section>
