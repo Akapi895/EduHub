@@ -34,6 +34,8 @@ import NotFound from '@/pages/NotFound';
 
 const TeacherInteractiveBookEditor = lazy(() => import('@/pages/teacher/InteractiveBookEditor'));
 const StudentInteractiveBook = lazy(() => import('@/pages/student/InteractiveBook'));
+const StudentGames = lazy(() => import('@/pages/student/Games'));
+const StudentGamePlayer = lazy(() => import('@/pages/student/GamePlayer'));
 
 function withLazyShell(element: ReactNode) {
   return (
@@ -54,6 +56,7 @@ export const routes: RouteObject[] = [
   { path: '/register', element: <Register /> },
   { path: '/student/interactive-books/:id', element: withLazyShell(<StudentInteractiveBook />) },
   { path: '/student/interactive-books/:id/scenes/:sceneId', element: withLazyShell(<StudentInteractiveBook />) },
+  { path: '/student/games/:slug', element: withLazyShell(<StudentGamePlayer />) },
   {
     path: '/teacher',
     element: <DashboardLayout />,
@@ -85,6 +88,7 @@ export const routes: RouteObject[] = [
       { path: 'classes/:id', element: <StudentClassDetail /> },
       { path: 'library', element: <StudentLibrary /> },
       { path: 'library/:id', element: <MaterialDetail /> },
+      { path: 'games', element: withLazyShell(<StudentGames />) },
       { path: 'exam/:id', element: <StudentExam /> },
       { path: 'exams/:id', element: <StudentExam /> },
       { path: 'exams', element: <StudentExams /> },
