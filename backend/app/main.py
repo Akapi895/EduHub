@@ -4,8 +4,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import settings
 from app.api.v1.router import api_router
+from app.core.config import settings
 from app.db.init_db import create_tables
 
 logger = logging.getLogger(__name__)
@@ -23,21 +23,25 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
     lifespan=lifespan,
 )
 
-# CORS — allow all origins for development
+cors_origins = settings.cors_origins
+cors_origin_regex = settings.cors_origin_regex
+if not cors_origins and not cors_origin_regex:
+    cors_origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_origin_regex=cors_origin_regex,
+    allow_credentials=bool(cors_origins or cors_origin_regex),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount API router
 app.include_router(api_router, prefix="/api/v1")
 
 

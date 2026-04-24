@@ -1,3 +1,4 @@
+import logging
 from sqlalchemy import text, inspect
 from app.db.base import Base
 from app.db.session import engine
@@ -16,6 +17,8 @@ from app.models.interactive_book import (  # noqa: F401
     InteractiveBookEvent,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _add_column_if_missing(conn, table: str, column: str, col_type: str, default=None):
     inspector = inspect(conn)
@@ -23,7 +26,7 @@ def _add_column_if_missing(conn, table: str, column: str, col_type: str, default
     if column not in cols:
         default_clause = f" DEFAULT {default}" if default is not None else ""
         conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}"))
-        print(f"[DB] Added column {table}.{column}")
+        logger.info("Added missing column %s.%s", table, column)
 
 
 def _migrate(conn):
@@ -41,7 +44,7 @@ def create_tables(*, run_legacy_migrations: bool = False) -> None:
         with engine.connect() as conn:
             _migrate(conn)
             conn.commit()
-    print("[DB] All tables created successfully.")
+    logger.info("Database tables are ready.")
 
 
 if __name__ == "__main__":

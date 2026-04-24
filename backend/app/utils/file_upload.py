@@ -1,6 +1,7 @@
 """File upload utilities for Cloudinary-backed assets."""
 
 from dataclasses import dataclass
+import logging
 from pathlib import PurePosixPath
 import re
 from urllib.parse import urlsplit
@@ -29,6 +30,10 @@ IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 VIDEO_EXTENSIONS = {"mp4", "webm"}
 AUDIO_EXTENSIONS = {"mp3", "wav", "ogg", "m4a", "aac", "flac"}
 SIGNED_DOWNLOAD_EXTENSIONS = {"pdf", "docx", "pptx", "xlsx"}
+ALLOWED_FILE_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS | AUDIO_EXTENSIONS | SIGNED_DOWNLOAD_EXTENSIONS
+SAFE_SUB_DIR_PATTERN = re.compile(r"^[a-z0-9]+(?:[a-z0-9/_-]*[a-z0-9])?$")
+
+logger = logging.getLogger(__name__)
 
 
 cloudinary.config(
@@ -93,6 +98,15 @@ def _infer_resource_type(file: UploadFile) -> str:
     if content_type.startswith("image/") or extension in IMAGE_EXTENSIONS:
         return "image"
     return "raw"
+
+
+def normalize_upload_sub_dir(sub_dir: str | None) -> str:
+    normalized = (sub_dir or "").strip().strip("/")
+    if not normalized:
+        return ""
+    if ".." in normalized or len(normalized) > 64 or not SAFE_SUB_DIR_PATTERN.fullmatch(normalized):
+        raise HTTPException(status_code=400, detail="Upload target is not allowed.")
+    return normalized
 
 
 def parse_cloudinary_asset_url(file_url: str | None) -> ParsedCloudinaryAsset | None:
@@ -199,7 +213,17 @@ def build_material_access_urls(
 
 async def save_upload_file(file: UploadFile, sub_dir: str = "") -> UploadedAssetInfo:
     """Upload a file to Cloudinary and return normalized metadata."""
-    if file.content_type and file.content_type not in ALLOWED_MIME_TYPES:
+    content_type = (file.content_type or "").lower()
+    extension = get_file_extension(file.filename or "")
+    normalized_sub_dir = normalize_upload_sub_dir(sub_dir)
+
+    if not extension or extension not in ALLOWED_FILE_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="File extension is not allowed.",
+        )
+
+    if content_type and content_type not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=400,
             detail=f"File type '{file.content_type}' is not allowed.",
@@ -212,7 +236,7 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> UploadedAsset
             detail=f"File exceeds the {MAX_FILE_SIZE_MB}MB size limit.",
         )
 
-    folder = f"eduhub/{sub_dir}" if sub_dir else "eduhub"
+    folder = f"eduhub/{normalized_sub_dir}" if normalized_sub_dir else "eduhub"
     resource_type = _infer_resource_type(file)
 
     try:
@@ -224,7 +248,12 @@ async def save_upload_file(file: UploadFile, sub_dir: str = "") -> UploadedAsset
             unique_filename=True,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(exc)}") from exc
+        logger.exception(
+            "Cloudinary upload failed for sub_dir=%s filename=%s",
+            normalized_sub_dir,
+            file.filename,
+        )
+        raise HTTPException(status_code=500, detail="Upload failed.") from exc
 
     file_url = result["secure_url"]
     return UploadedAssetInfo(

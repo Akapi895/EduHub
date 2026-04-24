@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import field_validator
@@ -22,6 +23,9 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440  # 24h
+    expose_api_docs: bool | None = None
+    cors_origins: list[str] = []
+    cors_origin_regex: str | None = None
 
     database_url: str = "postgresql://eduhub:eduhub@localhost:5433/eduhub"
     db_bootstrap_on_startup: bool = False
@@ -44,6 +48,17 @@ class Settings(BaseSettings):
                 return False
             if normalized in {"debug", "development", "dev"}:
                 return True
+        return value
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def normalize_cors_origins(cls, value: Any):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, (list, tuple, set)):
+            return [str(item).strip() for item in value if str(item).strip()]
         return value
 
     @staticmethod
@@ -77,6 +92,12 @@ class Settings(BaseSettings):
         if self.normalized_database_url.startswith("sqlite"):
             return {"check_same_thread": False}
         return {}
+
+    @property
+    def api_docs_enabled(self) -> bool:
+        if self.expose_api_docs is None:
+            return self.debug
+        return self.expose_api_docs
 
 
 @lru_cache
