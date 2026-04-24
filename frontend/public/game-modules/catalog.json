@@ -1,0 +1,9 @@
+{
+  "games": [
+    {
+      "slug": "gold-miner",
+      "manifest": "/game-modules/gold-miner/manifest.json",
+      "featured": true
+    }
+  ]
+}

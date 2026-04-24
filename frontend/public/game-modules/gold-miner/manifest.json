@@ -1,0 +1,26 @@
+{
+  "id": "gold-miner",
+  "slug": "gold-miner",
+  "title": "Thợ mỏ vàng",
+  "short_description": "Trò chơi canvas cổ điển được tích hợp vào EduHub dưới dạng module độc lập.",
+  "description": "Thợ mỏ vàng được đóng gói theo mô hình game module: runtime chạy trong iframe sandbox, tài nguyên tách riêng theo thư mục, host shell quản lý vòng đời và nhận telemetry qua postMessage. Những game khác stack vẫn có thể dùng chung nền tảng này nếu chỉ cần cung cấp một entry web hợp lệ.",
+  "thumbnail": "/game-modules/gold-miner/images/background.png",
+  "entry": "/game-modules/gold-miner/index.html",
+  "tags": ["Canvas", "Arcade", "Iframe sandbox", "Sự kiện bridge"],
+  "instructions": [
+    "Nhấn chuột hoặc bấm phím bất kỳ để thả móc.",
+    "Đạt mục tiêu điểm trước khi hết giờ để sang màn tiếp theo.",
+    "Nếu thua, dùng nút Chơi lại của EduHub để bắt đầu phiên mới."
+  ],
+  "runtime": {
+    "kind": "iframe",
+    "sandbox": "allow-scripts allow-same-origin",
+    "allow": "fullscreen",
+    "aspect_ratio": "16 / 9"
+  },
+  "bridge": {
+    "enabled": true,
+    "version": 1,
+    "capabilities": ["ready", "state", "progress", "complete", "pause", "resume", "restart"]
+  }
+}
