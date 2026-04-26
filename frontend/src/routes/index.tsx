@@ -33,6 +33,9 @@ import StudentSettings from '@/pages/student/Settings';
 import NotFound from '@/pages/NotFound';
 
 const TeacherInteractiveBookEditor = lazy(() => import('@/pages/teacher/InteractiveBookEditor'));
+const TeacherGames = lazy(() => import('@/pages/teacher/Games'));
+const TeacherGamePackageCreate = lazy(() => import('@/pages/teacher/GamePackageCreate'));
+const TeacherGamePackageDetail = lazy(() => import('@/pages/teacher/GamePackageDetail'));
 const StudentInteractiveBook = lazy(() => import('@/pages/student/InteractiveBook'));
 const StudentGames = lazy(() => import('@/pages/student/Games'));
 const StudentGamePlayer = lazy(() => import('@/pages/student/GamePlayer'));
@@ -56,7 +59,7 @@ export const routes: RouteObject[] = [
   { path: '/register', element: <Register /> },
   { path: '/student/interactive-books/:id', element: withLazyShell(<StudentInteractiveBook />) },
   { path: '/student/interactive-books/:id/scenes/:sceneId', element: withLazyShell(<StudentInteractiveBook />) },
-  { path: '/student/games/:slug', element: withLazyShell(<StudentGamePlayer />) },
+  { path: '/student/games/:packageId', element: withLazyShell(<StudentGamePlayer />) },
   {
     path: '/teacher',
     element: <DashboardLayout />,
@@ -72,6 +75,9 @@ export const routes: RouteObject[] = [
       { path: 'classes', element: <TeacherClasses /> },
       { path: 'classes/:id', element: <TeacherClassDetail /> },
       { path: 'classes/:classId/exams/create', element: <CreateExam /> },
+      { path: 'games', element: withLazyShell(<TeacherGames />) },
+      { path: 'classes/:classId/games/create', element: withLazyShell(<TeacherGamePackageCreate />) },
+      { path: 'games/:packageId', element: withLazyShell(<TeacherGamePackageDetail />) },
       { path: 'exams/:id', element: <TeacherExamDetail /> },
       { path: 'exams/:examId/submissions/:submissionId', element: <TeacherSubmissionReview /> },
       { path: 'inbox', element: <TeacherInbox /> },

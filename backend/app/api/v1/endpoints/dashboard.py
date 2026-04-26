@@ -2,20 +2,49 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.db.session import get_db
 from app.crud import class_crud
 from app.crud.exam import _compute_status
 from app.core.dependencies import get_current_user
+from app.models.class_model import ClassMaterial, ClassStudent
+from app.models.content_package import ContentPackage, ContentPackageAssignment
+from app.models.package_attempt import PackageAttempt
 from app.models.user import User
-from app.models.exam import Exam
-from app.models.submission import Submission
-from app.models.class_model import ClassStudent, ClassMaterial
-from app.utils.enums import ExamStatus, SubmissionStatus
+from app.utils.enums import ExamStatus
 from app.utils.responses import ok
 
 router = APIRouter(tags=["Dashboard"])
+
+
+def _load_exam_packages_for_classes(db: Session, class_ids: list[str]) -> list[ContentPackage]:
+    if not class_ids:
+        return []
+    return (
+        db.query(ContentPackage)
+        .options(
+            selectinload(ContentPackage.assignments).selectinload(ContentPackageAssignment.class_),
+            selectinload(ContentPackage.exam_config),
+            selectinload(ContentPackage.question_bank),
+        )
+        .join(ContentPackageAssignment, ContentPackageAssignment.package_id == ContentPackage.id)
+        .filter(
+            ContentPackage.package_type == "exam",
+            ContentPackageAssignment.class_id.in_(class_ids),
+            ContentPackageAssignment.is_active.is_(True),
+        )
+        .all()
+    )
+
+
+def _assignment_for_class(package: ContentPackage, class_id: str | None = None) -> ContentPackageAssignment | None:
+    active = [assignment for assignment in package.assignments if assignment.is_active]
+    if class_id:
+        for assignment in active:
+            if assignment.class_id == class_id:
+                return assignment
+    return active[0] if active else None
 
 
 @router.get("/dashboard/teacher")
@@ -25,48 +54,43 @@ def teacher_dashboard(db: Session = Depends(get_db), teacher: User = Depends(get
     total_students = sum(len(c.students) for c in classes)
     class_ids = [c.id for c in classes]
 
-    # Batch-load all exams for teacher's classes
-    all_exams: list[Exam] = []
-    if class_ids:
-        all_exams = db.query(Exam).filter(Exam.class_id.in_(class_ids)).all()
-        for e in all_exams:
-            e.status = _compute_status(e)
+    all_exams = _load_exam_packages_for_classes(db, class_ids)
+    for exam in all_exams:
+        exam.runtime_status = _compute_status(exam)  # type: ignore[attr-defined]
 
-    exam_ids = [e.id for e in all_exams]
-
-    # Upcoming exams — full details for display
+    exam_ids = [exam.id for exam in all_exams]
     upcoming_exams = sorted(
-        [e for e in all_exams if e.status == ExamStatus.upcoming],
-        key=lambda e: e.start_time or datetime.max,
+        [exam for exam in all_exams if getattr(exam, "runtime_status", None) == ExamStatus.upcoming],
+        key=lambda exam: exam.exam_config.start_time if exam.exam_config and exam.exam_config.start_time else datetime.max,
     )[:5]
 
-    # Ungraded submissions: submitted but total_score is null
     ungraded_count = 0
     recent_submissions_data: list[dict] = []
     if exam_ids:
         ungraded_q = (
-            db.query(Submission)
+            db.query(PackageAttempt)
+            .options(selectinload(PackageAttempt.package).selectinload(ContentPackage.assignments).selectinload(ContentPackageAssignment.class_), selectinload(PackageAttempt.user))
             .filter(
-                Submission.exam_id.in_(exam_ids),
-                Submission.status == SubmissionStatus.submitted,
-                Submission.total_score.is_(None),
+                PackageAttempt.package_id.in_(exam_ids),
+                PackageAttempt.status == "submitted",
             )
-            .order_by(Submission.submitted_at.desc())
+            .order_by(PackageAttempt.submitted_at.desc())
         )
         ungraded_count = ungraded_q.count()
-        recent_subs = ungraded_q.limit(5).all()
-        for s in recent_subs:
-            recent_submissions_data.append({
-                "id": s.id,
-                "student_name": s.student.full_name if s.student else None,
-                "exam_id": s.exam_id,
-                "exam_title": s.exam.title if s.exam else None,
-                "class_name": s.exam.class_.name if s.exam and s.exam.class_ else None,
-                "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
-                "total_score": s.total_score,
-            })
+        for submission in ungraded_q.limit(5).all():
+            assignment = _assignment_for_class(submission.package)
+            recent_submissions_data.append(
+                {
+                    "id": submission.id,
+                    "student_name": submission.user.full_name if submission.user else None,
+                    "exam_id": submission.package_id,
+                    "exam_title": submission.package.title if submission.package else None,
+                    "class_name": assignment.class_.name if assignment and assignment.class_ else None,
+                    "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+                    "total_score": submission.score_total,
+                }
+            )
 
-    # Batch counts for classes
     material_counts: dict[str, int] = {}
     exam_counts: dict[str, int] = {}
     if class_ids:
@@ -77,41 +101,47 @@ def teacher_dashboard(db: Session = Depends(get_db), teacher: User = Depends(get
             .all()
         )
         exam_counts = dict(
-            db.query(Exam.class_id, func.count(Exam.id))
-            .filter(Exam.class_id.in_(class_ids))
-            .group_by(Exam.class_id)
+            db.query(ContentPackageAssignment.class_id, func.count(ContentPackageAssignment.id))
+            .join(ContentPackage, ContentPackage.id == ContentPackageAssignment.package_id)
+            .filter(
+                ContentPackageAssignment.class_id.in_(class_ids),
+                ContentPackage.package_type == "exam",
+            )
+            .group_by(ContentPackageAssignment.class_id)
             .all()
         )
 
-    return ok(data={
-        "total_classes": total_classes,
-        "total_students": total_students,
-        "total_exams": len(all_exams),
-        "ungraded_count": ungraded_count,
-        "recent_submissions": recent_submissions_data,
-        "upcoming_exams": [
-            {
-                "id": e.id,
-                "title": e.title,
-                "class_name": e.class_.name if e.class_ else None,
-                "start_time": e.start_time.isoformat() if e.start_time else None,
-                "question_count": len(e.questions),
-            }
-            for e in upcoming_exams
-        ],
-        "classes": [
-            {
-                "id": c.id,
-                "name": c.name,
-                "description": c.description,
-                "thumbnail_url": c.thumbnail_url,
-                "student_count": len(c.students),
-                "material_count": material_counts.get(c.id, 0),
-                "exam_count": exam_counts.get(c.id, 0),
-            }
-            for c in classes
-        ],
-    })
+    return ok(
+        data={
+            "total_classes": total_classes,
+            "total_students": total_students,
+            "total_exams": len(all_exams),
+            "ungraded_count": ungraded_count,
+            "recent_submissions": recent_submissions_data,
+            "upcoming_exams": [
+                {
+                    "id": exam.id,
+                    "title": exam.title,
+                    "class_name": _assignment_for_class(exam).class_.name if _assignment_for_class(exam) and _assignment_for_class(exam).class_ else None,
+                    "start_time": exam.exam_config.start_time.isoformat() if exam.exam_config and exam.exam_config.start_time else None,
+                    "question_count": len(exam.question_bank.items) if exam.question_bank else 0,
+                }
+                for exam in upcoming_exams
+            ],
+            "classes": [
+                {
+                    "id": class_.id,
+                    "name": class_.name,
+                    "description": class_.description,
+                    "thumbnail_url": class_.thumbnail_url,
+                    "student_count": len(class_.students),
+                    "material_count": material_counts.get(class_.id, 0),
+                    "exam_count": exam_counts.get(class_.id, 0),
+                }
+                for class_ in classes
+            ],
+        }
+    )
 
 
 @router.get("/dashboard/student")
@@ -120,84 +150,93 @@ def student_dashboard(db: Session = Depends(get_db), student: User = Depends(get
     total_classes = len(classes)
     class_ids = [c.id for c in classes]
 
-    # Batch-load all exams from enrolled classes
-    all_exams: list[Exam] = []
-    if class_ids:
-        all_exams = db.query(Exam).filter(Exam.class_id.in_(class_ids)).all()
-        for e in all_exams:
-            e.status = _compute_status(e)
+    all_exams = _load_exam_packages_for_classes(db, class_ids)
+    for exam in all_exams:
+        exam.runtime_status = _compute_status(exam)  # type: ignore[attr-defined]
 
-    # All submissions for this student
+    exam_ids = [exam.id for exam in all_exams]
     all_submissions = (
-        db.query(Submission)
-        .filter(Submission.student_id == student.id)
-        .order_by(Submission.submitted_at.desc())
+        db.query(PackageAttempt)
+        .options(selectinload(PackageAttempt.package).selectinload(ContentPackage.assignments).selectinload(ContentPackageAssignment.class_))
+        .filter(
+            PackageAttempt.user_id == student.id,
+            PackageAttempt.package_id.in_(exam_ids) if exam_ids else False,
+        )
+        .order_by(PackageAttempt.submitted_at.desc(), PackageAttempt.started_at.desc())
         .all()
+        if exam_ids
+        else []
     )
 
-    # Build exam→submissions lookup
-    exam_subs: dict[str, list[Submission]] = {}
-    for s in all_submissions:
-        exam_subs.setdefault(s.exam_id, []).append(s)
+    exam_subs: dict[str, list[PackageAttempt]] = {}
+    for submission in all_submissions:
+        exam_subs.setdefault(submission.package_id, []).append(submission)
 
-    # Compute per-exam student status
     completed_exam_ids: set[str] = set()
     scores: list[float] = []
-    for exam_id, subs in exam_subs.items():
-        completed = [s for s in subs if s.status != SubmissionStatus.in_progress]
+    for exam_id, submissions in exam_subs.items():
+        completed = [submission for submission in submissions if submission.status != "in_progress"]
         if completed:
             completed_exam_ids.add(exam_id)
-            best = max((s.total_score for s in completed if s.total_score is not None), default=None)
+            best = max((submission.score_total for submission in completed if submission.score_total is not None), default=None)
             if best is not None:
                 scores.append(best)
 
     completed_count = len(completed_exam_ids)
     average_score = round(sum(scores) / len(scores), 1) if scores else None
 
-    # Todo exams: open/upcoming AND not yet completed
     todo_exams_list = [
-        e for e in all_exams
-        if e.status in (ExamStatus.open, ExamStatus.upcoming) and e.id not in completed_exam_ids
+        exam
+        for exam in all_exams
+        if getattr(exam, "runtime_status", None) in (ExamStatus.open, ExamStatus.upcoming) and exam.id not in completed_exam_ids
     ]
-    # Sort: open first, then upcoming; within each group by start_time
     status_order = {ExamStatus.open: 0, ExamStatus.upcoming: 1}
-    todo_exams_list.sort(key=lambda e: (status_order.get(e.status, 2), e.start_time or datetime.max))
+    todo_exams_list.sort(
+        key=lambda exam: (
+            status_order.get(getattr(exam, "runtime_status", ""), 2),
+            exam.exam_config.start_time if exam.exam_config and exam.exam_config.start_time else datetime.max,
+        )
+    )
+
     todo_exams_data = []
-    for e in todo_exams_list[:6]:
-        subs = exam_subs.get(e.id, [])
-        in_progress = any(s.status == SubmissionStatus.in_progress for s in subs)
-        todo_exams_data.append({
-            "id": e.id,
-            "class_id": e.class_id,
-            "title": e.title,
-            "description": e.description,
-            "thumbnail_url": e.thumbnail_url,
-            "class_name": e.class_.name if e.class_ else None,
-            "status": e.status,
-            "start_time": e.start_time.isoformat() if e.start_time else None,
-            "end_time": e.end_time.isoformat() if e.end_time else None,
-            "question_count": len(e.questions),
-            "student_status": "in_progress" if in_progress else "not_started",
-            "best_score": None,
-        })
+    for exam in todo_exams_list[:6]:
+        submissions = exam_subs.get(exam.id, [])
+        in_progress = any(submission.status == "in_progress" for submission in submissions)
+        assignment = _assignment_for_class(exam)
+        todo_exams_data.append(
+            {
+                "id": exam.id,
+                "class_id": assignment.class_id if assignment else None,
+                "title": exam.title,
+                "description": exam.description,
+                "thumbnail_url": exam.thumbnail_url,
+                "class_name": assignment.class_.name if assignment and assignment.class_ else None,
+                "status": getattr(exam, "runtime_status", ExamStatus.open),
+                "start_time": exam.exam_config.start_time.isoformat() if exam.exam_config and exam.exam_config.start_time else None,
+                "end_time": exam.exam_config.end_time.isoformat() if exam.exam_config and exam.exam_config.end_time else None,
+                "question_count": len(exam.question_bank.items) if exam.question_bank else 0,
+                "student_status": "in_progress" if in_progress else "not_started",
+                "best_score": None,
+            }
+        )
 
-    # Recent results: completed submissions (newest first), max 5
-    completed_subs = [s for s in all_submissions if s.status != SubmissionStatus.in_progress][:5]
-    recent_results = [
-        {
-            "submission_id": s.id,
-            "exam_id": s.exam_id,
-            "exam_title": s.exam.title if s.exam else None,
-            "class_name": s.exam.class_.name if s.exam and s.exam.class_ else None,
-            "total_score": s.total_score,
-            "status": s.status,
-            "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
-            "allow_review": s.exam.allow_review if s.exam else False,
-        }
-        for s in completed_subs
-    ]
+    completed_subs = [submission for submission in all_submissions if submission.status != "in_progress"][:5]
+    recent_results = []
+    for submission in completed_subs:
+        assignment = _assignment_for_class(submission.package)
+        recent_results.append(
+            {
+                "submission_id": submission.id,
+                "exam_id": submission.package_id,
+                "exam_title": submission.package.title if submission.package else None,
+                "class_name": assignment.class_.name if assignment and assignment.class_ else None,
+                "total_score": submission.score_total,
+                "status": submission.status,
+                "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+                "allow_review": submission.package.exam_config.allow_review if submission.package and submission.package.exam_config else False,
+            }
+        )
 
-    # Batch counts for class cards
     material_counts: dict[str, int] = {}
     exam_counts_map: dict[str, int] = {}
     student_counts: dict[str, int] = {}
@@ -209,9 +248,13 @@ def student_dashboard(db: Session = Depends(get_db), student: User = Depends(get
             .all()
         )
         exam_counts_map = dict(
-            db.query(Exam.class_id, func.count(Exam.id))
-            .filter(Exam.class_id.in_(class_ids))
-            .group_by(Exam.class_id)
+            db.query(ContentPackageAssignment.class_id, func.count(ContentPackageAssignment.id))
+            .join(ContentPackage, ContentPackage.id == ContentPackageAssignment.package_id)
+            .filter(
+                ContentPackageAssignment.class_id.in_(class_ids),
+                ContentPackage.package_type == "exam",
+            )
+            .group_by(ContentPackageAssignment.class_id)
             .all()
         )
         student_counts = dict(
@@ -221,28 +264,29 @@ def student_dashboard(db: Session = Depends(get_db), student: User = Depends(get
             .all()
         )
 
-    return ok(data={
-        "total_classes": total_classes,
-        "completed_exams": completed_count,
-        "average_score": average_score,
-        "todo_exam_count": len(todo_exams_list),
-        "todo_exams": todo_exams_data,
-        "recent_results": recent_results,
-        "classes": [
-            {
-                "id": c.id,
-                "name": c.name,
-                "description": c.description,
-                "thumbnail_url": c.thumbnail_url,
-                "teacher_name": c.teacher.full_name if c.teacher else None,
-                "student_count": student_counts.get(c.id, 0),
-                "material_count": material_counts.get(c.id, 0),
-                "exam_count": exam_counts_map.get(c.id, 0),
-            }
-            for c in classes
-        ],
-        # Backward compat
-        "total_exams": len(all_exams),
-        "upcoming_exams": len([e for e in all_exams if e.status == ExamStatus.upcoming]),
-        "pending_submissions": len([s for s in all_submissions if s.status == SubmissionStatus.in_progress]),
-    })
+    return ok(
+        data={
+            "total_classes": total_classes,
+            "completed_exams": completed_count,
+            "average_score": average_score,
+            "todo_exam_count": len(todo_exams_list),
+            "todo_exams": todo_exams_data,
+            "recent_results": recent_results,
+            "classes": [
+                {
+                    "id": class_.id,
+                    "name": class_.name,
+                    "description": class_.description,
+                    "thumbnail_url": class_.thumbnail_url,
+                    "teacher_name": class_.teacher.full_name if class_.teacher else None,
+                    "student_count": student_counts.get(class_.id, 0),
+                    "material_count": material_counts.get(class_.id, 0),
+                    "exam_count": exam_counts_map.get(class_.id, 0),
+                }
+                for class_ in classes
+            ],
+            "total_exams": len(all_exams),
+            "upcoming_exams": len([exam for exam in all_exams if getattr(exam, "runtime_status", None) == ExamStatus.upcoming]),
+            "pending_submissions": len([submission for submission in all_submissions if submission.status == "in_progress"]),
+        }
+    )

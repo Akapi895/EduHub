@@ -28,9 +28,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-cors_origins = settings.cors_origins
+default_dev_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+]
+cors_origins = settings.cors_origins or default_dev_origins
 cors_origin_regex = settings.cors_origin_regex
-if not cors_origins and not cors_origin_regex:
+if not settings.cors_origins and not cors_origin_regex:
     cors_origin_regex = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 app.add_middleware(

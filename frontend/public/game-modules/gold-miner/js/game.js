@@ -21,6 +21,11 @@ let timeH = 0;
 let vlH = 0;
 
 const bridge = window.EduHubGameBridge || null;
+const ITEM_TYPE_PLAN = [3, 4, 5, 3, 4, 5, 0, 1, 0, 1, 2, 2, 6, 7, 6];
+const DEFAULT_TIME_LIMIT_SECONDS = 60;
+const DEFAULT_TARGET_SCORE_BASE = 1000;
+const DEFAULT_TARGET_SCORE_STEP = 180;
+const N = ITEM_TYPE_PLAN.length;
 
 const bg = new Image();
 bg.src = 'images/background.png';
@@ -40,8 +45,6 @@ levelIM.src = 'images/level.png';
 const clockIM = new Image();
 clockIM.src = 'images/clock.png';
 
-let N = -10;
-
 class game {
   constructor() {
     this.canvas = null;
@@ -50,7 +53,21 @@ class game {
     this.gg = [];
     this.isPaused = false;
     this.isFinished = false;
+    this.resultOutcome = null;
     this.lastReportedAt = 0;
+    this.didHostInit = false;
+    this.sessionReady = false;
+    this.answeredQuestionsByLevel = [];
+    this.completedQuestionAttemptIds = new Set();
+    this.timeLimitSeconds = DEFAULT_TIME_LIMIT_SECONDS;
+    this.maxLevels = 1;
+    this.questionPlan = {
+      level_count: 1,
+      capture_slots_by_level: [[]],
+      questions_per_level: [0],
+      target_scores_by_level: [DEFAULT_TARGET_SCORE_BASE],
+    };
+    this.capturedItemsInLevel = 0;
     this.init();
   }
 
@@ -61,7 +78,9 @@ class game {
 
     this.attachBridge();
     this.render();
-    this.newGold();
+    if (!bridge) {
+      this.resetSession();
+    }
     this.loop();
     this.listenKeyboard();
     this.listenMouse();
@@ -81,16 +100,32 @@ class game {
       return;
     }
 
-    bridge.onHostMessage((type) => {
+    bridge.onHostMessage((type, payload) => {
       if (type === 'host:pause') {
         this.isPaused = true;
         this.reportState('paused', true);
         return;
       }
 
-      if (type === 'host:resume' || type === 'host:init') {
+      if (type === 'host:init') {
+        this.applyRuntimeConfig(payload && payload.runtimeConfig ? payload.runtimeConfig : null);
+        this.resetSession();
+        this.didHostInit = true;
         this.isPaused = false;
-        this.reportState(type === 'host:init' ? 'host-init' : 'resumed', true);
+        this.reportState('host-init', true, {
+          questionResult: payload && payload.questionResult ? payload.questionResult : null,
+        });
+        return;
+      }
+
+      if (type === 'host:resume') {
+        if (payload && payload.questionResult) {
+          this.recordQuestionCompletion(payload.questionResult);
+        }
+        this.isPaused = false;
+        this.reportState('resumed', true, {
+          questionResult: payload && payload.questionResult ? payload.questionResult : null,
+        });
         return;
       }
 
@@ -100,8 +135,128 @@ class game {
     });
   }
 
+  applyRuntimeConfig(runtimeConfig) {
+    const questionPlan = runtimeConfig && typeof runtimeConfig.question_plan === 'object'
+      ? runtimeConfig.question_plan
+      : null;
+    const session = runtimeConfig && typeof runtimeConfig.session === 'object'
+      ? runtimeConfig.session
+      : {};
+
+    this.questionPlan = {
+      level_count: Number(questionPlan && questionPlan.level_count) > 0 ? Number(questionPlan.level_count) : 1,
+      capture_slots_by_level: Array.isArray(questionPlan && questionPlan.capture_slots_by_level)
+        ? questionPlan.capture_slots_by_level
+        : [[]],
+      questions_per_level: Array.isArray(questionPlan && questionPlan.questions_per_level)
+        ? questionPlan.questions_per_level
+        : [0],
+      target_scores_by_level: Array.isArray(questionPlan && questionPlan.target_scores_by_level)
+        ? questionPlan.target_scores_by_level
+        : [DEFAULT_TARGET_SCORE_BASE],
+    };
+
+    this.maxLevels = Number(session && session.max_levels) > 0
+      ? Number(session.max_levels)
+      : this.questionPlan.level_count;
+    this.timeLimitSeconds = Number(session && session.time_limit_seconds) > 0
+      ? Number(session.time_limit_seconds)
+      : DEFAULT_TIME_LIMIT_SECONDS;
+  }
+
+  resetSession() {
+    this.sessionReady = false;
+    this.score = 0;
+    this.gg = [];
+    this.isFinished = false;
+    this.isPaused = false;
+    this.resultOutcome = null;
+    this.capturedItemsInLevel = 0;
+    this.answeredQuestionsByLevel = [];
+    this.completedQuestionAttemptIds = new Set();
+    level = -1;
+    time = this.timeLimitSeconds;
+    tager = this.getTargetForLevel(1);
+    this.newGold();
+    this.sessionReady = true;
+  }
+
   scheduleNextLoop(delay = 10) {
     window.setTimeout(() => this.loop(), delay);
+  }
+
+  getTargetForLevel(levelNumber) {
+    if (Array.isArray(this.questionPlan.target_scores_by_level) && this.questionPlan.target_scores_by_level[levelNumber - 1]) {
+      return this.questionPlan.target_scores_by_level[levelNumber - 1];
+    }
+    const index = Math.max(levelNumber - 1, 0);
+    return DEFAULT_TARGET_SCORE_BASE * (index + 1) + DEFAULT_TARGET_SCORE_STEP * index;
+  }
+
+  getQuestionQuotaForLevel(levelNumber) {
+    if (!Array.isArray(this.questionPlan.questions_per_level)) {
+      return 0;
+    }
+    return Number(this.questionPlan.questions_per_level[levelNumber - 1] || 0);
+  }
+
+  levelQuestionScheduleCompleted(levelNumber) {
+    return this.getAnsweredQuestionsForLevel(levelNumber) >= this.getQuestionQuotaForLevel(levelNumber);
+  }
+
+  getAnsweredQuestionsForLevel(levelNumber) {
+    return Number(this.answeredQuestionsByLevel[levelNumber - 1] || 0);
+  }
+
+  getRemainingQuestionsForLevel(levelNumber) {
+    return Math.max(this.getQuestionQuotaForLevel(levelNumber) - this.getAnsweredQuestionsForLevel(levelNumber), 0);
+  }
+
+  recordQuestionCompletion(questionResultPayload) {
+    if (!questionResultPayload || typeof questionResultPayload !== 'object') {
+      return;
+    }
+
+    const payload = questionResultPayload.question_result && typeof questionResultPayload.question_result === 'object'
+      ? questionResultPayload.question_result
+      : questionResultPayload;
+    const questionAttemptId = payload.id || questionResultPayload.question_attempt_id || questionResultPayload.questionAttemptId;
+    const levelValue = payload.source_payload && typeof payload.source_payload === 'object'
+      ? payload.source_payload.level
+      : questionResultPayload.level;
+    const levelNumber = Number(levelValue || 0);
+
+    if (!questionAttemptId || levelNumber <= 0 || this.completedQuestionAttemptIds.has(questionAttemptId)) {
+      return;
+    }
+
+    this.completedQuestionAttemptIds.add(questionAttemptId);
+    this.answeredQuestionsByLevel[levelNumber - 1] = this.getAnsweredQuestionsForLevel(levelNumber) + 1;
+  }
+
+  isLastLevel() {
+    return Math.max(level + 1, 1) >= this.maxLevels;
+  }
+
+  advanceToNextLevel(reason) {
+    if (this.isLastLevel()) {
+      this.handleWin(reason);
+      return;
+    }
+
+    if (bridge && typeof bridge.progress === 'function') {
+      bridge.progress({
+        status: 'running',
+        reason,
+        level: Math.max(level + 1, 1),
+        nextLevel: Math.max(level + 2, 2),
+        score: this.score,
+        targetScore: tager,
+        timeRemaining: Math.max(0, Math.floor(time)),
+      });
+    }
+
+    this.newGold();
   }
 
   newGold() {
@@ -113,11 +268,15 @@ class game {
     drag = false;
     timeH = -1;
     vlH = 0;
-    time = 60;
+    time = this.timeLimitSeconds;
     level += 1;
-    tager = (level + 1) * 1000 + level * level * 120;
+    tager = this.getTargetForLevel(Math.max(level + 1, 1));
+    this.capturedItemsInLevel = 0;
+    this.resultOutcome = null;
     this.initGold();
-    this.reportState('level-start', true);
+    this.reportState('level-start', true, {
+      questionsPlannedInLevel: this.getQuestionQuotaForLevel(Math.max(level + 1, 1)),
+    });
   }
 
   listenKeyboard() {
@@ -133,17 +292,25 @@ class game {
   }
 
   solve() {
-    if (!drag && !this.isFinished) {
-      drag = true;
-      d = true;
-      speedReturn = this.getWidth() / 2;
-      index = -1;
-      this.reportState('hook-launch', true);
+    if (!this.sessionReady || this.isFinished || drag) {
+      return;
     }
+    drag = true;
+    d = true;
+    speedReturn = this.getWidth() / 2;
+    index = -1;
+    this.reportState('hook-launch', true);
   }
 
   loop() {
     if (this.isFinished) {
+      return;
+    }
+
+    if (!this.sessionReady) {
+      this.render();
+      this.drawWaitingState();
+      this.scheduleNextLoop(100);
       return;
     }
 
@@ -158,44 +325,70 @@ class game {
     this.draw();
     this.reportState('tick');
 
+    const currentLevel = Math.max(level + 1, 1);
     const clearedAllTargets = this.checkWin();
-    if (time <= 0 || clearedAllTargets) {
-      if (this.score >= tager || clearedAllTargets) {
-        if (bridge && typeof bridge.progress === 'function') {
-          bridge.progress({
-            status: 'running',
-            reason: 'level-cleared',
-            level: Math.max(level + 1, 1),
-            score: this.score,
-            targetScore: tager,
-            timeRemaining: Math.max(0, Math.floor(time)),
-          });
-        }
-        this.newGold();
-        this.scheduleNextLoop(10);
+    if (clearedAllTargets) {
+      this.advanceToNextLevel('level-cleared');
+      return;
+    }
+
+    if (time <= 0) {
+      if (this.score >= tager && this.levelQuestionScheduleCompleted(currentLevel)) {
+        this.advanceToNextLevel('target-reached');
         return;
       }
 
-      this.handleLose();
+      this.handleLose(this.score >= tager ? 'questions-incomplete' : 'time-up');
       return;
     }
 
     this.scheduleNextLoop(10);
   }
 
-  handleLose() {
+  handleLose(reason) {
     this.isFinished = true;
+    this.resultOutcome = 'failed';
     this.draw();
-    this.reportState('lose', true, { status: 'completed', outcome: 'failed', timeRemaining: 0 });
+    this.reportState('lose', true, {
+      status: 'completed',
+      outcome: 'failed',
+      reason: reason || 'time-up',
+      timeRemaining: 0,
+    });
 
     if (bridge && typeof bridge.complete === 'function') {
       bridge.complete({
         status: 'completed',
         outcome: 'failed',
+        reason: reason || 'time-up',
         score: this.score,
         level: Math.max(level + 1, 1),
         targetScore: tager,
         timeRemaining: 0,
+      });
+    }
+  }
+
+  handleWin(reason) {
+    this.isFinished = true;
+    this.resultOutcome = 'success';
+    this.draw();
+    this.reportState('win', true, {
+      status: 'completed',
+      outcome: 'success',
+      reason,
+      timeRemaining: Math.max(0, Math.floor(time)),
+    });
+
+    if (bridge && typeof bridge.complete === 'function') {
+      bridge.complete({
+        status: 'completed',
+        outcome: 'success',
+        reason,
+        score: this.score,
+        level: Math.max(level + 1, 1),
+        targetScore: tager,
+        timeRemaining: Math.max(0, Math.floor(time)),
       });
     }
   }
@@ -220,6 +413,10 @@ class game {
       timeRemaining: Math.max(0, Math.floor(time)),
       timeRemainingPrecise: Math.max(0, Number(time.toFixed(2))),
       dragging: drag,
+      capturesInLevel: this.capturedItemsInLevel,
+      answeredQuestionsInLevel: this.getAnsweredQuestionsForLevel(Math.max(level + 1, 1)),
+      questionQuotaInLevel: this.getQuestionQuotaForLevel(Math.max(level + 1, 1)),
+      remainingQuestionsInLevel: this.getRemainingQuestionsForLevel(Math.max(level + 1, 1)),
       ...extra,
     });
   }
@@ -251,13 +448,39 @@ class game {
 
         for (let i = 0; i < N; i += 1) {
           if (this.gg[i].alive && this.range(Xh, Yh, this.gg[i].x, this.gg[i].y) <= 2 * this.getWidth()) {
+            const collectedItem = this.gg[i];
+            const scoreBefore = this.score;
             this.gg[i].alive = false;
             this.score += this.gg[i].score;
+            this.capturedItemsInLevel += 1;
             timeH = time - 0.7;
             vlH = this.gg[i].score;
+
+            const currentLevel = Math.max(level + 1, 1);
+            if (bridge && typeof bridge.questionTrigger === 'function') {
+              bridge.questionTrigger({
+                triggerType: 'item_captured',
+                triggerKey: 'item_type',
+                triggerValue: collectedItem.itemType || 'rock',
+                eventPayload: {
+                  rawType: collectedItem.type,
+                  item_instance_id: collectedItem.instanceId,
+                  capture_index_in_level: this.capturedItemsInLevel,
+                  scoreValue: collectedItem.score,
+                  scoreBefore: scoreBefore,
+                  scoreAfter: this.score,
+                  level: currentLevel,
+                  targetScore: tager,
+                  timeRemaining: Math.max(0, Math.floor(time)),
+                },
+              });
+            }
+
             this.reportState('item-collected', true, {
               collectedScore: this.gg[i].score,
+              collectedItemType: collectedItem.itemType || 'rock',
               score: this.score,
+              captureIndexInLevel: this.capturedItemsInLevel,
             });
           }
         }
@@ -294,19 +517,22 @@ class game {
         r = R;
       }
       MaxLeng = this.range(XXX, YYY, game_W - 2 * this.getWidth(), game_H - 2 * this.getWidth());
-      if (N < 0) {
-        N = game_W * game_H / (20 * this.getWidth() * this.getWidth());
-      }
     }
   }
 
   draw() {
     this.clearScreen();
 
+    if (!this.sessionReady) {
+      this.drawWaitingState();
+      return;
+    }
+
     for (let i = 0; i < N; i += 1) {
-      if (this.gg[i].alive) {
-        this.gg[i].update();
-        this.gg[i].draw();
+      const item = this.gg[i];
+      if (item && item.alive) {
+        item.update();
+        item.draw();
       }
     }
 
@@ -334,6 +560,19 @@ class game {
     }
   }
 
+  drawWaitingState() {
+    this.context.fillStyle = 'rgba(2, 6, 23, 0.72)';
+    this.context.fillRect(0, 0, game_W, game_H);
+
+    this.context.fillStyle = '#FFFFFF';
+    this.context.textAlign = 'center';
+    this.context.font = `bold ${Math.max(28, this.getWidth())}px Arial`;
+    this.context.fillText('Đang chuẩn bị màn chơi', game_W / 2, game_H / 2 - this.getWidth() * 0.4);
+    this.context.font = `${Math.max(16, this.getWidth() * 0.45)}px Arial`;
+    this.context.fillText('EduHub đang đồng bộ dữ liệu câu hỏi và phiên chơi.', game_W / 2, game_H / 2 + this.getWidth() * 0.4);
+    this.context.textAlign = 'start';
+  }
+
   drawResultOverlay() {
     this.context.fillStyle = 'rgba(2, 6, 23, 0.78)';
     this.context.fillRect(0, 0, game_W, game_H);
@@ -341,11 +580,17 @@ class game {
     this.context.fillStyle = '#FFFFFF';
     this.context.textAlign = 'center';
     this.context.font = `bold ${Math.max(32, this.getWidth() * 1.3)}px Arial`;
-    this.context.fillText('Game Over', game_W / 2, game_H / 2 - this.getWidth());
+    this.context.fillText(this.resultOutcome === 'success' ? 'Hoàn thành' : 'Game Over', game_W / 2, game_H / 2 - this.getWidth());
 
     this.context.font = `${Math.max(20, this.getWidth() * 0.6)}px Arial`;
     this.context.fillText(`Score: ${this.score}`, game_W / 2, game_H / 2);
-    this.context.fillText('Dung nut "Choi lai" cua EduHub de bat dau session moi.', game_W / 2, game_H / 2 + this.getWidth());
+    this.context.fillText(
+      this.resultOutcome === 'success'
+        ? 'Em đã hoàn thành toàn bộ các màn chơi.'
+        : 'Dùng nút "Chơi lại" của EduHub để bắt đầu phiên mới.',
+      game_W / 2,
+      game_H / 2 + this.getWidth(),
+    );
     this.context.textAlign = 'start';
   }
 
@@ -395,9 +640,14 @@ class game {
   }
 
   checkWin() {
+    if (!this.sessionReady || this.gg.length === 0) {
+      return false;
+    }
+
     let check = true;
     for (let i = 0; i < N; i += 1) {
-      if (this.gg[i].alive === true) {
+      const item = this.gg[i];
+      if (item && item.alive === true) {
         check = false;
       }
     }
@@ -405,17 +655,17 @@ class game {
   }
 
   initGold() {
-    this.gg = [];
-    for (let i = 0; i < N; i += 1) {
-      this.gg[i] = new gold(this);
-    }
+    const currentLevel = Math.max(level + 1, 1);
+    this.gg = ITEM_TYPE_PLAN.map((type, itemIndex) => new gold(this, type, `level-${currentLevel}-item-${itemIndex + 1}`));
     while (true) {
       let check = true;
       for (let i = 0; i < N - 1; i += 1) {
         for (let j = i + 1; j < N; j += 1) {
-          while (this.range(this.gg[i].x, this.gg[i].y, this.gg[j].x, this.gg[j].y) < 2 * this.getWidth()) {
+          const minimumDistance = this.gg[i].size() + this.gg[j].size() + this.getWidth() * 0.3;
+          while (this.range(this.gg[i].x, this.gg[i].y, this.gg[j].x, this.gg[j].y) < minimumDistance) {
             check = false;
             this.gg[j].randomXY();
+            this.gg[j].update();
           }
         }
       }

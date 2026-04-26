@@ -14,8 +14,8 @@ from app.crud import notification as noti_crud
 from app.core.dependencies import get_current_user, require_teacher
 from app.models.user import User
 from app.models.class_model import Class, Chapter, ClassStudent, ClassMaterial
+from app.models.content_package import ContentPackage, ContentPackageAssignment
 from app.models.material import Material as MaterialModel, MaterialView
-from app.models.exam import Exam
 from app.utils.enums import InteractiveBookStatus, MaterialType
 from app.utils.responses import ok
 
@@ -34,7 +34,15 @@ def _class_with_count(db: Session, class_: Class) -> dict:
     data = ClassOut.model_validate(class_).model_dump()
     data["student_count"] = db.query(ClassStudent).filter(ClassStudent.class_id == class_.id).count()
     data["material_count"] = db.query(ClassMaterial).filter(ClassMaterial.class_id == class_.id).count()
-    data["exam_count"] = db.query(Exam).filter(Exam.class_id == class_.id).count()
+    data["exam_count"] = (
+        db.query(ContentPackageAssignment)
+        .join(ContentPackage, ContentPackage.id == ContentPackageAssignment.package_id)
+        .filter(
+            ContentPackageAssignment.class_id == class_.id,
+            ContentPackage.package_type == "exam",
+        )
+        .count()
+    )
     if class_.teacher:
         data["teacher_name"] = class_.teacher.full_name
     return data
@@ -65,9 +73,13 @@ def list_classes(db: Session = Depends(get_db), current_user: User = Depends(get
         .all()  # type: ignore[arg-type]
     )
     exam_counts: dict[str, int] = dict(
-        db.query(Exam.class_id, func.count(Exam.id))
-        .filter(Exam.class_id.in_(class_ids))
-        .group_by(Exam.class_id)
+        db.query(ContentPackageAssignment.class_id, func.count(ContentPackageAssignment.id))
+        .join(ContentPackage, ContentPackage.id == ContentPackageAssignment.package_id)
+        .filter(
+            ContentPackageAssignment.class_id.in_(class_ids),
+            ContentPackage.package_type == "exam",
+        )
+        .group_by(ContentPackageAssignment.class_id)
         .all()  # type: ignore[arg-type]
     )
 

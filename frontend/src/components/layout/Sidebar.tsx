@@ -14,6 +14,7 @@ import {
   Globe,
   FolderOpen,
 } from 'lucide-react';
+
 import { useAuthStore } from '@/store/auth.store';
 import { useChatStore } from '@/store/chat.store';
 import { chatService } from '@/services/chat.service';
@@ -38,6 +39,7 @@ const teacherMenu: MenuItem[] = [
     ],
   },
   { label: 'Lớp học', icon: GraduationCap, path: '/teacher/classes' },
+  { label: 'Trò chơi', icon: Gamepad2, path: '/teacher/games' },
   { label: 'Hộp thư', icon: Mail, path: '/teacher/inbox' },
   { label: 'Cài đặt', icon: Settings, path: '/teacher/settings' },
 ];
@@ -57,15 +59,21 @@ interface SidebarProps {
   collapsed?: boolean;
 }
 
+function getRoleLabel(role: string) {
+  if (role === 'teacher') return 'Giáo viên';
+  if (role === 'student') return 'Học sinh';
+  return role;
+}
+
 export default function Sidebar({ collapsed = false }: SidebarProps) {
-  const user = useAuthStore((s) => s.user);
+  const user = useAuthStore((state) => state.user);
   const menu = user?.role === 'teacher' ? teacherMenu : studentMenu;
   const location = useLocation();
   const { unreadCount, setUnreadCount } = useChatStore();
   const [expandedItems, setExpandedItems] = useState<string[]>(() => {
     const expanded: string[] = [];
     for (const item of (user?.role === 'teacher' ? teacherMenu : studentMenu)) {
-      if (item.children?.some((c) => location.pathname.startsWith(c.path))) {
+      if (item.children?.some((child) => location.pathname.startsWith(child.path))) {
         expanded.push(item.path);
       }
     }
@@ -73,18 +81,20 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
   });
 
   const toggleExpand = (path: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(path) ? prev.filter((p) => p !== path) : [...prev, path],
-    );
+    setExpandedItems((current) => (
+      current.includes(path)
+        ? current.filter((itemPath) => itemPath !== path)
+        : [...current, path]
+    ));
   };
 
   useEffect(() => {
     const fetchUnread = async () => {
       try {
-        const res = await chatService.getUnreadCount();
-        setUnreadCount(res.data.data?.total || 0);
+        const response = await chatService.getUnreadCount();
+        setUnreadCount(response.data.data?.total || 0);
       } catch {
-        // silent
+        // Silent refresh.
       }
     };
 
@@ -94,6 +104,29 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
   }, [setUnreadCount]);
 
   const showBadge = unreadCount > 0;
+
+  const isMenuItemActive = (path: string, isActive: boolean) => {
+    const currentTeacherTab = new URLSearchParams(location.search).get('tab');
+    const isTeacherGameCreatePath = /^\/teacher\/classes\/[^/]+\/games(\/.*)?$/.test(location.pathname);
+    const isTeacherGameTab = location.pathname.startsWith('/teacher/classes/') && currentTeacherTab === 'games';
+
+    if (user?.role === 'teacher') {
+      if (path === '/teacher/games') {
+        return (
+          isActive
+          || location.pathname.startsWith('/teacher/games/')
+          || isTeacherGameCreatePath
+          || isTeacherGameTab
+        );
+      }
+
+      if (path === '/teacher/classes' && (location.pathname.startsWith('/teacher/games') || isTeacherGameCreatePath || isTeacherGameTab)) {
+        return false;
+      }
+    }
+
+    return isActive;
+  };
 
   return (
     <aside
@@ -106,16 +139,14 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary">
           <BookOpen className="h-4 w-4 text-white" />
         </div>
-        {!collapsed && (
-          <span className="text-lg font-semibold text-primary">EduHub</span>
-        )}
+        {!collapsed && <span className="text-lg font-semibold text-primary">EduHub</span>}
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-4">
         {menu.map((item) => {
           if (item.children && !collapsed) {
             const isExpanded = expandedItems.includes(item.path);
-            const isChildActive = item.children.some((c) => location.pathname.startsWith(c.path));
+            const isChildActive = item.children.some((child) => location.pathname.startsWith(child.path));
 
             return (
               <div key={item.path}>
@@ -130,26 +161,21 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
                   <span className="flex-1 text-left">{item.label}</span>
-                  {isExpanded ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
+                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                 </button>
+
                 {isExpanded && (
                   <div className="ml-4 mt-1 space-y-0.5">
                     {item.children.map((child) => (
                       <NavLink
                         key={child.path}
                         to={child.path}
-                        className={({ isActive }) =>
-                          cn(
-                            'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200',
-                            isActive
-                              ? 'bg-primary text-white shadow-sm'
-                              : 'text-gray-500 hover:bg-primary-lighter hover:text-primary',
-                          )
-                        }
+                        className={({ isActive }) => cn(
+                          'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+                          isActive
+                            ? 'bg-primary text-white shadow-sm'
+                            : 'text-gray-500 hover:bg-primary-lighter hover:text-primary',
+                        )}
                       >
                         <child.icon className="h-4 w-4 flex-shrink-0" />
                         <span>{child.label}</span>
@@ -165,14 +191,12 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
             <NavLink
               key={item.path}
               to={item.path}
-              className={({ isActive }) =>
-                cn(
-                  'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
-                  isActive
-                    ? 'bg-primary text-white shadow-md'
-                    : 'text-gray-600 hover:bg-primary-lighter hover:text-primary',
-                )
-              }
+              className={({ isActive }) => cn(
+                'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200',
+                isMenuItemActive(item.path, isActive)
+                  ? 'bg-primary text-white shadow-md'
+                  : 'text-gray-600 hover:bg-primary-lighter hover:text-primary',
+              )}
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
               {!collapsed && (
@@ -200,10 +224,8 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
               {user.full_name?.[0]?.toUpperCase() || 'U'}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-800">
-                {user.full_name}
-              </p>
-              <p className="text-xs capitalize text-gray-400">{user.role}</p>
+              <p className="truncate text-sm font-medium text-gray-800">{user.full_name}</p>
+              <p className="text-xs text-gray-400">{getRoleLabel(user.role)}</p>
             </div>
           </div>
         </div>

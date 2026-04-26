@@ -11,9 +11,9 @@ from app.utils.enums import UserRole
 
 if TYPE_CHECKING:
     from app.models.class_model import Class, ClassStudent
+    from app.models.content_package import ContentPackage
     from app.models.material import Material
-    from app.models.exam import Exam
-    from app.models.submission import Submission
+    from app.models.package_attempt import PackageAttempt, PackageQuestionAttempt
     from app.models.message import Message, ConversationMember
     from app.models.notification import Notification
     from app.models.interactive_book import InteractiveBook, InteractiveBookAttempt
@@ -43,11 +43,14 @@ class User(Base):
     materials: Mapped[list["Material"]] = relationship(  # noqa: F821
         "Material", back_populates="creator", foreign_keys="[Material.created_by]"
     )
-    created_exams: Mapped[list["Exam"]] = relationship(  # noqa: F821
-        "Exam", back_populates="creator"
+    created_content_packages: Mapped[list["ContentPackage"]] = relationship(  # noqa: F821
+        "ContentPackage", back_populates="creator", foreign_keys="[ContentPackage.created_by]"
     )
-    submissions: Mapped[list["Submission"]] = relationship(  # noqa: F821
-        "Submission", back_populates="student"
+    package_attempts: Mapped[list["PackageAttempt"]] = relationship(  # noqa: F821
+        "PackageAttempt", back_populates="user"
+    )
+    graded_question_attempts: Mapped[list["PackageQuestionAttempt"]] = relationship(  # noqa: F821
+        "PackageQuestionAttempt", foreign_keys="[PackageQuestionAttempt.graded_by]"
     )
     sent_messages: Mapped[list["Message"]] = relationship(  # noqa: F821
         "Message", back_populates="sender"

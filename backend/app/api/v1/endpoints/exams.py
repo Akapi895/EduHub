@@ -8,22 +8,20 @@ from app.crud import notification as noti_crud
 from app.crud import submission as submission_crud
 from app.db.session import get_db
 from app.models.class_model import ClassStudent
-from app.models.exam import Exam as ExamModel
-from app.models.question import Question
-from app.models.submission import Submission
+from app.models.package_attempt import PackageAttempt
 from app.models.user import User
-from app.schemas.exam import ExamCreate, ExamOut, ExamUpdate
-from app.schemas.question import QuestionCreate, QuestionOut, QuestionStudentOut, QuestionUpdate
+from app.schemas.exam import ExamCreate, ExamUpdate
+from app.schemas.question import QuestionCreate, QuestionUpdate
 from app.utils.responses import ok
 
 router = APIRouter(tags=["Exams"])
 
 
-def _student_exam_status(subs: list[Submission]) -> tuple[str, float | None]:
+def _student_exam_status(subs: list[PackageAttempt]) -> tuple[str, float | None]:
     completed = [submission for submission in subs if submission.status != "in_progress"]
     in_progress = any(submission.status == "in_progress" for submission in subs)
     if completed:
-        best = max((submission.total_score for submission in completed if submission.total_score is not None), default=None)
+        best = max((submission.score_total for submission in completed if submission.score_total is not None), default=None)
         return "completed", best
     if in_progress:
         return "in_progress", None
@@ -46,13 +44,15 @@ def _assert_class_access(db: Session, class_id: str, current_user: User):
     raise HTTPException(status_code=403, detail="Forbidden")
 
 
-def _assert_exam_access(db: Session, exam: ExamModel, current_user: User) -> None:
+def _assert_exam_access(db: Session, exam, current_user: User) -> None:
     if current_user.role == "teacher":
-        if exam.created_by == current_user.id or (exam.class_ and exam.class_.teacher_id == current_user.id):
+        if exam.created_by == current_user.id:
+            return
+        if any(assignment.class_ and assignment.class_.teacher_id == current_user.id for assignment in exam.assignments):
             return
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    if class_crud.is_member(db, class_id=exam.class_id, user_id=current_user.id):
+    if any(class_crud.is_member(db, class_id=assignment.class_id, user_id=current_user.id) for assignment in exam.assignments):
         return
 
     raise HTTPException(status_code=403, detail="Forbidden")
@@ -71,12 +71,14 @@ def list_my_all_exams(
     if not class_ids:
         return ok(data=[])
 
-    exams = db.query(ExamModel).filter(ExamModel.class_id.in_(class_ids)).all()
+    exams_map = {}
+    for class_id in class_ids:
+        for exam in exam_crud.get_exams_for_class(db, class_id):
+            exams_map[exam.id] = exam
+
     result = []
-    for exam in exams:
-        data = ExamOut.model_validate(exam).model_dump()
-        data["question_count"] = len(exam.questions)
-        data["class_name"] = exam.class_.name if exam.class_ else None
+    for exam in exams_map.values():
+        data = exam_crud.serialize_exam(exam)
         submissions = submission_crud.get_all_submissions_for_exam_student(db, exam.id, current_user.id)
         data["student_status"], data["best_score"] = _student_exam_status(submissions)
         result.append(data)
@@ -93,8 +95,7 @@ def list_exams(
     exams = exam_crud.get_exams_for_class(db, class_id)
     result = []
     for exam in exams:
-        data = ExamOut.model_validate(exam).model_dump()
-        data["question_count"] = len(exam.questions)
+        data = exam_crud.serialize_exam(exam, class_id=class_id)
         if current_user.role == "student":
             submissions = submission_crud.get_all_submissions_for_exam_student(db, exam.id, current_user.id)
             data["student_status"], data["best_score"] = _student_exam_status(submissions)
@@ -120,11 +121,11 @@ def create_exam(
             db,
             user_ids=student_ids,
             type="new_exam",
-            title="Bai thi moi",
-            content=f"Lop {class_.name} vua co bai thi moi: {exam.title}",
+            title="Bài thi mới",
+            content=f"Lớp {class_.name} vừa có bài thi mới: {exam.title}",
             link=f"/student/exam/{exam.id}",
         )
-    return ok(data=ExamOut.model_validate(exam).model_dump(), status_code=201)
+    return ok(data=exam_crud.serialize_exam(exam, class_id=class_id), status_code=201)
 
 
 @router.get("/exams/{exam_id}")
@@ -138,10 +139,7 @@ def get_exam(
         raise HTTPException(status_code=404, detail="Exam not found")
 
     _assert_exam_access(db, exam, current_user)
-
-    data = ExamOut.model_validate(exam).model_dump()
-    data["question_count"] = len(exam.questions)
-    return ok(data=data)
+    return ok(data=exam_crud.serialize_exam(exam))
 
 
 @router.put("/exams/{exam_id}")
@@ -156,7 +154,7 @@ def update_exam(
         raise HTTPException(status_code=404, detail="Exam not found")
 
     updated = exam_crud.update_exam(db, exam=exam, data=data)
-    return ok(data=ExamOut.model_validate(updated).model_dump())
+    return ok(data=exam_crud.serialize_exam(updated))
 
 
 @router.delete("/exams/{exam_id}")
@@ -170,7 +168,7 @@ def delete_exam(
         raise HTTPException(status_code=404, detail="Exam not found")
 
     exam_crud.delete_exam(db, exam=exam)
-    return ok(message="Da xoa de thi")
+    return ok(message="Đã xóa đề thi")
 
 
 @router.get("/exams/{exam_id}/questions")
@@ -189,11 +187,20 @@ def list_questions(
         submissions = submission_crud.get_all_submissions_for_exam_student(db, exam_id, current_user.id)
         if not submissions:
             raise HTTPException(status_code=403, detail="Ban can bat dau bai thi truoc")
+        in_progress = submission_crud.get_submission_for_exam_student(db, exam_id, current_user.id)
+        if in_progress:
+            question_attempts = submission_crud.get_presented_questions_for_submission(db, in_progress.id)
+            data = [
+                exam_crud.serialize_question(item.question_item, exam_id=exam_id, include_correct=False)
+                for item in question_attempts
+            ]
+            return ok(data=data)
+
         questions = exam_crud.get_questions(db, exam_id)
-        return ok(data=[QuestionStudentOut.model_validate(question).model_dump() for question in questions])
+        return ok(data=[exam_crud.serialize_question(question, exam_id=exam_id, include_correct=False) for question in questions])
 
     questions = exam_crud.get_questions(db, exam_id)
-    return ok(data=[QuestionOut.model_validate(question).model_dump() for question in questions])
+    return ok(data=[exam_crud.serialize_question(question, exam_id=exam_id, include_correct=True) for question in questions])
 
 
 @router.post("/exams/{exam_id}/questions", status_code=201)
@@ -208,7 +215,7 @@ def create_question(
         raise HTTPException(status_code=404, detail="Exam not found")
 
     question = exam_crud.create_question(db, exam_id=exam_id, data=data)
-    return ok(data=QuestionOut.model_validate(question).model_dump(), status_code=201)
+    return ok(data=exam_crud.serialize_question(question, exam_id=exam_id, include_correct=True), status_code=201)
 
 
 @router.put("/questions/{question_id}")
@@ -218,14 +225,14 @@ def update_question(
     db: Session = Depends(get_db),
     teacher: User = Depends(require_teacher),
 ):
-    question = db.query(Question).filter(Question.id == question_id).first()
+    question = exam_crud.get_question(db, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    if not question.exam or question.exam.created_by != teacher.id:
+    if not question.question_bank or not question.question_bank.package or question.question_bank.package.created_by != teacher.id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     updated = exam_crud.update_question(db, question=question, data=data)
-    return ok(data=QuestionOut.model_validate(updated).model_dump())
+    return ok(data=exam_crud.serialize_question(updated, exam_id=updated.question_bank.package_id, include_correct=True))
 
 
 @router.delete("/questions/{question_id}")
@@ -234,11 +241,11 @@ def delete_question(
     db: Session = Depends(get_db),
     teacher: User = Depends(require_teacher),
 ):
-    question = db.query(Question).filter(Question.id == question_id).first()
+    question = exam_crud.get_question(db, question_id)
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
-    if not question.exam or question.exam.created_by != teacher.id:
+    if not question.question_bank or not question.question_bank.package or question.question_bank.package.created_by != teacher.id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     exam_crud.delete_question(db, question=question)
-    return ok(message="Da xoa cau hoi")
+    return ok(message="Đã xóa câu hỏi")

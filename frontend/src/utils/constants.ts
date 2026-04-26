@@ -1,4 +1,38 @@
-export const API_BASE_URL = `${import.meta.env.VITE_API_URL || ''}/api/v1`;
+function normalizeLocalApiUrl(rawUrl: string) {
+  if (typeof window === 'undefined') {
+    return rawUrl.replace(/\/$/, '');
+  }
+
+  try {
+    const parsedUrl = new URL(rawUrl);
+    const isLocalApiHost = ['localhost', '127.0.0.1'].includes(parsedUrl.hostname);
+    const isLocalFrontendHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+    if (isLocalApiHost && isLocalFrontendHost) {
+      parsedUrl.hostname = window.location.hostname;
+    }
+
+    return parsedUrl.toString().replace(/\/$/, '');
+  } catch {
+    return rawUrl.replace(/\/$/, '');
+  }
+}
+
+function resolveApiBaseUrl() {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+
+  if (configuredUrl) {
+    return normalizeLocalApiUrl(configuredUrl);
+  }
+
+  if (typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return '';
+}
+
+export const API_BASE_URL = `${resolveApiBaseUrl()}/api/v1`;
 
 export const ROLES = {
   TEACHER: 'teacher',

@@ -14,6 +14,7 @@ class MaterialType(str, Enum):
     reference = "reference"
     document = "document"
     interactive_book = "interactive_book"
+    game_package = "game_package"
 
 
 class ExamStatus(str, Enum):
@@ -34,6 +35,64 @@ class SubmissionStatus(str, Enum):
     in_progress = "in_progress"
     submitted = "submitted"
     graded = "graded"
+
+
+class ContentPackageType(str, Enum):
+    exam = "exam"
+    game = "game"
+
+
+class ContentPackageStatus(str, Enum):
+    draft = "draft"
+    published = "published"
+    archived = "archived"
+
+
+class DifficultyBand(str, Enum):
+    recognition = "recognition"
+    comprehension = "comprehension"
+    application_basic = "application_basic"
+    application_advanced = "application_advanced"
+
+
+class TextInputVariant(str, Enum):
+    short_text = "short_text"
+    paragraph = "paragraph"
+
+
+class TextGradingMode(str, Enum):
+    exact_match = "exact_match"
+    normalized_exact = "normalized_exact"
+    keyword = "keyword"
+    hybrid = "hybrid"
+    manual = "manual"
+
+
+class PackageAttemptStatus(str, Enum):
+    in_progress = "in_progress"
+    submitted = "submitted"
+    graded = "graded"
+    completed = "completed"
+    abandoned = "abandoned"
+
+
+class QuestionAttemptStatus(str, Enum):
+    presented = "presented"
+    answered = "answered"
+    pending_manual = "pending_manual"
+    graded = "graded"
+    resolved = "resolved"
+
+
+class QuestionSourceContext(str, Enum):
+    exam_sequence = "exam_sequence"
+    game_trigger = "game_trigger"
+
+
+class GameModuleStatus(str, Enum):
+    draft = "draft"
+    active = "active"
+    archived = "archived"
 
 
 class InteractiveBookStatus(str, Enum):

@@ -1,0 +1,91 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, Field
+
+from app.schemas.question import QuestionCreate, QuestionUpdate
+from app.utils.enums import ContentPackageStatus, DifficultyBand
+
+
+class GamePackageCreate(BaseModel):
+    title: str
+    description: str | None = None
+    game_module_id: str
+    thumbnail_url: str | None = None
+    runtime_config: dict[str, Any] | None = None
+    selector_strategy: str = "random_no_repeat"
+    scoring_config: dict[str, Any] | None = None
+    subject: str | None = None
+    grade: str | None = None
+    status: ContentPackageStatus = ContentPackageStatus.published
+
+
+class GamePackageUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    game_module_id: str | None = None
+    thumbnail_url: str | None = None
+    runtime_config: dict[str, Any] | None = None
+    selector_strategy: str | None = None
+    scoring_config: dict[str, Any] | None = None
+    subject: str | None = None
+    grade: str | None = None
+    status: ContentPackageStatus | None = None
+
+
+class GameQuestionCreate(QuestionCreate):
+    difficulty_band: DifficultyBand
+
+
+class GameQuestionUpdate(QuestionUpdate):
+    difficulty_band: DifficultyBand | None = None
+
+
+class GameRuntimeTriggerRequest(BaseModel):
+    attempt_id: str
+    trigger_type: str
+    trigger_key: str
+    trigger_value: str
+    event_payload: dict[str, Any] | None = None
+
+
+class GameMatchingAnswerInput(BaseModel):
+    left_item_id: str
+    selected_right_key: str | None = None
+
+
+class GameRuntimeAnswerRequest(BaseModel):
+    attempt_id: str
+    question_attempt_id: str
+    text_answer: str | None = None
+    selected_option_ids: list[str] = Field(default_factory=list)
+    matching_answers: list[GameMatchingAnswerInput] = Field(default_factory=list)
+    uploaded_image_url: str | None = None
+
+
+class GameRuntimeEventRequest(BaseModel):
+    attempt_id: str
+    event_type: str
+    event_payload: dict[str, Any] | None = None
+
+
+class GameCompleteRequest(BaseModel):
+    attempt_id: str
+    summary_payload: dict[str, Any]
+    runtime_state: dict[str, Any] | None = None
+
+
+class GamePackageAttemptOut(BaseModel):
+    id: str
+    package_id: str
+    user_id: str
+    class_id: str | None = None
+    attempt_index: int
+    status: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    score_total: float | None = None
+    score_question: float | None = None
+    score_context: float | None = None

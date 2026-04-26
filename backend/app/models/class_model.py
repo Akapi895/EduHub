@@ -21,7 +21,9 @@ class Class(Base):
     students: Mapped[list["ClassStudent"]] = relationship("ClassStudent", back_populates="class_", cascade="all, delete-orphan")
     chapters: Mapped[list["Chapter"]] = relationship("Chapter", back_populates="class_", cascade="all, delete-orphan")
     class_materials: Mapped[list["ClassMaterial"]] = relationship("ClassMaterial", back_populates="class_", cascade="all, delete-orphan")
-    exams: Mapped[list["Exam"]] = relationship("Exam", back_populates="class_", cascade="all, delete-orphan")
+    package_assignments: Mapped[list["ContentPackageAssignment"]] = relationship(
+        "ContentPackageAssignment", back_populates="class_", cascade="all, delete-orphan"
+    )
 
 
 class ClassStudent(Base):
