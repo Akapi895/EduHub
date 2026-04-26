@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     expose_api_docs: bool | None = None
     cors_origins: list[str] = []
     cors_origin_regex: str | None = None
+    app_timezone: str = "Asia/Ho_Chi_Minh"
 
     database_url: str = "postgresql://eduhub:eduhub@localhost:5433/eduhub"
     db_bootstrap_on_startup: bool = False

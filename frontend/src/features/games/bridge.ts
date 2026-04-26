@@ -28,6 +28,16 @@ export function buildHostCommand(
 }
 
 export function resolveGameTargetOrigin(game: GameManifest) {
+  const sandboxTokens = (game.runtime?.sandbox ?? '')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const usesOpaqueSandboxOrigin = sandboxTokens.length > 0 && !sandboxTokens.includes('allow-same-origin');
+
+  if (usesOpaqueSandboxOrigin) {
+    return '*';
+  }
+
   if (game.runtime?.target_origin) {
     return game.runtime.target_origin;
   }

@@ -1,27 +1,47 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Users, BookOpen, FileText, Plus, Copy, Check, Loader2, Settings } from 'lucide-react';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Users,
+  BookOpen,
+  FileText,
+  Plus,
+  Copy,
+  Check,
+  Loader2,
+  Settings,
+  Gamepad2,
+} from 'lucide-react';
+
 import ChapterSection from '@/components/classes/ChapterSection';
 import StudentTable from '@/components/classes/StudentTable';
 import ExamCard from '@/components/exam/ExamCard';
+import TeacherGamePackageCard from '@/components/games/TeacherGamePackageCard';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
+import { gameService } from '@/services/game.service';
 import { showErrorToast } from '@/store/toast.store';
-import type { Class, Chapter, Exam, User } from '@/types';
+import type { Class, Chapter, Exam, GamePackage, User } from '@/types';
 
-type Tab = 'materials' | 'exams' | 'students' | 'settings';
+type Tab = 'materials' | 'exams' | 'games' | 'students' | 'settings';
+
+function isValidTab(value: string | null): value is Tab {
+  return value === 'materials' || value === 'exams' || value === 'games' || value === 'students' || value === 'settings';
+}
 
 export default function TeacherClassDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [classItem, setClassItem] = useState<Class | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [students, setStudents] = useState<User[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
+  const [gamePackages, setGamePackages] = useState<GamePackage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>('materials');
+  const [activeTab, setActiveTab] = useState<Tab>(isValidTab(searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'materials');
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [newChapter, setNewChapter] = useState('');
   const [copied, setCopied] = useState(false);
@@ -31,19 +51,23 @@ export default function TeacherClassDetail() {
   const fetchClassData = useCallback(async () => {
     if (!id) return;
     setLoading(true);
+
     try {
-      const [classRes, studentsRes, examsRes, chaptersRes] = await Promise.all([
+      const [classRes, studentsRes, examsRes, chaptersRes, gamePackagesRes] = await Promise.all([
         classService.getClass(id),
         classService.getStudents(id),
         classService.getExams(id),
         classService.getChapters(id),
+        gameService.getClassGamePackages(id).catch(() => null),
       ]);
+
       setClassItem(classRes.data.data);
-      const cls = classRes.data.data;
-      setEditForm({ name: cls?.name || '', description: cls?.description || '' });
+      const currentClass = classRes.data.data;
+      setEditForm({ name: currentClass?.name || '', description: currentClass?.description || '' });
       setStudents(studentsRes.data.data || []);
       setExams(examsRes.data.data || []);
       setChapters(chaptersRes.data.data || []);
+      setGamePackages(gamePackagesRes?.data?.data || []);
     } catch {
       setClassItem(null);
     } finally {
@@ -55,19 +79,39 @@ export default function TeacherClassDetail() {
     fetchClassData();
   }, [fetchClassData]);
 
+  useEffect(() => {
+    const nextTab = searchParams.get('tab');
+    if (isValidTab(nextTab)) {
+      setActiveTab(nextTab);
+      return;
+    }
+    setActiveTab('materials');
+  }, [searchParams]);
+
+  const handleTabChange = (nextTab: Tab) => {
+    setActiveTab(nextTab);
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextTab === 'materials') {
+      nextParams.delete('tab');
+    } else {
+      nextParams.set('tab', nextTab);
+    }
+    setSearchParams(nextParams);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!classItem) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 text-lg">Không tìm thấy lớp học</p>
-        <Link to="/teacher/classes" className="text-primary hover:underline mt-2 inline-block">
+      <div className="py-12 text-center">
+        <p className="text-lg text-gray-500">Không tìm thấy lớp học</p>
+        <Link to="/teacher/classes" className="mt-2 inline-block text-primary hover:underline">
           Quay lại danh sách
         </Link>
       </div>
@@ -75,10 +119,11 @@ export default function TeacherClassDetail() {
   }
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'materials', label: 'Tài liệu', icon: <BookOpen className="w-4 h-4" /> },
-    { key: 'exams', label: 'Bài kiểm tra', icon: <FileText className="w-4 h-4" /> },
-    { key: 'students', label: 'Học sinh', icon: <Users className="w-4 h-4" /> },
-    { key: 'settings', label: 'Cài đặt', icon: <Settings className="w-4 h-4" /> },
+    { key: 'materials', label: 'Tài liệu', icon: <BookOpen className="h-4 w-4" /> },
+    { key: 'exams', label: 'Bài kiểm tra', icon: <FileText className="h-4 w-4" /> },
+    { key: 'games', label: 'Trò chơi', icon: <Gamepad2 className="h-4 w-4" /> },
+    { key: 'students', label: 'Học sinh', icon: <Users className="h-4 w-4" /> },
+    { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-4 w-4" /> },
   ];
 
   const handleCopyCode = () => {
@@ -89,51 +134,52 @@ export default function TeacherClassDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start gap-4">
         <Link to="/teacher/classes" className="mt-1.5 text-gray-400 hover:text-gray-600">
-          <ArrowLeft className="w-5 h-5" />
+          <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-800">{classItem.name}</h1>
-          <p className="text-gray-500 mt-1">{classItem.description}</p>
+          <p className="mt-1 text-gray-500">{classItem.description}</p>
         </div>
-        <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-xl">
+        <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-2">
           <span className="text-sm text-gray-500">Mã lớp:</span>
           <span className="font-mono font-bold text-primary">{classItem.join_code}</span>
           <button onClick={handleCopyCode} className="text-gray-400 hover:text-primary">
-            {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-card p-4 shadow-sm text-center">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div className="rounded-card bg-white p-4 text-center shadow-sm">
           <p className="text-2xl font-bold text-primary">{students.length}</p>
           <p className="text-sm text-gray-500">Học sinh</p>
         </div>
-        <div className="bg-white rounded-card p-4 shadow-sm text-center">
+        <div className="rounded-card bg-white p-4 text-center shadow-sm">
           <p className="text-2xl font-bold text-accent-purple">{chapters.length}</p>
           <p className="text-sm text-gray-500">Chương</p>
         </div>
-        <div className="bg-white rounded-card p-4 shadow-sm text-center">
+        <div className="rounded-card bg-white p-4 text-center shadow-sm">
           <p className="text-2xl font-bold text-accent-pink">{exams.length}</p>
           <p className="text-sm text-gray-500">Bài kiểm tra</p>
         </div>
+        <div className="rounded-card bg-white p-4 text-center shadow-sm">
+          <p className="text-2xl font-bold text-sky-600">{gamePackages.length}</p>
+          <p className="text-sm text-gray-500">Trò chơi</p>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <div className="bg-white rounded-card shadow-sm">
+      <div className="rounded-card bg-white shadow-sm">
         <div className="flex border-b border-border">
           {tabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-6 py-3.5 text-sm font-medium transition-colors border-b-2 ${
+              onClick={() => handleTabChange(tab.key)}
+              className={`flex items-center gap-2 border-b-2 px-6 py-3.5 text-sm font-medium transition-colors ${
                 activeTab === tab.key
-                  ? 'text-primary border-primary'
-                  : 'text-gray-500 border-transparent hover:text-gray-700'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               {tab.icon}
@@ -147,7 +193,7 @@ export default function TeacherClassDetail() {
             <div className="space-y-4">
               <div className="flex justify-end">
                 <Button size="sm" onClick={() => setShowAddChapter(true)}>
-                  <Plus className="w-4 h-4 mr-1" /> Thêm chương
+                  <Plus className="mr-1 h-4 w-4" /> Thêm chương
                 </Button>
               </div>
               {chapters.length > 0 ? (
@@ -157,17 +203,17 @@ export default function TeacherClassDetail() {
                     chapter={chapter}
                     classId={id!}
                     onMaterialAdded={async () => {
-                      const res = await classService.getChapters(id!);
-                      setChapters(res.data.data || []);
+                      const response = await classService.getChapters(id!);
+                      setChapters(response.data.data || []);
                     }}
                     onChapterDeleted={async () => {
-                      const res = await classService.getChapters(id!);
-                      setChapters(res.data.data || []);
+                      const response = await classService.getChapters(id!);
+                      setChapters(response.data.data || []);
                     }}
                   />
                 ))
               ) : (
-                <p className="text-center text-gray-400 py-8">Chưa có chương nào</p>
+                <p className="py-8 text-center text-gray-400">Chưa có chương nào</p>
               )}
             </div>
           )}
@@ -176,17 +222,46 @@ export default function TeacherClassDetail() {
             <div className="space-y-4">
               <div className="flex justify-end">
                 <Button size="sm" onClick={() => navigate(`/teacher/classes/${id}/exams/create`)}>
-                  <Plus className="w-4 h-4 mr-1" /> Tạo bài kiểm tra
+                  <Plus className="mr-1 h-4 w-4" /> Tạo bài kiểm tra
                 </Button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {exams.map((exam) => (
                   <ExamCard key={exam.id} exam={exam} onClick={() => navigate(`/teacher/exams/${exam.id}`)} />
                 ))}
                 {exams.length === 0 && (
-                  <p className="text-center text-gray-400 py-8 col-span-2">Chưa có bài kiểm tra nào</p>
+                  <p className="col-span-2 py-8 text-center text-gray-400">Chưa có bài kiểm tra nào</p>
                 )}
               </div>
+            </div>
+          )}
+
+          {activeTab === 'games' && (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <Button size="sm" onClick={() => navigate(`/teacher/classes/${id}/games/create`)}>
+                  <Plus className="mr-1 h-4 w-4" /> Tạo gói trò chơi
+                </Button>
+              </div>
+
+              {gamePackages.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                  <p className="text-lg font-semibold text-slate-900">Chưa có gói trò chơi nào</p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    Tạo gói mới rồi soạn câu hỏi theo 4 mức độ để học sinh có thể vào chơi ngay.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {gamePackages.map((gamePackage) => (
+                    <TeacherGamePackageCard
+                      key={gamePackage.id}
+                      gamePackage={gamePackage}
+                      onOpen={(targetPackageId) => navigate(`/teacher/games/${targetPackageId}`)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -196,13 +271,13 @@ export default function TeacherClassDetail() {
                 <p className="text-sm text-gray-500">{students.length} học sinh</p>
               </div>
               <StudentTable
-                students={students.map((s) => ({
-                  id: s.id,
-                  student_id: s.id,
-                  full_name: s.full_name,
-                  email: s.email,
-                  avatar_url: s.avatar_url,
-                  joined_at: s.created_at,
+                students={students.map((student) => ({
+                  id: student.id,
+                  student_id: student.id,
+                  full_name: student.full_name,
+                  email: student.email,
+                  avatar_url: student.avatar_url,
+                  joined_at: student.created_at,
                 }))}
                 onRemove={async (studentId) => {
                   try {
@@ -217,19 +292,19 @@ export default function TeacherClassDetail() {
           )}
 
           {activeTab === 'settings' && (
-            <div className="space-y-6 max-w-lg">
+            <div className="max-w-lg space-y-6">
               <Input
                 label="Tên lớp"
                 value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
               />
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+                <label className="mb-1 block text-sm font-medium text-gray-700">Mô tả</label>
                 <textarea
                   value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  onChange={(event) => setEditForm({ ...editForm, description: event.target.value })}
                   rows={3}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none resize-none"
+                  className="w-full resize-none rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-300"
                 />
               </div>
               <div className="flex items-center gap-3">
@@ -260,7 +335,7 @@ export default function TeacherClassDetail() {
                       showErrorToast(err.response?.data?.message || 'Xóa lớp thất bại');
                     }
                   }}
-                  className="!text-red-600 !border-red-200 hover:!bg-red-50"
+                  className="!border-red-200 !text-red-600 hover:!bg-red-50"
                 >
                   Xóa lớp học
                 </Button>
@@ -275,23 +350,27 @@ export default function TeacherClassDetail() {
           <Input
             label="Tên chương"
             value={newChapter}
-            onChange={(e) => setNewChapter(e.target.value)}
+            onChange={(event) => setNewChapter(event.target.value)}
             placeholder="VD: Chương 4 - Giới hạn"
           />
           <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setShowAddChapter(false)}>Hủy</Button>
-            <Button onClick={async () => {
-              try {
-                await classService.createChapter(id!, { name: newChapter });
-                setShowAddChapter(false);
-                setNewChapter('');
-                // Refetch just chapters for instant display
-                const res = await classService.getChapters(id!);
-                setChapters(res.data.data || []);
-              } catch (err: any) {
-                showErrorToast(err.response?.data?.message || 'Thêm chương thất bại');
-              }
-            }} disabled={!newChapter}>
+            <Button variant="secondary" onClick={() => setShowAddChapter(false)}>
+              Hủy
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  await classService.createChapter(id!, { name: newChapter });
+                  setShowAddChapter(false);
+                  setNewChapter('');
+                  const response = await classService.getChapters(id!);
+                  setChapters(response.data.data || []);
+                } catch (err: any) {
+                  showErrorToast(err.response?.data?.message || 'Thêm chương thất bại');
+                }
+              }}
+              disabled={!newChapter}
+            >
               Thêm
             </Button>
           </div>

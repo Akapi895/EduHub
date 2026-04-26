@@ -4,6 +4,7 @@ export type GameBridgeCapability =
   | 'ready'
   | 'state'
   | 'progress'
+  | 'question-trigger'
   | 'complete'
   | 'error'
   | 'pause'
@@ -18,23 +19,13 @@ export type GameRuntimeStatus =
   | 'completed'
   | 'error';
 
-export interface GameCatalogIndexEntry {
-  slug: string;
-  manifest: string;
-  featured?: boolean;
-}
-
-export interface GameCatalogIndex {
-  games: GameCatalogIndexEntry[];
-}
-
 export interface GameManifest {
   id: string;
   slug: string;
   title: string;
   description: string;
   short_description?: string;
-  thumbnail: string;
+  thumbnail?: string;
   entry: string;
   tags?: string[];
   instructions?: string[];
@@ -61,11 +52,23 @@ export interface GameBridgeEnvelope<TType extends string = string, TPayload = Re
   payload?: TPayload;
 }
 
+export interface GameQuestionTriggerPayload {
+  triggerType: string;
+  triggerKey: string;
+  triggerValue: string;
+  eventPayload?: Record<string, unknown>;
+}
+
 export interface GameHostCommandPayload {
   sessionId: string;
+  attemptId?: string;
+  packageId?: string;
   route?: string;
   issuedAt: string;
   reason?: string;
+  runtimeConfig?: Record<string, unknown> | null;
+  questionResult?: Record<string, unknown> | null;
+  [key: string]: unknown;
 }
 
 export type GameHostCommandType =
@@ -75,13 +78,6 @@ export type GameHostCommandType =
   | 'host:restart'
   | 'host:ping';
 
-export interface GameRuntimeEvent {
-  id: string;
-  type: string;
-  timestamp: string;
-  payload: Record<string, unknown>;
-}
-
 export function isGameManifest(value: unknown): value is GameManifest {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
@@ -90,7 +86,6 @@ export function isGameManifest(value: unknown): value is GameManifest {
     && typeof candidate.slug === 'string'
     && typeof candidate.title === 'string'
     && typeof candidate.description === 'string'
-    && typeof candidate.thumbnail === 'string'
     && typeof candidate.entry === 'string'
   );
 }

@@ -1,14 +1,32 @@
 import logging
 from sqlalchemy import text, inspect
 from app.db.base import Base
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
 # Explicit model imports to register them with SQLAlchemy metadata
 from app.models.user import User  # noqa: F401
 from app.models.class_model import Class, ClassStudent, Chapter, ClassMaterial  # noqa: F401
 from app.models.material import Material, Folder, MaterialView  # noqa: F401
-from app.models.exam import Exam  # noqa: F401
-from app.models.question import Question, QuestionOption, MatchingPair  # noqa: F401
-from app.models.submission import Submission, Answer, AnswerOption  # noqa: F401
+from app.models.content_package import ContentPackage, ContentPackageAssignment, ExamPackageConfig, GamePackageConfig  # noqa: F401
+from app.models.question_bank import (  # noqa: F401
+    QuestionBank,
+    QuestionBankItem,
+    QuestionItemAsset,
+    QuestionItemMatchingLeftItem,
+    QuestionItemMatchingRightItem,
+    QuestionItemOption,
+    QuestionItemTextAcceptedAnswer,
+    QuestionItemTextConfig,
+    QuestionItemTextKeyword,
+)
+from app.models.package_attempt import (  # noqa: F401
+    PackageAttempt,
+    PackageQuestionAttempt,
+    QuestionAttemptMatchingAnswer,
+    QuestionAttemptSelectedOption,
+    QuestionAttemptTextAnswer,
+    QuestionAttemptUploadedAsset,
+)
+from app.models.game_module import GameModule, GameModuleTriggerMapping, GameRuntimeEvent  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.interactive_book import (  # noqa: F401
@@ -16,6 +34,7 @@ from app.models.interactive_book import (  # noqa: F401
     InteractiveBookAttempt,
     InteractiveBookEvent,
 )
+from app.services.game_seed_service import ensure_default_game_modules
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +50,6 @@ def _add_column_if_missing(conn, table: str, column: str, col_type: str, default
 
 def _migrate(conn):
     """Add any missing columns for schema evolution."""
-    _add_column_if_missing(conn, "exams", "allow_review", "BOOLEAN", "TRUE")
-    _add_column_if_missing(conn, "exams", "show_answers_policy", "VARCHAR", "'never'")
     _add_column_if_missing(conn, "library_materials", "shared_by", "VARCHAR")
     _add_column_if_missing(conn, "library_materials", "source_id", "VARCHAR")
 
@@ -40,6 +57,8 @@ def _migrate(conn):
 def create_tables(*, run_legacy_migrations: bool = False) -> None:
     """Dev bootstrap helper: create all known tables from SQLAlchemy metadata."""
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as db:
+        ensure_default_game_modules(db)
     if run_legacy_migrations:
         with engine.connect() as conn:
             _migrate(conn)

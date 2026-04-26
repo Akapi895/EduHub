@@ -1,302 +1,135 @@
-# Game Modules Architecture
+# Kiến trúc game module
 
-## Short answer
+## Mục đích
 
-No. A new game does **not** have to put its entire source code into `frontend/public/game-modules/`.
+Tài liệu này chốt cách EduHub tích hợp game theo hướng mở rộng được cho nhiều engine và nhiều đội phát triển khác nhau, đồng thời làm rõ vai trò của `frontend/public/game-modules`.
 
-That folder should be treated as the **runtime delivery layer**:
+## Kết luận ngắn
 
-- static build output that the browser can load directly;
-- one possible deployment target;
-- not the canonical place where every game's source code must live forever.
+Không cần đặt toàn bộ source của mọi game vào `frontend/public/game-modules`.
 
-The current setup works for the first integration because Gold Miner is a plain static HTML/CSS/JS sample. It is acceptable as a bootstrap path, but it is not the ideal long-term source-management model once the number of games grows or the stacks diverge.
+Thư mục này nên được hiểu là lớp `runtime artifact`:
 
-## Current architecture in EduHub
+- chứa bundle đã sẵn sàng chạy trên trình duyệt;
+- có thể được serve trực tiếp khi chạy local hoặc deploy đơn giản;
+- không phải nơi bắt buộc phải lưu source gốc lâu dài.
 
-### Main app
+## Kiến trúc hiện tại
 
-- `frontend/src/routes`: route composition.
-- `frontend/src/pages`: role-based pages.
-- `frontend/src/components`: reusable UI and runtime containers.
-- `frontend/src/services` and `frontend/src/store`: application data and state.
-- `backend/app/api/v1 -> services -> crud -> models/schemas`: standard API and business flow.
+### Lớp dữ liệu và phân quyền
 
-### Game integration layer
+- Backend quản lý `game_modules`, `content_packages`, `content_package_assignments`, `package_attempts`.
+- Học sinh không mở game từ raw catalog nữa, mà từ `game package` đã được giao cho lớp.
+- Giáo viên tạo nội dung game qua package, không thao tác trực tiếp với thư mục bundle.
 
-- `frontend/src/features/games/types.ts`: manifest and bridge contract.
-- `frontend/src/features/games/catalog.ts`: catalog loader.
-- `frontend/src/features/games/bridge.ts`: host-to-game command helpers.
-- `frontend/src/components/games/GamePlayerShell.tsx`: host shell that owns route, lifecycle, telemetry and iframe.
-- `frontend/src/pages/student/Games.tsx`: catalog page.
-- `frontend/src/pages/student/GamePlayer.tsx`: player route.
+### Lớp host trong frontend
 
-### Runtime bundle layer
+- `frontend/src/components/games/GamePlayerShell.tsx`: shell quản lý `iframe`, lifecycle, pause/resume và modal câu hỏi.
+- `frontend/src/features/games/bridge.ts`: gửi lệnh `host:init`, `host:pause`, `host:resume`, `host:restart`.
+- `frontend/src/features/games/helpers.ts`: helper cho phân bổ câu hỏi, số liệu runtime và metadata.
+- `frontend/src/pages/student/Games.tsx`: danh sách package học sinh có thể chơi.
+- `frontend/src/pages/student/GamePlayer.tsx`: route mở game theo package.
+- `frontend/src/pages/teacher/Games.tsx` và các page teacher khác: quản lý package game theo lớp.
+
+### Lớp runtime bundle
 
 ```text
 frontend/public/game-modules/
-├─ catalog.json
-└─ gold-miner/
-   ├─ manifest.json
-   ├─ bridge.js
-   ├─ index.html
-   ├─ css/
-   ├─ js/
-   └─ images/
+└── gold-miner/
+    ├── manifest.json
+    ├── bridge.js
+    ├── index.html
+    ├── css/
+    ├── js/
+    └── images/
 ```
 
-This means:
+Game chạy như một web app độc lập trong `iframe` sandbox và giao tiếp với hệ thống chính bằng `postMessage`.
 
-- the React app loads a **manifest/catalog**;
-- the host shell renders the game inside a sandboxed `iframe`;
-- the game bundle is loaded as a standalone web app;
-- communication happens through `postMessage`, not through shared React state.
+## Vì sao `iframe` vẫn là mặc định đúng
 
-## Why `iframe` is still the right default
+`iframe` là lựa chọn mặc định phù hợp nhất cho EduHub vì:
 
-For many future games with different stacks, `iframe` is the safest baseline because it gives:
+- cô lập CSS, JS và asset của game khỏi app chính;
+- tương thích với nhiều stack khác nhau như HTML/JS thuần, React, Phaser, Pixi, Unity WebGL, Godot export;
+- cho ranh giới lỗi rõ ràng hơn;
+- giảm rủi ro game làm hỏng route hoặc state của frontend chính;
+- đơn giản hóa việc build và deploy từng game độc lập.
 
-- CSS and JS isolation;
-- independence from the main frontend build;
-- compatibility with plain HTML/JS, Phaser, Pixi, React, Vue, Unity WebGL, Godot Web exports;
-- simpler failure boundaries;
-- easier asset packaging and cache control.
+`Micro-frontend` chỉ nên cân nhắc nếu game thực chất là một web app cùng stack, cùng vòng đời release và cần chia sẻ sâu dependency với frontend chính. Đó không phải mặc định tốt cho domain game.
 
-`micro-frontend` is not the right default here because it assumes much tighter runtime coupling and shared dependency discipline. That is useful when all subapps are still basically web apps inside one frontend platform. It is less suitable for arbitrary game runtimes.
+## Phân tách source và artifact
 
-## The important distinction: source vs artifact
+### Nên lưu source game ở đâu
 
-Today `frontend/public/game-modules/gold-miner` contains:
+Hai hướng hợp lý:
 
-- HTML entry;
-- JS runtime;
-- CSS;
-- images;
-- bridge adapter.
+1. `games/<slug>/` trong cùng repo nếu game do nội bộ duy trì và bundle không quá nặng.
+2. Repo riêng nếu game có toolchain nặng, asset lớn hoặc do đội khác phụ trách.
 
-That folder is currently both:
+### Nên publish artifact ở đâu
 
-1. the place where the browser reads the game from;
-2. the place where we copied the sample's source from.
+Hai hướng hợp lý:
 
-For Gold Miner that is fine.
-For scale, those two concerns should be separated.
+1. `frontend/public/game-modules/<slug>/` cho local dev và môi trường đơn giản.
+2. CDN hoặc object storage cho production scale.
 
-### What `public/game-modules` should mean long term
+Backend chỉ cần giữ `manifest_url` và metadata module. Frontend shell không phụ thuộc bundle nằm ở đâu, miễn manifest hợp lệ.
 
-It should only contain one of these:
+## Kiến trúc khuyến nghị lâu dài
 
-- locally committed build artifacts for small internal games;
-- synced output generated by another build pipeline;
-- deployment mirrors of bundles that also exist elsewhere.
+### 1. Source workspace
 
-It should **not** be the mandatory home for all raw source code.
+- Source gốc đặt ngoài `public`.
+- Mỗi game tự có toolchain build riêng.
 
-## Viable source management models
-
-### 1. Source in repo, build artifact copied to `public`
-
-Best for:
-
-- small internal games;
-- teams that want one monorepo;
-- games that are easy to build in CI.
-
-Suggested structure:
+Ví dụ:
 
 ```text
 games/
-├─ gold-miner/
-│  ├─ src-or-original/
-│  ├─ build-config/
-│  └─ dist/
+└── gold-miner/
+    ├── src/
+    ├── assets/
+    └── dist/
 ```
 
-Flow:
+### 2. Delivery layer
 
-1. Keep source in `games/<slug>/`.
-2. Build to `games/<slug>/dist/`.
-3. Copy or sync `dist/` into `frontend/public/game-modules/<slug>/` during build or release.
+- `dist/` được đồng bộ sang `frontend/public/game-modules/<slug>/` hoặc upload lên CDN.
+- `public/game-modules` chỉ giữ artifact cần browser tải.
 
-Pros:
+### 3. Registry layer
 
-- source remains organized and reviewable;
-- each game can keep its own toolchain;
-- the app still serves the final static bundle.
+- `game_modules` là registry chuẩn ở backend.
+- `content_packages` là lớp nội dung giáo viên tạo cho từng lớp.
+- `content_package_assignments` quyết định học sinh nào được chơi package nào.
 
-Cons:
+## Gold Miner hiện tại đang đi theo hướng nào
 
-- the frontend repo may become heavy if many large game assets are committed.
+Gold Miner hiện là bản tích hợp đầu tiên, nên source mẫu đã được đóng gói trực tiếp thành runtime bundle trong `frontend/public/game-modules/gold-miner`.
 
-### 2. Source in separate repos, bundle hosted on CDN or object storage
+Điều này chấp nhận được ở giai đoạn bootstrap, nhưng không nên xem là quy tắc chung cho các game sau.
 
-Best for:
+## Checklist khi thêm game mới
 
-- different teams or vendors owning different games;
-- very large bundles;
-- mixed stacks and independent release cadence.
+1. Tạo hoặc nhận bundle web độc lập có `index.html` và asset tự chứa.
+2. Cung cấp `manifest.json` với `entry`, `runtime`, `bridge`.
+3. Đăng ký module vào bảng `game_modules`.
+4. Nếu game dùng trigger generic, cấu hình `game_module_trigger_mappings`.
+5. Nếu game có scheduler đặc thù như Gold Miner, triển khai service runtime riêng nhưng vẫn dùng chung `content_packages`, `question_banks`, `package_attempts`.
+6. Tạo `game package` từ giao diện teacher, không gắn logic nội dung trực tiếp vào module runtime.
 
-Flow:
+## Contract manifest tối thiểu
 
-1. Each game builds independently.
-2. Final bundle is uploaded to CDN / S3 / Cloudflare R2 / similar storage.
-3. EduHub only stores manifest URLs or entry URLs.
+Manifest tối thiểu nên có:
 
-Pros:
+- `id`, `slug`, `title`
+- `entry`
+- `runtime.kind`, `runtime.sandbox`, `runtime.allow`, `runtime.aspect_ratio`
+- `bridge.enabled`, `bridge.version`, `bridge.capabilities`
 
-- clean separation of ownership;
-- smaller main repo;
-- independent versioning and rollback.
+## Ghi chú bảo trì
 
-Cons:
-
-- requires CORS, caching, release discipline and asset hosting rules.
-
-### 3. Backend as registry, static bundles elsewhere
-
-Best for:
-
-- when games need metadata, permissions, class assignment, analytics and lifecycle management inside EduHub.
-
-Flow:
-
-1. Backend stores a `game_modules` table or equivalent.
-2. Each record contains metadata plus `manifest_url` or `entry_url`.
-3. Frontend reads catalog from backend instead of a static JSON file.
-
-Pros:
-
-- games become first-class domain objects;
-- easy to filter by grade, subject, status, ownership;
-- aligns with future library/class assignment.
-
-Cons:
-
-- slightly more backend work up front.
-
-### 4. Backend serves bundles directly
-
-Possible, but not my recommended default.
-
-Use when:
-
-- you need private gated bundles;
-- you need signed URLs or temporary access.
-
-Downside:
-
-- backend becomes responsible for serving large static assets, which is usually worse than CDN/object storage.
-
-## What the code already supports now
-
-The current implementation is less rigid than it looks:
-
-- catalog source is now configurable through `VITE_GAME_CATALOG_URL`;
-- each manifest can point to any valid `entry` URL, including external domains;
-- the host shell only cares about the manifest contract and bridge protocol.
-
-So even if Gold Miner is under `frontend/public/game-modules` today, the shell is not fundamentally tied to that folder.
-
-## Recommended target architecture for EduHub
-
-For this project, the cleanest long-term direction is:
-
-### Layer 1. Game source workspace
-
-Keep raw source outside `frontend/public`.
-
-Recommended options:
-
-- `games/<slug>/...` inside the repo for internally maintained games;
-- separate repositories for externally owned or heavy games.
-
-### Layer 2. Build artifact hosting
-
-Host final web bundles in one of:
-
-- `frontend/public/game-modules` for local development and simple deployment;
-- object storage / CDN for production scale.
-
-### Layer 3. Registry
-
-Move catalog ownership to backend.
-
-Backend should eventually expose something like:
-
-- `GET /api/v1/game-modules`
-- `GET /api/v1/game-modules/{slug}`
-
-Each record can hold:
-
-- `slug`
-- `title`
-- `description`
-- `thumbnail_url`
-- `manifest_url`
-- `entry_url` if needed
-- `subject`
-- `grade`
-- `status`
-- `visibility`
-- `version`
-
-### Layer 4. Runtime
-
-Keep the current host shell + iframe + bridge model.
-
-That part is the right abstraction and should remain stable.
-
-## Practical recommendation
-
-### Near term
-
-Keep the current Gold Miner bundle in `frontend/public/game-modules` because it is already working and low risk.
-
-### Next refactor
-
-Introduce a dedicated source area, for example:
-
-```text
-games/
-└─ gold-miner/
-   ├─ source/
-   ├─ adapter/
-   └─ dist/
-```
-
-Then automate publish/sync into the delivery location.
-
-### Medium term
-
-Move the catalog to backend or a configurable registry endpoint, and keep runtime bundles on CDN/storage.
-
-That gives:
-
-- scalable storage;
-- independent deployment;
-- cleaner source ownership;
-- easier onboarding for future mixed-stack games.
-
-## Bridge contract
-
-Current message contract:
-
-- host to game: `host:init`, `host:pause`, `host:resume`, `host:restart`, `host:ping`
-- game to host: `game:ready`, `game:state`, `game:progress`, `game:complete`, `game:error`
-
-This contract is intentionally small so future games can implement it in any stack with minimal adapter code.
-
-## Sidebar font issue
-
-The sidebar issue was not a missing font import.
-
-Findings:
-
-- design system font is already configured in Tailwind as `Be Vietnam Pro`;
-- the font is loaded from Google Fonts in `frontend/index.html`;
-- sidebar labels were corrupted by text encoding, so Vietnamese strings rendered as mojibake.
-
-Fix applied:
-
-- restored the sidebar labels to proper UTF-8 Vietnamese text;
-- kept the sidebar on `font-sans` explicitly to match the design system.
+- Không đặt business logic teacher/student vào trong bundle game.
+- Không để game tự quyết định phân quyền hay dữ liệu câu hỏi.
+- Chỉ frontend shell và backend runtime service mới được quyết định session, attempt, pause/resume và ghi nhận kết quả.

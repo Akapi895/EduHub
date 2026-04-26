@@ -10,9 +10,27 @@ from app.db.base import Base
 from app.models.user import User  # noqa: F401
 from app.models.class_model import Class, ClassStudent, Chapter, ClassMaterial  # noqa: F401
 from app.models.material import Material, Folder, MaterialView  # noqa: F401
-from app.models.exam import Exam  # noqa: F401
-from app.models.question import Question, QuestionOption, MatchingPair  # noqa: F401
-from app.models.submission import Submission, Answer, AnswerOption  # noqa: F401
+from app.models.content_package import ContentPackage, ContentPackageAssignment, ExamPackageConfig, GamePackageConfig  # noqa: F401
+from app.models.question_bank import (  # noqa: F401
+    QuestionBank,
+    QuestionBankItem,
+    QuestionItemAsset,
+    QuestionItemMatchingLeftItem,
+    QuestionItemMatchingRightItem,
+    QuestionItemOption,
+    QuestionItemTextAcceptedAnswer,
+    QuestionItemTextConfig,
+    QuestionItemTextKeyword,
+)
+from app.models.package_attempt import (  # noqa: F401
+    PackageAttempt,
+    PackageQuestionAttempt,
+    QuestionAttemptMatchingAnswer,
+    QuestionAttemptSelectedOption,
+    QuestionAttemptTextAnswer,
+    QuestionAttemptUploadedAsset,
+)
+from app.models.game_module import GameModule, GameModuleTriggerMapping, GameRuntimeEvent  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.interactive_book import (  # noqa: F401

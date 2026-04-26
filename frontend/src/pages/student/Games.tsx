@@ -3,28 +3,26 @@ import { Loader2, Sparkles } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import GameCard from '@/components/games/GameCard';
-import { loadGameCatalog } from '@/features/games/catalog';
-import type { GameManifest } from '@/features/games/types';
+import { gameService } from '@/services/game.service';
+import type { GamePackage } from '@/types';
 
 export default function StudentGames() {
   const navigate = useNavigate();
-  const [games, setGames] = useState<GameManifest[]>([]);
+  const [gamePackages, setGamePackages] = useState<GamePackage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    loadGameCatalog()
-      .then((catalog) => {
-        if (!cancelled) {
-          setGames(catalog);
-        }
+    gameService.getMyGamePackages()
+      .then((response) => {
+        if (cancelled) return;
+        setGamePackages(Array.isArray(response.data.data) ? response.data.data : []);
       })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message || 'Không thể tải danh sách trò chơi');
-        }
+      .catch(() => {
+        if (cancelled) return;
+        setError('Không thể tải danh sách trò chơi.');
       })
       .finally(() => {
         if (!cancelled) {
@@ -43,12 +41,12 @@ export default function StudentGames() {
         <div className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-100">
             <Sparkles className="h-3.5 w-3.5 text-amber-300" />
-            Khu trò chơi
+            Trò chơi dành cho em
           </div>
           <div>
-            <h1 className="text-3xl font-semibold sm:text-4xl">Khám phá trò chơi dành cho học sinh</h1>
+            <h1 className="text-3xl font-semibold sm:text-4xl">Chọn trò chơi và bắt đầu khám phá</h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">
-              Chọn trò chơi em muốn thử, đọc hướng dẫn nhanh rồi bắt đầu luyện phản xạ, tư duy và khả năng chinh phục mục tiêu.
+              Đây là những trò chơi giáo viên đã giao cho lớp của em. Mỗi trò chơi sẽ lưu tiến độ và câu trả lời riêng.
             </p>
           </div>
         </div>
@@ -56,9 +54,9 @@ export default function StudentGames() {
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-xl font-semibold text-slate-900">Danh sách trò chơi</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Các trò chơi có thể chơi</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Mỗi trò chơi đều có khu vực chơi riêng để em tập trung trải nghiệm mà không bị ảnh hưởng bởi các phần khác của hệ thống.
+            Chọn một trò chơi để tiếp tục phần chơi hoặc bắt đầu lượt mới.
           </p>
         </div>
 
@@ -70,13 +68,20 @@ export default function StudentGames() {
           <div className="rounded-[28px] border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
             {error}
           </div>
+        ) : gamePackages.length === 0 ? (
+          <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
+            <p className="text-lg font-semibold text-slate-900">Chưa có trò chơi nào được giao</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Khi giáo viên thêm trò chơi cho lớp, trò chơi sẽ xuất hiện tại đây.
+            </p>
+          </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {games.map((game) => (
+            {gamePackages.map((gamePackage) => (
               <GameCard
-                key={game.slug}
-                game={game}
-                onPlay={(slug) => navigate(`/student/games/${slug}`)}
+                key={gamePackage.id}
+                gamePackage={gamePackage}
+                onPlay={(packageId) => navigate(`/student/games/${packageId}`)}
               />
             ))}
           </div>

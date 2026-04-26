@@ -47,6 +47,9 @@
     progress: function (payload) {
       post('game:progress', payload);
     },
+    questionTrigger: function (payload) {
+      post('game:question-trigger', payload);
+    },
     complete: function (payload) {
       post('game:complete', payload);
     },
