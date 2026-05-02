@@ -41,6 +41,7 @@ import { gameService } from '@/services/game.service';
 import { showErrorToast } from '@/store/toast.store';
 import type {
   GamePackagePlayResponse,
+  GameLeaderboardResponse,
   GameRuntimeAnswerRequest,
   GameRuntimeAnswerResponse,
   GameRuntimeQuestion,
@@ -62,9 +63,72 @@ function unwrapApiData<T>(response: { data?: { data?: T } & T }): T {
   return (response.data?.data ?? response.data) as T;
 }
 
+const startAttemptRequests = new Map<string, Promise<GameStartAttemptResponse>>();
+const INIT_HANDSHAKE_FALLBACK_MS = 800;
+const MAX_AUTO_FRAME_RECOVERIES = 2;
+const RESUME_WATCHDOG_MS = 1_500;
+const RESUME_RECOVERY_MS = 4_000;
+const QUESTION_BUSY_VISIBILITY_DELAY_MS = 180;
+
+function getStartAttemptRequest(packageId: string, sessionKey: number) {
+  const requestKey = `${packageId}:${sessionKey}`;
+  const cachedRequest = startAttemptRequests.get(requestKey);
+  if (cachedRequest) {
+    return cachedRequest;
+  }
+
+  const request = gameService
+    .startGamePackage(packageId)
+    .then((response) => unwrapApiData<GameStartAttemptResponse>(response));
+
+  startAttemptRequests.set(requestKey, request);
+  request.then(
+    () => {
+      if (startAttemptRequests.get(requestKey) === request) {
+        startAttemptRequests.delete(requestKey);
+      }
+    },
+    () => {
+      if (startAttemptRequests.get(requestKey) === request) {
+        startAttemptRequests.delete(requestKey);
+      }
+    },
+  );
+
+  return request;
+}
+
 function extractApiErrorMessage(error: unknown, fallback: string) {
   const responseData = (error as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
   return responseData?.detail || responseData?.message || (error as { message?: string })?.message || fallback;
+}
+
+function buildRestoredQuestionTrigger(questionAttempt: PackageQuestionAttempt): GameQuestionTriggerPayload {
+  return {
+    triggerType: 'restored_question',
+    triggerKey: 'question_attempt_id',
+    triggerValue: questionAttempt.id,
+    eventPayload: {
+      question_attempt_id: questionAttempt.id,
+      restored: true,
+    },
+  };
+}
+
+function getTriggerIdentity(trigger: GameQuestionTriggerPayload) {
+  const eventPayload = trigger.eventPayload ?? {};
+  const itemInstanceId = eventPayload.item_instance_id;
+  if (typeof itemInstanceId === 'string' && itemInstanceId.trim()) {
+    return `${trigger.triggerType}:item:${itemInstanceId}`;
+  }
+
+  const captureIndex = eventPayload.capture_index_in_level;
+  const level = eventPayload.level;
+  if (typeof captureIndex !== 'undefined' && typeof level !== 'undefined') {
+    return `${trigger.triggerType}:level:${String(level)}:capture:${String(captureIndex)}`;
+  }
+
+  return `${trigger.triggerType}:${trigger.triggerKey}:${trigger.triggerValue}:${JSON.stringify(eventPayload)}`;
 }
 
 function formatScalarValue(value: unknown) {
@@ -172,6 +236,15 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const completionAttemptRef = useRef<string | null>(null);
   const initTokenRef = useRef<string>('');
+  const questionFlowActiveRef = useRef(false);
+  const triggerInFlightRef = useRef(false);
+  const handledTriggerIdsRef = useRef<Set<string>>(new Set());
+  const restoredQuestionPauseRef = useRef<string | null>(null);
+  const autoFrameRecoveriesRef = useRef(0);
+  const lastRunningGameMessageAtRef = useRef(0);
+  const resumeRetryIssuedAtRef = useRef(0);
+  const telemetryOfflineUntilRef = useRef(0);
+  const questionBusyTimerRef = useRef<number | null>(null);
 
   const [manifest, setManifest] = useState<GameManifest | null>(initialManifest);
   const [manifestError, setManifestError] = useState<string | null>(null);
@@ -180,24 +253,28 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const [runtimeStatus, setRuntimeStatus] = useState<GameRuntimeStatus>('booting');
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<Record<string, unknown>>({});
   const [bridgeReady, setBridgeReady] = useState(false);
+  const [frameLoaded, setFrameLoaded] = useState(false);
   const [loadingAttempt, setLoadingAttempt] = useState(true);
   const [playerError, setPlayerError] = useState<string | null>(null);
   const [startBundle, setStartBundle] = useState<GameStartAttemptResponse | null>(null);
-  const [attempt, setAttempt] = useState<PackageAttempt | null>(playBundle.current_attempt ?? null);
-  const [attemptId, setAttemptId] = useState<string | null>(playBundle.current_attempt?.id ?? null);
-  const [attemptTotals, setAttemptTotals] = useState<PackageAttemptTotals | null>(playBundle.current_attempt?.totals ?? null);
+  const initialAttempt = playBundle.current_attempt ?? playBundle.attempt ?? null;
+  const [attempt, setAttempt] = useState<PackageAttempt | null>(initialAttempt);
+  const [attemptId, setAttemptId] = useState<string | null>(initialAttempt?.id ?? null);
+  const [attemptTotals, setAttemptTotals] = useState<PackageAttemptTotals | null>(initialAttempt?.totals ?? null);
   const [questionFlow, setQuestionFlow] = useState<{
     question: GameRuntimeQuestion;
     questionAttempt: PackageQuestionAttempt;
     trigger: GameQuestionTriggerPayload;
   } | null>(null);
   const [questionBusy, setQuestionBusy] = useState(false);
+  const [questionBusyVisible, setQuestionBusyVisible] = useState(false);
   const [submittingAnswer, setSubmittingAnswer] = useState(false);
   const [selectedOptionIds, setSelectedOptionIds] = useState<string[]>([]);
   const [textAnswer, setTextAnswer] = useState('');
   const [uploadedImageUrl, setUploadedImageUrl] = useState('');
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({});
   const [lastQuestionResult, setLastQuestionResult] = useState<GameRuntimeAnswerResponse | null>(null);
+  const [leaderboard, setLeaderboard] = useState<GameLeaderboardResponse | null>(null);
 
   const moduleEntry = resolveGameModule(playBundle, startBundle);
   const manifestUrl = resolveManifestUrl(playBundle, startBundle, moduleEntry);
@@ -231,6 +308,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
 
   const logRuntimeEvent = async (eventType: string, eventPayload: Record<string, unknown>) => {
     if (!attemptId) return;
+    if (Date.now() < telemetryOfflineUntilRef.current) return;
 
     try {
       await gameService.logRuntimeEvent(gamePackage.id, {
@@ -239,20 +317,46 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         event_payload: eventPayload,
       });
     } catch {
-      // Non-blocking telemetry.
+      telemetryOfflineUntilRef.current = Date.now() + 30_000;
     }
   };
 
   const pauseRuntime = (reason: string, eventPayload: Record<string, unknown> = {}) => {
     setRuntimeStatus((current) => (current === 'completed' || current === 'error' ? current : 'paused'));
     sendHostCommand('host:pause', reason, eventPayload);
-    void logRuntimeEvent('pause', { reason, ...eventPayload });
   };
 
-  const resumeRuntime = (reason: string, eventPayload: Record<string, unknown> = {}) => {
+  const resumeRuntime = (
+    reason: string,
+    eventPayload: Record<string, unknown> = {},
+    options: { watchdog?: boolean } = {},
+  ) => {
+    const issuedAt = Date.now();
     setRuntimeStatus((current) => (current === 'completed' || current === 'error' ? current : 'running'));
     sendHostCommand('host:resume', reason, eventPayload);
-    void logRuntimeEvent('resume', { reason, ...eventPayload });
+
+    if (!options.watchdog) return;
+
+    window.setTimeout(() => {
+      if (questionFlowActiveRef.current || lastRunningGameMessageAtRef.current >= issuedAt) return;
+
+      resumeRetryIssuedAtRef.current = Date.now();
+      sendHostCommand('host:resume', 'resume-watchdog', {
+        ...eventPayload,
+        originalReason: reason,
+        watchdog: true,
+      });
+    }, RESUME_WATCHDOG_MS);
+
+    window.setTimeout(() => {
+      const retryIssuedAt = resumeRetryIssuedAtRef.current || issuedAt;
+      if (questionFlowActiveRef.current || lastRunningGameMessageAtRef.current >= retryIssuedAt) return;
+
+      recoverGameFrame('resume-timeout', {
+        originalReason: reason,
+        lastRunningGameMessageAt: lastRunningGameMessageAtRef.current,
+      });
+    }, RESUME_RECOVERY_MS);
   };
 
   const resetQuestionDraft = (question: GameRuntimeQuestion | null) => {
@@ -263,19 +367,87 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     setMatchingAnswers(draft.matchingAnswers);
   };
 
+  const loadLeaderboard = async () => {
+    try {
+      const response = await gameService.getGameLeaderboard(gamePackage.id, { limit: 5 });
+      setLeaderboard(unwrapApiData<GameLeaderboardResponse>(response));
+    } catch {
+      setLeaderboard(null);
+    }
+  };
+
+  const clearQuestionBusyTimer = () => {
+    if (questionBusyTimerRef.current !== null) {
+      window.clearTimeout(questionBusyTimerRef.current);
+      questionBusyTimerRef.current = null;
+    }
+  };
+
+  const beginQuestionLookup = () => {
+    setQuestionBusy(true);
+    setQuestionBusyVisible(false);
+    clearQuestionBusyTimer();
+    questionBusyTimerRef.current = window.setTimeout(() => {
+      questionBusyTimerRef.current = null;
+      if (triggerInFlightRef.current) {
+        setQuestionBusyVisible(true);
+      }
+    }, QUESTION_BUSY_VISIBILITY_DELAY_MS);
+  };
+
+  const endQuestionLookup = () => {
+    clearQuestionBusyTimer();
+    setQuestionBusy(false);
+    setQuestionBusyVisible(false);
+  };
+
+  const restoreActiveQuestion = (
+    activeQuestion: GameRuntimeQuestion | null | undefined,
+    activeQuestionAttempt: PackageQuestionAttempt | null | undefined,
+  ) => {
+    if (!activeQuestion || !activeQuestionAttempt) return false;
+
+    setQuestionFlow({
+      question: activeQuestion,
+      questionAttempt: activeQuestionAttempt,
+      trigger: buildRestoredQuestionTrigger(activeQuestionAttempt),
+    });
+    resetQuestionDraft(activeQuestion);
+    setRuntimeStatus('paused');
+    return true;
+  };
+
   const refreshAttemptFromBundle = (bundle: GameStartAttemptResponse | null) => {
     const bundledAttempt = bundle?.attempt ?? null;
     setAttempt(bundledAttempt);
     setAttemptId(bundle?.attempt_id ?? bundledAttempt?.id ?? null);
-    if (bundledAttempt?.totals) {
+    if (bundle?.attempt_totals) {
+      setAttemptTotals(bundle.attempt_totals);
+    } else if (bundledAttempt?.totals) {
       setAttemptTotals(bundledAttempt.totals);
     }
+
+    restoreActiveQuestion(bundle?.active_question, bundle?.active_question_attempt);
   };
 
   const handleQuestionTrigger = async (trigger: GameQuestionTriggerPayload) => {
-    if (!attemptId || questionFlowActive) return;
+    if (!attemptId) {
+      resumeRuntime('question-trigger-without-attempt', { trigger });
+      return;
+    }
 
-    setQuestionBusy(true);
+    const triggerIdentity = getTriggerIdentity(trigger);
+    if (
+      triggerInFlightRef.current
+      || questionFlowActiveRef.current
+      || handledTriggerIdsRef.current.has(triggerIdentity)
+    ) {
+      return;
+    }
+
+    triggerInFlightRef.current = true;
+    handledTriggerIdsRef.current.add(triggerIdentity);
+    beginQuestionLookup();
     pauseRuntime('question-trigger', { trigger });
     setLastQuestionResult(null);
 
@@ -304,12 +476,13 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         trigger,
         reason: data.reason ?? 'no-matching-question',
         attemptTotals: data.attempt_totals ?? null,
-      });
+      }, { watchdog: true });
     } catch (error) {
       showErrorToast(extractApiErrorMessage(error, 'Không thể tải câu hỏi cho lượt chơi này.'));
-      resumeRuntime('question-trigger-error', { trigger });
+      resumeRuntime('question-trigger-error', { trigger }, { watchdog: true });
     } finally {
-      setQuestionBusy(false);
+      triggerInFlightRef.current = false;
+      endQuestionLookup();
     }
   };
 
@@ -349,7 +522,10 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
       const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
       setAttemptTotals(data.attempt_totals ?? null);
       setLastQuestionResult(data);
+      questionFlowActiveRef.current = false;
       setQuestionFlow(null);
+      endQuestionLookup();
+      setSubmittingAnswer(false);
       resetQuestionDraft(null);
 
       resumeRuntime('question-answered', {
@@ -360,7 +536,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
           feedbackMessage: data.feedback_message,
         },
         attemptTotals: data.attempt_totals ?? null,
-      });
+      }, { watchdog: true });
     } catch (error) {
       showErrorToast(extractApiErrorMessage(error, 'Không thể nộp câu trả lời.'));
     } finally {
@@ -369,19 +545,34 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   };
 
   useEffect(() => {
+    questionFlowActiveRef.current = questionFlowActive;
+  }, [questionFlowActive]);
+
+  useEffect(() => {
     setRuntimeStatus('booting');
     setRuntimeSnapshot({});
     setBridgeReady(false);
+    setFrameLoaded(false);
     setPlayerError(null);
     setManifestError(null);
     setQuestionFlow(null);
-    setQuestionBusy(false);
+    setQuestionBusyVisible(false);
     setSubmittingAnswer(false);
     setLastQuestionResult(null);
     resetQuestionDraft(null);
     completionAttemptRef.current = null;
     initTokenRef.current = '';
+    triggerInFlightRef.current = false;
+    handledTriggerIdsRef.current.clear();
+    restoredQuestionPauseRef.current = null;
+    lastRunningGameMessageAtRef.current = 0;
+    resumeRetryIssuedAtRef.current = 0;
+    clearQuestionBusyTimer();
   }, [gamePackage.id, sessionKey]);
+
+  useEffect(() => () => {
+    clearQuestionBusyTimer();
+  }, []);
 
   useEffect(() => {
     if (initialManifest) {
@@ -420,10 +611,9 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     setLoadingAttempt(true);
     setPlayerError(null);
 
-    gameService.startGamePackage(gamePackage.id)
-      .then((response) => {
+    getStartAttemptRequest(gamePackage.id, sessionKey)
+      .then((data) => {
         if (cancelled) return;
-        const data = unwrapApiData<GameStartAttemptResponse>(response);
         setStartBundle(data);
         refreshAttemptFromBundle(data);
       })
@@ -443,17 +633,95 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   }, [gamePackage.id, sessionKey]);
 
   useEffect(() => {
-    if (!bridgeReady || !attemptId || !manifest) return;
+    if (!attemptId || !manifest || !frameLoaded) return;
 
     const initToken = `${sessionId}:${attemptId}:${sessionKey}`;
     if (initTokenRef.current === initToken) return;
 
-    initTokenRef.current = initToken;
-    sendHostCommand('host:init', 'bridge-ready', {
-      attemptId,
-      packageId: gamePackage.id,
+    const sendInit = (reason: string, extraPayload: Record<string, unknown> = {}) => {
+      if (initTokenRef.current === initToken) return;
+      initTokenRef.current = initToken;
+      sendHostCommand('host:init', reason, {
+        attemptId,
+        packageId: gamePackage.id,
+        attemptTotals,
+        ...extraPayload,
+      });
+    };
+
+    if (bridgeReady) {
+      sendInit('bridge-ready');
+      return;
+    }
+
+    const fallbackTimer = window.setTimeout(() => {
+      sendInit('bridge-ready-timeout', { handshakeFallback: true });
+    }, INIT_HANDSHAKE_FALLBACK_MS);
+
+    return () => window.clearTimeout(fallbackTimer);
+  }, [attemptId, attemptTotals, bridgeReady, frameLoaded, gamePackage.id, manifest, sessionId, sessionKey]);
+
+  useEffect(() => {
+    if (!bridgeReady || !questionFlow || !attemptId) return;
+    const questionAttemptId = questionFlow.questionAttempt.id;
+    if (restoredQuestionPauseRef.current === questionAttemptId) return;
+
+    restoredQuestionPauseRef.current = questionAttemptId;
+    pauseRuntime('active-question-restored', {
+      question_attempt_id: questionAttemptId,
+      question_id: questionFlow.question.id,
     });
-  }, [attemptId, bridgeReady, gamePackage.id, manifest, sessionId, sessionKey]);
+  }, [attemptId, bridgeReady, questionFlow?.question.id, questionFlow?.questionAttempt.id]);
+
+  const recoverGameFrame = (reason: string, eventPayload: Record<string, unknown> = {}) => {
+    if (autoFrameRecoveriesRef.current >= MAX_AUTO_FRAME_RECOVERIES) {
+      showErrorToast('Module trÃ² chÆ¡i Ä‘ang gáº·p lá»—i. HÃ£y báº¥m ChÆ¡i láº¡i Ä‘á»ƒ táº£i láº¡i mÃ n chÆ¡i.');
+      return;
+    }
+
+    autoFrameRecoveriesRef.current += 1;
+    void logRuntimeEvent('frame_recovery', { reason, ...eventPayload });
+    setBridgeReady(false);
+    setFrameLoaded(false);
+    initTokenRef.current = '';
+    setRuntimeStatus('booting');
+    setSessionId(createSessionId());
+    setSessionKey((current) => current + 1);
+  };
+
+  useEffect(() => {
+    if (!attemptId || !manifest || !frameLoaded || bridgeReady) return;
+
+    const recoveryTimer = window.setTimeout(() => {
+      if (!bridgeReady && !initTokenRef.current) {
+        recoverGameFrame('bridge-init-timeout');
+      }
+    }, INIT_HANDSHAKE_FALLBACK_MS * 5);
+
+    return () => window.clearTimeout(recoveryTimer);
+  }, [attemptId, bridgeReady, frameLoaded, manifest, sessionKey]);
+
+  useEffect(() => {
+    if (!bridgeReady) return;
+
+    const stableFrameTimer = window.setTimeout(() => {
+      autoFrameRecoveriesRef.current = 0;
+    }, 10_000);
+
+    return () => window.clearTimeout(stableFrameTimer);
+  }, [bridgeReady, sessionKey]);
+
+  useEffect(() => {
+    if (playBundle.active_question && playBundle.active_question_attempt) {
+      restoreActiveQuestion(playBundle.active_question, playBundle.active_question_attempt);
+    }
+  }, [playBundle.active_question?.id, playBundle.active_question_attempt?.id]);
+
+  useEffect(() => {
+    if (!questionFlow) {
+      restoredQuestionPauseRef.current = null;
+    }
+  }, [questionFlow]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -469,11 +737,15 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
       }
 
       if (message.type === 'game:state' || message.type === 'game:progress') {
-        setRuntimeStatus(
+        const nextStatus = (
           message.type === 'game:progress'
             ? 'running'
-            : ((message.payload?.status as GameRuntimeStatus) || 'running'),
+            : ((message.payload?.status as GameRuntimeStatus) || 'running')
         );
+        if (nextStatus === 'running') {
+          lastRunningGameMessageAtRef.current = Date.now();
+        }
+        setRuntimeStatus(nextStatus);
         setRuntimeSnapshot((current) => ({ ...current, ...(message.payload ?? {}) }));
         return;
       }
@@ -500,23 +772,36 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
           attempt_id: attemptId,
           summary_payload: (message.payload as Record<string, unknown>) ?? {},
           runtime_state: nextRuntimeSnapshot,
-        }).catch(() => {
+        }).catch((error: unknown) => {
           completionAttemptRef.current = null;
+          setRuntimeStatus('running');
+          showErrorToast(extractApiErrorMessage(error, 'Em cần hoàn thành toàn bộ câu hỏi trước khi kết thúc trò chơi.'));
+          sendHostCommand('host:resume', 'completion-rejected', {
+            attemptTotals,
+          });
+        }).finally(() => {
+          void loadLeaderboard();
         });
         void logRuntimeEvent('complete', (message.payload as Record<string, unknown>) ?? {});
         return;
       }
 
       if (message.type === 'game:error') {
+        const errorPayload = (message.payload as Record<string, unknown>) ?? {};
         setRuntimeStatus('error');
-        setRuntimeSnapshot((current) => ({ ...current, ...(message.payload ?? {}) }));
-        void logRuntimeEvent('error', (message.payload as Record<string, unknown>) ?? {});
+        setRuntimeSnapshot((current) => ({ ...current, ...errorPayload }));
+        void logRuntimeEvent('error', errorPayload);
+        recoverGameFrame('iframe-error', errorPayload);
       }
     };
 
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [attemptId, gamePackage.id, questionFlowActive, runtimeSnapshot]);
+  }, [attemptId, attemptTotals, gamePackage.id, questionFlowActive, runtimeSnapshot]);
+
+  useEffect(() => {
+    void loadLeaderboard();
+  }, [gamePackage.id]);
 
   useEffect(() => {
     const onVisibilityChange = () => {
@@ -630,7 +915,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         onSubmit={handleAnswerSubmit}
       />
 
-      {questionBusy && !questionFlow && (
+      {questionBusyVisible && !questionFlow && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm">
           <div className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
             <div className="flex items-center gap-3 text-sm font-medium text-slate-700">
@@ -748,6 +1033,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
                   allow={allowPolicy}
                   onLoad={() => {
                     setRuntimeStatus('booting');
+                    setBridgeReady(false);
+                    setFrameLoaded(true);
                     initTokenRef.current = '';
                   }}
                 />
@@ -860,6 +1147,34 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)]">
+              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">
+                <Trophy className="h-4 w-4 text-amber-500" />
+                Bảng xếp hạng
+              </div>
+              {leaderboard?.entries?.length ? (
+                <div className="mt-4 space-y-2">
+                  {leaderboard.entries.slice(0, 5).map((entry) => (
+                    <div
+                      key={entry.user_id}
+                      className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm ${
+                        entry.is_current_user
+                          ? 'border-amber-200 bg-amber-50 text-amber-800'
+                          : 'border-slate-200 bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      <span className="truncate font-medium">#{entry.rank} {entry.student_name || 'Học sinh'}</span>
+                      <strong className="text-slate-900">{formatScalarValue(entry.best_score_total ?? 0)}</strong>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  Hoàn thành lượt chơi đầu tiên để ghi tên lên bảng xếp hạng.
+                </p>
+              )}
             </section>
 
             <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)]">

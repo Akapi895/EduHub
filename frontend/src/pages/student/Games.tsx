@@ -15,7 +15,7 @@ export default function StudentGames() {
   useEffect(() => {
     let cancelled = false;
 
-    gameService.getMyGamePackages()
+    gameService.getGameHubPackages()
       .then((response) => {
         if (cancelled) return;
         setGamePackages(Array.isArray(response.data.data) ? response.data.data : []);
@@ -46,7 +46,7 @@ export default function StudentGames() {
           <div>
             <h1 className="text-3xl font-semibold sm:text-4xl">Chọn trò chơi và bắt đầu khám phá</h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">
-              Đây là những trò chơi giáo viên đã giao cho lớp của em. Mỗi trò chơi sẽ lưu tiến độ và câu trả lời riêng.
+              Đây là Game Hub chung của EduHub. Em có thể chọn bất kỳ trò chơi đã được publish và bắt đầu chơi ngay.
             </p>
           </div>
         </div>
@@ -70,9 +70,9 @@ export default function StudentGames() {
           </div>
         ) : gamePackages.length === 0 ? (
           <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
-            <p className="text-lg font-semibold text-slate-900">Chưa có trò chơi nào được giao</p>
+            <p className="text-lg font-semibold text-slate-900">Chưa có trò chơi nào trên Game Hub</p>
             <p className="mt-2 text-sm text-slate-500">
-              Khi giáo viên thêm trò chơi cho lớp, trò chơi sẽ xuất hiện tại đây.
+              Khi giáo viên publish trò chơi, trò chơi sẽ xuất hiện tại đây.
             </p>
           </div>
         ) : (

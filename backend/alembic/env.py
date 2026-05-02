@@ -10,7 +10,14 @@ from app.db.base import Base
 from app.models.user import User  # noqa: F401
 from app.models.class_model import Class, ClassStudent, Chapter, ClassMaterial  # noqa: F401
 from app.models.material import Material, Folder, MaterialView  # noqa: F401
-from app.models.content_package import ContentPackage, ContentPackageAssignment, ExamPackageConfig, GamePackageConfig  # noqa: F401
+from app.models.content_package import (  # noqa: F401
+    ContentPackage,
+    ContentPackageAccessRule,
+    ContentPackageAssignment,
+    ContentPackagePublication,
+    ExamPackageConfig,
+    GamePackageConfig,
+)
 from app.models.question_bank import (  # noqa: F401
     QuestionBank,
     QuestionBankItem,
@@ -23,6 +30,7 @@ from app.models.question_bank import (  # noqa: F401
     QuestionItemTextKeyword,
 )
 from app.models.package_attempt import (  # noqa: F401
+    GameLeaderboardEntry,
     PackageAttempt,
     PackageQuestionAttempt,
     QuestionAttemptMatchingAnswer,

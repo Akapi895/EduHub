@@ -37,6 +37,26 @@
     });
   });
 
+  window.addEventListener('error', function (event) {
+    post('game:error', {
+      status: 'error',
+      reason: 'iframe-runtime-error',
+      message: event.message || 'Unknown iframe runtime error',
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+    });
+  });
+
+  window.addEventListener('unhandledrejection', function (event) {
+    const reason = event.reason;
+    post('game:error', {
+      status: 'error',
+      reason: 'iframe-unhandled-rejection',
+      message: reason instanceof Error ? reason.message : String(reason || 'Unhandled rejection'),
+    });
+  });
+
   window.EduHubGameBridge = {
     ready: function (payload) {
       post('game:ready', payload);

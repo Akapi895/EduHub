@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.game import (
     GameCompleteRequest,
     GamePackageCreate,
+    GamePackagePublicationUpdate,
     GamePackageUpdate,
     GameQuestionCreate,
     GameQuestionUpdate,
@@ -17,7 +18,7 @@ from app.schemas.game import (
     GameRuntimeEventRequest,
     GameRuntimeTriggerRequest,
 )
-from app.services import game_runtime_service
+from app.services import game_access_service, game_leaderboard_service, game_runtime_service
 from app.services.game_seed_service import ensure_default_game_modules
 from app.utils.responses import ok
 
@@ -64,6 +65,24 @@ def list_my_game_packages(
     return ok(data=game_runtime_service.list_my_game_packages(db, student=student))
 
 
+@router.get("/game-hub/games")
+def list_game_hub_packages(
+    db: Session = Depends(get_db),
+    student: User = Depends(require_student),
+):
+    return ok(data=game_runtime_service.list_my_game_packages(db, student=student))
+
+
+@router.get("/game-packages")
+def list_teacher_game_packages(
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    ensure_default_game_modules(db)
+    packages = game_crud.get_game_packages_for_teacher(db, teacher.id)
+    return ok(data=[game_crud.serialize_game_package(package) for package in packages])
+
+
 @router.get("/classes/{class_id}/game-packages")
 def list_class_game_packages(
     class_id: str,
@@ -91,6 +110,21 @@ def create_game_package(
 
     package = game_crud.create_game_package(db, class_id=class_id, created_by=teacher.id, data=data)
     return ok(data=game_crud.serialize_game_package(package, class_id=class_id), status_code=201)
+
+
+@router.post("/game-packages", status_code=201)
+def create_standalone_game_package(
+    data: GamePackageCreate,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    ensure_default_game_modules(db)
+    module = game_crud.get_game_module(db, data.game_module_id)
+    if not module:
+        raise HTTPException(status_code=404, detail="Game module not found")
+
+    package = game_crud.create_game_package(db, created_by=teacher.id, data=data)
+    return ok(data=game_crud.serialize_game_package(package), status_code=201)
 
 
 @router.get("/game-packages/{package_id}/play")
@@ -179,6 +213,74 @@ def update_game_package(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ok(data=game_crud.serialize_game_package(updated))
+
+
+@router.put("/game-packages/{package_id}/publication")
+def update_game_package_publication(
+    package_id: str,
+    data: GamePackagePublicationUpdate,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    package = _assert_teacher_package(db, package_id=package_id, teacher=teacher)
+    updated = game_crud.publish_game_package_to_hub(db, package=package, teacher_id=teacher.id, data=data)
+    return ok(data=game_crud.serialize_game_package(updated))
+
+
+def _assert_leaderboard_access(db: Session, *, package_id: str, current_user: User):
+    package = game_crud.get_game_package(db, package_id)
+    if not package:
+        raise HTTPException(status_code=404, detail="Game package not found")
+    if current_user.role == "teacher":
+        return _assert_teacher_package(db, package_id=package_id, teacher=current_user)
+    if current_user.role == "student":
+        access = game_access_service.resolve_student_game_access(db, package=package, student=current_user)
+        if not access.allowed:
+            raise HTTPException(status_code=403, detail=access.reason or "Forbidden")
+        return package
+    raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.get("/game-packages/{package_id}/leaderboard")
+def get_game_leaderboard(
+    package_id: str,
+    scope: str = "global",
+    scope_id: str | None = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_leaderboard_access(db, package_id=package_id, current_user=current_user)
+    return ok(
+        data=game_leaderboard_service.get_leaderboard(
+            db,
+            package_id=package_id,
+            current_user_id=current_user.id,
+            scope_type=scope,
+            scope_id=scope_id,
+            limit=limit,
+        )
+    )
+
+
+@router.get("/game-packages/{package_id}/leaderboard/me")
+def get_my_game_leaderboard_entry(
+    package_id: str,
+    scope: str = "global",
+    scope_id: str | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    _assert_leaderboard_access(db, package_id=package_id, current_user=current_user)
+    leaderboard = game_leaderboard_service.get_leaderboard(
+        db,
+        package_id=package_id,
+        current_user_id=current_user.id,
+        scope_type=scope,
+        scope_id=scope_id,
+        limit=100,
+    )
+    return ok(data=leaderboard["current_user_entry"])
 
 
 @router.delete("/game-packages/{package_id}")

@@ -48,7 +48,7 @@ export default function GameCard({ gamePackage, onPlay }: GameCardProps) {
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/15 to-transparent" />
         <div className="absolute left-4 top-4 inline-flex items-center gap-2 rounded-full border border-white/40 bg-white/92 px-3 py-1 text-xs font-semibold text-slate-800">
           <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-          Trò chơi được giao
+          {gamePackage.access_context === 'class_assignment' ? 'Trò chơi từ lớp học' : 'Game Hub'}
         </div>
         {gamePackage.class_name && (
           <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-slate-950/55 px-3 py-1 text-xs font-medium text-white backdrop-blur">

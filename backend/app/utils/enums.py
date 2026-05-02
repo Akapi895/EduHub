@@ -48,6 +48,54 @@ class ContentPackageStatus(str, Enum):
     archived = "archived"
 
 
+class ContentPublicationChannel(str, Enum):
+    game_hub = "game_hub"
+    class_assignment = "class_assignment"
+    direct_link = "direct_link"
+    school = "school"
+
+
+class ContentPublicationVisibility(str, Enum):
+    public = "public"
+    restricted = "restricted"
+    unlisted = "unlisted"
+
+
+class ContentAccessPermission(str, Enum):
+    view = "view"
+    play = "play"
+    manage = "manage"
+    report = "report"
+
+
+class ContentAccessAudienceType(str, Enum):
+    all_students = "all_students"
+    role = "role"
+    class_ = "class"
+    grade = "grade"
+    school = "school"
+    user = "user"
+    group = "group"
+
+
+class ContentAccessEffect(str, Enum):
+    allow = "allow"
+    deny = "deny"
+
+
+class PackageAttemptPlayContext(str, Enum):
+    class_assignment = "class_assignment"
+    game_hub = "game_hub"
+    direct_link = "direct_link"
+
+
+class LeaderboardScopeType(str, Enum):
+    global_ = "global"
+    class_ = "class"
+    grade = "grade"
+    school = "school"
+
+
 class DifficultyBand(str, Enum):
     recognition = "recognition"
     comprehension = "comprehension"

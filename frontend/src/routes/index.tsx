@@ -76,6 +76,7 @@ export const routes: RouteObject[] = [
       { path: 'classes/:id', element: <TeacherClassDetail /> },
       { path: 'classes/:classId/exams/create', element: <CreateExam /> },
       { path: 'games', element: withLazyShell(<TeacherGames />) },
+      { path: 'games/create', element: withLazyShell(<TeacherGamePackageCreate />) },
       { path: 'classes/:classId/games/create', element: withLazyShell(<TeacherGamePackageCreate />) },
       { path: 'games/:packageId', element: withLazyShell(<TeacherGamePackageDetail />) },
       { path: 'exams/:id', element: <TeacherExamDetail /> },

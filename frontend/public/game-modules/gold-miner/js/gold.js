@@ -99,11 +99,21 @@ class gold {
     }
 
     randomXY() {
-        this.x = 2 * this.game.getWidth() + Math.random() * (game_W - 4 * this.game.getWidth());
-        this.y = 2 * this.game.getWidth() + game_H / 3 + Math.random() * (2 * game_H / 3 - 4 * this.game.getWidth());
+        const unit = this.game.getWidth();
+        const minX = 2 * unit;
+        const maxX = Math.max(minX, game_W - 2 * unit);
+        const minY = 2 * unit + game_H / 3;
+        const maxY = Math.max(minY, game_H - 2 * unit);
+        this.x = minX + Math.random() * Math.max(maxX - minX, 1);
+        this.y = minY + Math.random() * Math.max(maxY - minY, 1);
     }
 
     draw() {
+        if (this.game && typeof this.game.drawImageSafe === "function") {
+            this.game.drawImageSafe(this.IM, this.x - this.width / 2, this.y - this.height / 2, this.width, this.height);
+            return;
+        }
+
         this.game.context.drawImage(this.IM, this.x - this.width / 2, this.y - this.height / 2, this.width, this.height);
     }
 

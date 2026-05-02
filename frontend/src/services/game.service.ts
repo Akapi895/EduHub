@@ -1,6 +1,7 @@
 import api from './api';
 import type {
   GameCompleteRequest,
+  GamePackagePublicationPayload,
   GamePackageCreatePayload,
   GamePackageUpdatePayload,
   GameQuestionPayload,
@@ -12,6 +13,9 @@ import type {
 export const gameService = {
   getGameModules: () => api.get('/game-modules'),
 
+  getTeacherGamePackages: () => api.get('/game-packages'),
+  createGamePackage: (data: GamePackageCreatePayload) => api.post('/game-packages', data),
+
   getClassGamePackages: (classId: string) => api.get(`/classes/${classId}/game-packages`),
   createClassGamePackage: (classId: string, data: GamePackageCreatePayload) =>
     api.post(`/classes/${classId}/game-packages`, data),
@@ -19,6 +23,8 @@ export const gameService = {
   getGamePackage: (packageId: string) => api.get(`/game-packages/${packageId}`),
   updateGamePackage: (packageId: string, data: GamePackageUpdatePayload) =>
     api.put(`/game-packages/${packageId}`, data),
+  updateGamePackagePublication: (packageId: string, data: GamePackagePublicationPayload) =>
+    api.put(`/game-packages/${packageId}/publication`, data),
   deleteGamePackage: (packageId: string) => api.delete(`/game-packages/${packageId}`),
 
   getGamePackageQuestions: (packageId: string) => api.get(`/game-packages/${packageId}/questions`),
@@ -29,6 +35,7 @@ export const gameService = {
   deleteGameQuestion: (questionId: string) => api.delete(`/game-questions/${questionId}`),
 
   getMyGamePackages: () => api.get('/game-packages/my-all'),
+  getGameHubPackages: () => api.get('/game-hub/games'),
   getGamePackagePlay: (packageId: string) => api.get(`/game-packages/${packageId}/play`),
   startGamePackage: (packageId: string) => api.post(`/game-packages/${packageId}/start`),
 
@@ -42,4 +49,8 @@ export const gameService = {
     api.post(`/game-packages/${packageId}/complete`, data),
 
   getGameAttempt: (attemptId: string) => api.get(`/game-attempts/${attemptId}`),
+  getGameLeaderboard: (packageId: string, params?: { scope?: string; scope_id?: string; limit?: number }) =>
+    api.get(`/game-packages/${packageId}/leaderboard`, { params }),
+  getMyGameLeaderboardEntry: (packageId: string, params?: { scope?: string; scope_id?: string }) =>
+    api.get(`/game-packages/${packageId}/leaderboard/me`, { params }),
 };

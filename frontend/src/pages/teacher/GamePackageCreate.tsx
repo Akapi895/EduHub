@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Gamepad2, Loader2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Gamepad2, Loader2, Sparkles, UploadCloud } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
-import { parseJsonInput, prettyPrintJson } from '@/features/games/helpers';
+import api from '@/services/api';
 import { classService } from '@/services/class.service';
 import { gameService } from '@/services/game.service';
 import { showErrorToast, showSuccessToast } from '@/store/toast.store';
@@ -25,19 +25,13 @@ export default function TeacherGamePackageCreate() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
-  const [runtimeConfigText, setRuntimeConfigText] = useState('');
-  const [runtimeConfigError, setRuntimeConfigError] = useState<string | null>(null);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    if (!classId) {
-      setLoading(false);
-      return;
-    }
-
     Promise.all([
-      classService.getClass(classId).catch(() => null),
+      classId ? classService.getClass(classId).catch(() => null) : Promise.resolve(null),
       gameService.getGameModules(),
     ])
       .then(([classResponse, modulesResponse]) => {
@@ -64,22 +58,41 @@ export default function TeacherGamePackageCreate() {
     };
   }, [classId]);
 
-  const handleCreate = async () => {
-    if (!classId || !selectedModuleId || !title.trim()) return;
+  const handleThumbnailUpload = async (file: File) => {
+    setUploadingThumbnail(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/upload?sub_dir=thumbnails', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const uploadedUrl = response.data?.data?.url;
+      if (!uploadedUrl) {
+        throw new Error('Upload response is missing url');
+      }
+      setThumbnailUrl(uploadedUrl);
+      showSuccessToast('Đã tải ảnh đại diện.');
+    } catch {
+      showErrorToast('Không thể tải ảnh đại diện.');
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  };
 
-    const parsedConfig = parseJsonInput(runtimeConfigText);
-    setRuntimeConfigError(parsedConfig.error);
-    if (parsedConfig.error) return;
+  const handleCreate = async () => {
+    if (!selectedModuleId || !title.trim() || uploadingThumbnail) return;
 
     setSaving(true);
     try {
-      const response = await gameService.createClassGamePackage(classId, {
+      const payload = {
         title: title.trim(),
         description: description.trim() || undefined,
         game_module_id: selectedModuleId,
         thumbnail_url: thumbnailUrl.trim() || undefined,
-        runtime_config: parsedConfig.parsed,
-      });
+      };
+      const response = classId
+        ? await gameService.createClassGamePackage(classId, payload)
+        : await gameService.createGamePackage(payload);
       const createdPackage = unwrapApiData<{ id: string }>(response);
       showSuccessToast('Đã tạo gói trò chơi.');
       navigate(`/teacher/games/${createdPackage.id}`);
@@ -109,9 +122,13 @@ export default function TeacherGamePackageCreate() {
             <Sparkles className="h-3.5 w-3.5" />
             Gói trò chơi mới
           </div>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-900">Tạo trò chơi cho lớp học</h1>
+          <h1 className="mt-3 text-3xl font-semibold text-slate-900">
+            {classId ? 'Tạo trò chơi cho lớp học' : 'Tạo trò chơi cho Game Hub'}
+          </h1>
           <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">
-            Gói này sẽ được gắn vào lớp {classItem?.name ? `"${classItem.name}"` : 'hiện tại'} để học sinh vào chơi và trả lời câu hỏi theo từng mức độ.
+            {classId
+              ? `Gói này sẽ được gắn vào lớp ${classItem?.name ? `"${classItem.name}"` : 'hiện tại'} để học sinh vào chơi và trả lời câu hỏi theo từng mức độ.`
+              : 'Gói này sẽ được tạo độc lập. Sau khi soạn xong, bạn có thể publish lên Game Hub để mọi học sinh cùng truy cập.'}
           </p>
         </div>
       </div>
@@ -145,33 +162,46 @@ export default function TeacherGamePackageCreate() {
               />
             </div>
             <div className="md:col-span-2">
-              <Input
-                label="Ảnh đại diện (tùy chọn)"
-                value={thumbnailUrl}
-                onChange={(event) => setThumbnailUrl(event.target.value)}
-                placeholder="https://..."
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Thiết lập nâng cao (JSON)</label>
-              <textarea
-                value={runtimeConfigText}
-                onChange={(event) => {
-                  setRuntimeConfigText(event.target.value);
-                  if (runtimeConfigError) {
-                    setRuntimeConfigError(null);
-                  }
-                }}
-                rows={8}
-                className={`w-full rounded-2xl border px-4 py-3 font-mono text-sm outline-none transition ${
-                  runtimeConfigError
-                    ? 'border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-200'
-                    : 'border-slate-200 focus:border-primary focus:ring-2 focus:ring-blue-200'
-                }`}
-                placeholder={prettyPrintJson({ difficulty: 'standard', timerSeconds: 60 })}
-              />
-              {runtimeConfigError && (
-                <p className="mt-2 text-sm text-red-600">{runtimeConfigError}</p>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện (tùy chọn)</label>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <Input
+                  value={thumbnailUrl}
+                  onChange={(event) => setThumbnailUrl(event.target.value)}
+                  placeholder="Dán liên kết ảnh hoặc tải file lên"
+                />
+                <label
+                  className={`inline-flex h-[42px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
+                    uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
+                  }`}
+                >
+                  {uploadingThumbnail ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                  )}
+                  {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingThumbnail}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      await handleThumbnailUpload(file);
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+              {thumbnailUrl && (
+                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  <img
+                    src={thumbnailUrl}
+                    alt="Ảnh đại diện trò chơi"
+                    className="h-40 w-full object-cover"
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -227,7 +257,7 @@ export default function TeacherGamePackageCreate() {
             <Button variant="secondary" onClick={() => navigate(classId ? `/teacher/classes/${classId}?tab=games` : '/teacher/games')}>
               Hủy
             </Button>
-            <Button onClick={handleCreate} disabled={!selectedModuleId || !title.trim()} isLoading={saving}>
+            <Button onClick={handleCreate} disabled={!selectedModuleId || !title.trim() || uploadingThumbnail} isLoading={saving}>
               Tạo gói trò chơi
             </Button>
           </div>

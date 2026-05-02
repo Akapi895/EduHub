@@ -35,6 +35,31 @@ class GamePackageUpdate(BaseModel):
     status: ContentPackageStatus | None = None
 
 
+class GamePackagePublicationUpdate(BaseModel):
+    published: bool = True
+    visibility: str = "public"
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    featured: bool = False
+    sort_order: int = 0
+    metadata_json: dict[str, Any] | None = None
+
+
+class GameLeaderboardEntryOut(BaseModel):
+    rank: int
+    user_id: str
+    student_name: str | None = None
+    avatar_url: str | None = None
+    best_attempt_id: str | None = None
+    best_score_total: float | None = None
+    best_score_context: float | None = None
+    best_score_question: float | None = None
+    best_duration_ms: int | None = None
+    attempts_count: int = 0
+    last_played_at: datetime | None = None
+    is_current_user: bool = False
+
+
 class GameQuestionCreate(QuestionCreate):
     difficulty_band: DifficultyBand
 

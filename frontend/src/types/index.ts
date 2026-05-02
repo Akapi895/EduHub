@@ -280,6 +280,19 @@ export interface ContentPackageAssignment {
   created_at?: string;
 }
 
+export interface GamePackageHubPublication {
+  id: string;
+  channel: 'game_hub' | string;
+  visibility: 'public' | 'restricted' | 'unlisted' | string;
+  status: ContentPackageStatus;
+  published_at?: string | null;
+  start_at?: string | null;
+  end_at?: string | null;
+  featured?: boolean;
+  sort_order?: number;
+  metadata_json?: Record<string, unknown> | null;
+}
+
 export interface GamePackageQuestionStats {
   total?: number;
   required_total?: number;
@@ -289,6 +302,7 @@ export interface GamePackageQuestionStats {
     distribution_mode?: 'random' | 'progressive';
     total_questions?: number;
     level_count?: number;
+    difficulty_bands?: DifficultyBand[];
     questions_per_level?: number[];
     capture_slots_by_level?: number[][];
     item_count_per_level?: number;
@@ -311,6 +325,11 @@ export interface PackageAttemptTotals {
   score_total?: number;
   score_question?: number;
   score_context?: number;
+  current_level?: number;
+  current_difficulty_band?: DifficultyBand | null;
+  remaining_by_difficulty?: Partial<Record<DifficultyBand, number>>;
+  answered_by_difficulty?: Partial<Record<DifficultyBand, number>>;
+  progress?: Record<string, unknown> | null;
   [key: string]: unknown;
 }
 
@@ -340,11 +359,15 @@ export interface PackageAttempt {
   package_id: string;
   user_id?: string;
   class_id?: string | null;
+  play_context?: 'class_assignment' | 'game_hub' | 'direct_link' | string;
+  access_rule_id?: string | null;
   attempt_index?: number;
   status?: PackageAttemptStatus;
   started_at?: string;
   submitted_at?: string | null;
   completed_at?: string | null;
+  duration_ms?: number | null;
+  leaderboard_eligible?: boolean;
   score_total?: number | null;
   score_question?: number | null;
   score_context?: number | null;
@@ -368,6 +391,8 @@ export interface GamePackage {
   created_by?: string;
   version?: number;
   published_at?: string | null;
+  published_to_hub?: boolean;
+  hub_publication?: GamePackageHubPublication | null;
   created_at?: string;
   updated_at?: string;
   class_id?: string;
@@ -385,11 +410,18 @@ export interface GamePackage {
   current_attempt?: PackageAttempt | null;
   can_play?: boolean;
   access_reason?: string | null;
+  access_context?: 'class_assignment' | 'game_hub' | 'direct_link' | string | null;
+  active_attempt_id?: string | null;
+  best_score?: number | null;
+  student_status?: 'not_started' | 'in_progress' | 'completed';
 }
 
 export interface GamePackagePlayAccess {
   allowed: boolean;
   reason?: string | null;
+  class_id?: string | null;
+  play_context?: 'class_assignment' | 'game_hub' | 'direct_link' | string | null;
+  access_rule_id?: string | null;
 }
 
 export interface GamePackagePlayResponse {
@@ -399,18 +431,26 @@ export interface GamePackagePlayResponse {
   entry?: string | null;
   runtime_config?: Record<string, unknown> | null;
   access?: GamePackagePlayAccess | null;
+  attempt?: PackageAttempt | null;
   current_attempt?: PackageAttempt | null;
+  active_question_attempt?: PackageQuestionAttempt | null;
+  active_question?: GameRuntimeQuestion | null;
 }
 
 export interface GameStartAttemptResponse {
   attempt_id: string;
   package_id: string;
+  class_id?: string | null;
+  play_context?: 'class_assignment' | 'game_hub' | 'direct_link' | string;
   module?: GameModuleRegistryEntry | null;
   manifest_url?: string | null;
   entry?: string | null;
   runtime_config?: Record<string, unknown> | null;
   status?: PackageAttemptStatus;
   attempt?: PackageAttempt | null;
+  attempt_totals?: PackageAttemptTotals | null;
+  active_question_attempt?: PackageQuestionAttempt | null;
+  active_question?: GameRuntimeQuestion | null;
 }
 
 export interface RuntimeQuestionOption {
@@ -510,6 +550,7 @@ export interface GamePackageCreatePayload {
   game_module_id: string;
   thumbnail_url?: string;
   runtime_config?: Record<string, unknown> | null;
+  status?: ContentPackageStatus;
 }
 
 export interface GamePackageUpdatePayload {
@@ -518,6 +559,45 @@ export interface GamePackageUpdatePayload {
   thumbnail_url?: string;
   runtime_config?: Record<string, unknown> | null;
   status?: ContentPackageStatus;
+}
+
+export interface GamePackagePublicationPayload {
+  published: boolean;
+  visibility?: 'public' | 'restricted' | 'unlisted';
+  start_at?: string | null;
+  end_at?: string | null;
+  featured?: boolean;
+  sort_order?: number;
+  metadata_json?: Record<string, unknown> | null;
+}
+
+export interface GameLeaderboardEntry {
+  rank: number;
+  user_id: string;
+  student_name?: string | null;
+  avatar_url?: string | null;
+  best_attempt_id?: string | null;
+  best_score_total?: number | null;
+  best_score_context?: number | null;
+  best_score_question?: number | null;
+  best_duration_ms?: number | null;
+  attempts_count: number;
+  last_played_at?: string | null;
+  is_current_user?: boolean;
+}
+
+export interface GameLeaderboardResponse {
+  package_id: string;
+  scope_type: string;
+  scope_id?: string;
+  entries: GameLeaderboardEntry[];
+  current_user_entry?: GameLeaderboardEntry | null;
+  total_entries: number;
+  ranking_policy?: {
+    primary_metric?: string;
+    tie_breakers?: string[];
+    aggregation?: string;
+  };
 }
 
 export interface GameQuestionPayload {

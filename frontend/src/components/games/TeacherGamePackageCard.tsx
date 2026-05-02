@@ -22,6 +22,10 @@ function getStatusLabel(status: GamePackage['status']) {
   return status;
 }
 
+function getHubLabel(gamePackage: GamePackage) {
+  return gamePackage.published_to_hub ? 'Đã publish Game Hub' : 'Chưa publish';
+}
+
 export default function TeacherGamePackageCard({
   gamePackage,
   onOpen,
@@ -47,6 +51,14 @@ export default function TeacherGamePackageCard({
                 {getStatusLabel(gamePackage.status)}
               </span>
             )}
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+              gamePackage.published_to_hub
+                ? 'border-sky-200 bg-sky-50 text-sky-700'
+                : 'border-slate-200 bg-slate-50 text-slate-500'
+            }`}
+            >
+              {getHubLabel(gamePackage)}
+            </span>
           </div>
 
           <div>
