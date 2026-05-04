@@ -170,13 +170,21 @@ function getOutcomeLabel(value: unknown) {
 }
 
 function sanitizeSandboxPolicy(value?: string) {
-  const tokens = (value ?? 'allow-scripts')
+  const tokens = (value ?? 'allow-scripts allow-same-origin')
     .split(/\s+/)
     .map((token) => token.trim())
-    .filter(Boolean)
-    .filter((token) => token !== 'allow-same-origin');
+    .filter(Boolean);
 
-  return tokens.length > 0 ? tokens.join(' ') : 'allow-scripts';
+  // Ensure allow-scripts is always present
+  if (!tokens.includes('allow-scripts')) {
+    tokens.push('allow-scripts');
+  }
+  // Ensure allow-same-origin is present so bridge postMessage works
+  if (!tokens.includes('allow-same-origin')) {
+    tokens.push('allow-same-origin');
+  }
+
+  return tokens.join(' ');
 }
 
 function buildMatchingShape(question: GameRuntimeQuestion | null) {
@@ -286,6 +294,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const questionFlowActive = Boolean(questionFlow) || questionBusy || submittingAnswer;
   const questionPlanPreview = getQuestionPlanPreview(gamePackage);
   const levelDistributionLabel = getLevelDistributionLabel(gamePackage);
+  const isMemoryCardGame = manifest?.id === 'memory-card' ||
+    (gamePackage as { game_module?: { slug?: string } })?.game_module?.slug === 'memory-card';
 
   const sendHostCommand = (
     type: GameHostCommandType,
@@ -835,7 +845,9 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const questionCorrect = getAttemptMetric(attemptTotals, ['questions_correct', 'correct_count']) ?? 0;
   const attemptScore = getAttemptMetric(attemptTotals, ['score_total', 'score_question']) ?? attempt?.score_total ?? 0;
   const progressPercent = getAttemptProgressPercent(attemptTotals);
-  const outcomeLabel = getOutcomeLabel(runtimeSnapshot.outcome);
+  const outcomeLabel = runtimeStatus === 'completed'
+    ? getOutcomeLabel(runtimeSnapshot.outcome ?? 'completed')
+    : getOutcomeLabel(runtimeSnapshot.outcome);
 
   const handleRestart = () => {
     sendHostCommand('host:restart', 'host-restart');
@@ -1020,7 +1032,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
               className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.14)]"
             >
               <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600">
-                Mỗi lần bắt vật đều được hệ thống kiểm tra. Khi cần, trò chơi sẽ tạm dừng để em trả lời câu hỏi rồi mới tiếp tục.
+                {manifest.short_description || manifest.description
+                  || 'Trò chơi sẽ tạm dừng khi cần để em trả lời câu hỏi rồi mới tiếp tục.'}
               </div>
               <div className="relative w-full bg-black" style={{ aspectRatio }}>
                 <iframe
@@ -1041,13 +1054,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
               </div>
             </div>
 
-            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)]">
-              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">
-                <BookOpen className="h-4 w-4 text-sky-500" />
-                Phân bổ câu hỏi
-              </div>
+            {!isMemoryCardGame && (
+              <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)]">
+                <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">
+                  <BookOpen className="h-4 w-4 text-sky-500" />
+                  Phân bổ câu hỏi
+                </div>
 
-              {questionPlanPreview && (
+                {questionPlanPreview && (
                 <div className="mt-4 grid gap-3 md:grid-cols-4">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Kiểu phân bổ</p>
@@ -1090,6 +1104,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
                 })}
               </div>
             </section>
+            )}
 
             {(manifest.instructions?.length ?? 0) > 0 && (
               <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)]">

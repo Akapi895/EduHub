@@ -1,0 +1,26 @@
+{
+  "id": "memory-card",
+  "slug": "memory-card",
+  "title": "Memory Card",
+  "short_description": "Lật thẻ ghi nhớ, tìm và ghép đúng từng cặp trước khi hết giờ.",
+  "description": "Game lật thẻ ghi nhớ chạy trong iframe sandbox. Giáo viên tạo các cặp thẻ (text hoặc hình ảnh), học sinh lật 2 thẻ mỗi lượt để tìm cặp khớp. Tất cả cặp nằm trong 1 màn duy nhất.",
+  "thumbnail": "/game-modules/memory-card/thumbnail.svg",
+  "entry": "/game-modules/memory-card/index.html",
+  "tags": ["Puzzle", "Memory", "Sandbox"],
+  "instructions": [
+    "Lật 2 thẻ để tìm cặp giống nhau.",
+    "Ghép đúng sẽ được cộng điểm, ghép sai thẻ tự úp lại.",
+    "Hoàn thành tất cả cặp trước khi hết thời gian để thắng!"
+  ],
+  "runtime": {
+    "kind": "iframe",
+    "sandbox": "allow-scripts allow-same-origin",
+    "allow": "fullscreen",
+    "aspect_ratio": "16 / 9"
+  },
+  "bridge": {
+    "enabled": true,
+    "version": 1,
+    "capabilities": ["ready", "state", "progress", "complete", "pause", "resume", "restart"]
+  }
+}

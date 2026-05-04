@@ -21,7 +21,7 @@ let timeH = 0;
 let vlH = 0;
 
 const bridge = window.EduHubGameBridge || null;
-const ITEM_TYPE_PLAN = [3, 4, 5, 3, 4, 5, 0, 1, 0, 1, 2, 2, 6, 7, 6];
+const ITEM_TYPE_PLAN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
 const DEFAULT_TIME_LIMIT_SECONDS = 60;
 const DEFAULT_TARGET_SCORE_BASE = 1000;
 const DEFAULT_TARGET_SCORE_STEP = 180;
@@ -48,7 +48,7 @@ const targetIM = new Image();
 targetIM.src = 'images/target.png';
 
 const dolarIM = new Image();
-dolarIM.src = 'images/dolar.png';
+dolarIM.src = 'images/money.png';
 
 const levelIM = new Image();
 levelIM.src = 'images/level.png';
@@ -517,6 +517,7 @@ class game {
 
     level = nextLevel - 2;
     this.newGold();
+    this.scheduleNextLoop(10);
   }
 
   syncLevelWithProgress(reason) {
@@ -664,12 +665,14 @@ class game {
       reason: this.levelEndReason,
       timeRemaining: 0,
     });
+    this.scheduleNextLoop(100);
   }
 
   retryCurrentLevel(reason) {
     this.reportState(reason || 'retry-level', true);
     level = Math.max(level + 1, 1) - 2;
     this.newGold();
+    this.scheduleNextLoop(10);
   }
 
   handleWin(reason) {

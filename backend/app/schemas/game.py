@@ -114,3 +114,23 @@ class GamePackageAttemptOut(BaseModel):
     score_total: float | None = None
     score_question: float | None = None
     score_context: float | None = None
+
+
+# ── Card Pairs (Memory Card / pair-matching games) ──────────────────────────
+
+class GameCardPairCreate(BaseModel):
+    """Payload to create a new card pair for a game package."""
+    left_label: str | None = None
+    left_image_url: str | None = None
+    right_label: str | None = None
+    right_image_url: str | None = None
+    order_index: int = 0
+
+
+class GameCardPairUpdate(BaseModel):
+    """Partial-update payload for an existing card pair."""
+    left_label: str | None = None
+    left_image_url: str | None = None
+    right_label: str | None = None
+    right_image_url: str | None = None
+    order_index: int | None = None

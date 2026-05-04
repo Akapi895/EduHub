@@ -16,6 +16,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import GameQuestionEditor from '@/components/games/GameQuestionEditor';
+import MemoryCardPairEditor from '@/components/games/MemoryCardPairEditor';
 import {
   GAME_DIFFICULTY_BANDS,
   getBandMeta,
@@ -182,7 +183,11 @@ export default function TeacherGamePackageDetail() {
     ?? gamePackage?.assignment?.class_id
     ?? gamePackage?.assignments?.[0]?.class_id
     ?? null;
-  const goldMinerPackage = gamePackage?.game_module?.slug === 'gold-miner';
+  const gameModuleName = gamePackage?.game_module?.title || 'Game';
+  const hasQuestionDistribution = gamePackage?.game_module?.slug !== undefined;
+  const goldMinerPackage = gamePackage?.game_module?.slug === 'gold-miner' ||
+    gamePackage?.game_module_id === 'gold-miner';
+  const isMemoryCard = gamePackage?.game_module?.slug === 'memory-card';
 
   const handleThumbnailUpload = async (file: File) => {
     setUploadingThumbnail(true);
@@ -519,13 +524,13 @@ export default function TeacherGamePackageDetail() {
             })}
           </div>
 
-          {goldMinerPackage && (
+          {hasQuestionDistribution && (
             <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Gold Miner sẽ phân phối câu hỏi theo level</p>
+              <p className="font-semibold text-slate-900">{gameModuleName} sẽ phân phối câu hỏi theo mức độ</p>
               <p className="mt-2 leading-6">
-                Giáo viên chỉ cần soạn bộ câu hỏi tổng thể. Hệ thống sẽ tự chia theo từng màn chơi,
-                cho phép có vật phẩm không kèm câu hỏi nhưng vẫn bảo đảm học sinh làm hết toàn bộ bộ câu hỏi
-                khi hoàn thành hết các màn.
+                Giáo viên chỉ cần soạn bộ câu hỏi tổng thể. Hệ thống sẽ tự chia theo từng phần chơi,
+                cho phép có mục không kèm câu hỏi nhưng vẫn bảo đảm học sinh làm hết toàn bộ bộ câu hỏi
+                khi hoàn thành hết trò chơi.
               </p>
               {questionPlanPreview && (
                 <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 sm:grid-cols-3">
@@ -550,58 +555,65 @@ export default function TeacherGamePackageDetail() {
         </div>
       </section>
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Đang chỉnh sửa
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getBandMeta(activeBand).label}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              {getBandMeta(activeBand).description}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => handleAddQuestion(activeBand)}>
-              Thêm câu hỏi mới
-            </Button>
-            <Button onClick={handleSaveQuestions} isLoading={savingQuestions}>
-              <Save className="mr-2 h-4 w-4" />
-              Lưu bộ câu hỏi
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-4">
-          {currentBandQuestions.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-              <p className="text-lg font-semibold text-slate-900">Mức độ này chưa có câu hỏi</p>
-              <p className="mt-2 text-sm text-slate-500">
-                Tạo ít nhất một câu hỏi để học sinh có nội dung làm bài khi chơi tới mức độ này.
+      {/* Question bank / Pair editor section */}
+      {isMemoryCard ? (
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <MemoryCardPairEditor packageId={packageId!} />
+        </section>
+      ) : (
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Đang chỉnh sửa
               </p>
-              <Button className="mt-4" onClick={() => handleAddQuestion(activeBand)}>
-                Thêm câu hỏi đầu tiên
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getBandMeta(activeBand).label}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                {getBandMeta(activeBand).description}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" onClick={() => handleAddQuestion(activeBand)}>
+                Thêm câu hỏi mới
+              </Button>
+              <Button onClick={handleSaveQuestions} isLoading={savingQuestions}>
+                <Save className="mr-2 h-4 w-4" />
+                Lưu bộ câu hỏi
               </Button>
             </div>
-          ) : (
-            currentBandQuestions.map((question, index) => (
-              <GameQuestionEditor
-                key={question.id}
-                question={question}
-                index={index}
-                band={activeBand}
-                warnOnManualText={goldMinerPackage}
-                onChange={(updatedQuestion) => {
-                  setQuestions((current) => current.map((item) => (
-                    item.id === updatedQuestion.id ? updatedQuestion : item
-                  )));
-                }}
-                onDelete={() => handleDeleteQuestion(question.id)}
-              />
-            ))
-          )}
-        </div>
-      </section>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {currentBandQuestions.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                <p className="text-lg font-semibold text-slate-900">Mức độ này chưa có câu hỏi</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Tạo ít nhất một câu hỏi để học sinh có nội dung làm bài khi chơi tới mức độ này.
+                </p>
+                <Button className="mt-4" onClick={() => handleAddQuestion(activeBand)}>
+                  Thêm câu hỏi đầu tiên
+                </Button>
+              </div>
+            ) : (
+              currentBandQuestions.map((question, index) => (
+                <GameQuestionEditor
+                  key={question.id}
+                  question={question}
+                  index={index}
+                  band={activeBand}
+                  warnOnManualText={goldMinerPackage}
+                  onChange={(updatedQuestion) => {
+                    setQuestions((current) => current.map((item) => (
+                      item.id === updatedQuestion.id ? updatedQuestion : item
+                    )));
+                  }}
+                  onDelete={() => handleDeleteQuestion(question.id)}
+                />
+              ))
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

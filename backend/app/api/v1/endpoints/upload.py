@@ -8,7 +8,7 @@ from app.utils.responses import ok
 router = APIRouter(prefix="/upload", tags=["Upload"])
 
 COMMON_UPLOAD_SUBDIRS = {"avatars"}
-TEACHER_UPLOAD_SUBDIRS = COMMON_UPLOAD_SUBDIRS | {"materials", "thumbnails", "interactive-books"}
+TEACHER_UPLOAD_SUBDIRS = COMMON_UPLOAD_SUBDIRS | {"materials", "thumbnails", "interactive-books", "card-pairs", "game-assets"}
 STUDENT_UPLOAD_SUBDIRS = COMMON_UPLOAD_SUBDIRS | {"exam-answers"}
 
 

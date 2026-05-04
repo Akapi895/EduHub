@@ -1,5 +1,6 @@
 import api from './api';
 import type {
+  GameCardPairPayload,
   GameCompleteRequest,
   GamePackagePublicationPayload,
   GamePackageCreatePayload,
@@ -53,4 +54,12 @@ export const gameService = {
     api.get(`/game-packages/${packageId}/leaderboard`, { params }),
   getMyGameLeaderboardEntry: (packageId: string, params?: { scope?: string; scope_id?: string }) =>
     api.get(`/game-packages/${packageId}/leaderboard/me`, { params }),
+
+  // Card Pairs (Memory Card / pair-matching games)
+  getCardPairs: (packageId: string) => api.get(`/game-packages/${packageId}/card-pairs`),
+  createCardPair: (packageId: string, data: GameCardPairPayload) =>
+    api.post(`/game-packages/${packageId}/card-pairs`, data),
+  updateCardPair: (pairId: string, data: Partial<GameCardPairPayload>) =>
+    api.put(`/game-card-pairs/${pairId}`, data),
+  deleteCardPair: (pairId: string) => api.delete(`/game-card-pairs/${pairId}`),
 };

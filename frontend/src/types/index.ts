@@ -618,6 +618,28 @@ export interface GameQuestionPayload {
   text_config?: QuestionTextConfig | null;
 }
 
+// ====== Game Card Pairs (Memory Card / pair-matching games) ======
+export interface GameCardPair {
+  id: string;
+  package_id: string;
+  left_label: string | null;
+  left_image_url: string | null;
+  right_label: string | null;
+  right_image_url: string | null;
+  order_index: number;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface GameCardPairPayload {
+  left_label?: string | null;
+  left_image_url?: string | null;
+  right_label?: string | null;
+  right_image_url?: string | null;
+  order_index?: number;
+}
+
 // ====== Messaging ======
 export interface Conversation {
   id: string;

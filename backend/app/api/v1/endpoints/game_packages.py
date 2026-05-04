@@ -4,10 +4,14 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, require_student, require_teacher
 from app.crud import class_crud
 from app.crud import game as game_crud
+from app.crud import game_card as card_pair_crud
 from app.db.session import get_db
+from app.models.game_card import GameCardPair
 from app.models.question_bank import QuestionBankItem
 from app.models.user import User
 from app.schemas.game import (
+    GameCardPairCreate,
+    GameCardPairUpdate,
     GameCompleteRequest,
     GamePackageCreate,
     GamePackagePublicationUpdate,
@@ -358,3 +362,65 @@ def get_game_attempt_detail(
     current_user: User = Depends(get_current_user),
 ):
     return ok(data=game_runtime_service.get_attempt_detail_for_user(db, attempt_id=attempt_id, current_user=current_user))
+
+
+# ── Card Pairs (Memory Card / pair-matching games) ─────────────────────────
+
+def _assert_teacher_card_pair(db: Session, *, pair_id: str, teacher: User) -> GameCardPair:
+    pair = card_pair_crud.get_card_pair(db, pair_id)
+    if not pair:
+        raise HTTPException(status_code=404, detail="Card pair not found")
+    package = game_crud.get_game_package(db, pair.package_id)
+    if not package:
+        raise HTTPException(status_code=404, detail="Game package not found")
+    if package.created_by == teacher.id or any(
+        a.class_ and a.class_.teacher_id == teacher.id for a in package.assignments
+    ):
+        return pair
+    raise HTTPException(status_code=403, detail="Forbidden")
+
+
+@router.get("/game-packages/{package_id}/card-pairs")
+def list_card_pairs(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    _assert_teacher_package(db, package_id=package_id, teacher=teacher)
+    pairs = card_pair_crud.get_card_pairs(db, package_id)
+    return ok(data=[card_pair_crud.serialize_card_pair(p) for p in pairs])
+
+
+@router.post("/game-packages/{package_id}/card-pairs", status_code=201)
+def create_card_pair(
+    package_id: str,
+    data: GameCardPairCreate,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    _assert_teacher_package(db, package_id=package_id, teacher=teacher)
+    pair = card_pair_crud.create_card_pair(db, package_id=package_id, data=data)
+    return ok(data=card_pair_crud.serialize_card_pair(pair), status_code=201)
+
+
+@router.put("/game-card-pairs/{pair_id}")
+def update_card_pair(
+    pair_id: str,
+    data: GameCardPairUpdate,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    pair = _assert_teacher_card_pair(db, pair_id=pair_id, teacher=teacher)
+    updated = card_pair_crud.update_card_pair(db, pair=pair, data=data)
+    return ok(data=card_pair_crud.serialize_card_pair(updated))
+
+
+@router.delete("/game-card-pairs/{pair_id}")
+def delete_card_pair(
+    pair_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    pair = _assert_teacher_card_pair(db, pair_id=pair_id, teacher=teacher)
+    card_pair_crud.delete_card_pair(db, pair=pair)
+    return ok(message="Card pair deleted")

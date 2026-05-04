@@ -35,6 +35,7 @@ from app.models.package_attempt import (  # noqa: F401
     QuestionAttemptUploadedAsset,
 )
 from app.models.game_module import GameModule, GameModuleTriggerMapping, GameRuntimeEvent  # noqa: F401
+from app.models.game_card import GameCardPair  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.interactive_book import (  # noqa: F401

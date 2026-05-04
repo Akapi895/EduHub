@@ -1,0 +1,275 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Base reset ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Ensure [hidden] always hides, even when CSS sets display explicitly */
+[hidden] { display: none !important; }
+
+:root {
+  --primary:    #6366f1;
+  --primary-lt: #ede9fe;
+  --success:    #22c55e;
+  --success-lt: #dcfce7;
+  --danger:     #ef4444;
+  --danger-lt:  #fee2e2;
+  --bg:         #f1f5f9;
+  --surface:    #ffffff;
+  --border:     #e2e8f0;
+  --text:       #0f172a;
+  --muted:      #64748b;
+  --radius-sm:  10px;
+  --radius-md:  16px;
+  --radius-lg:  24px;
+  --shadow-sm:  0 1px 4px rgba(0,0,0,.08);
+  --shadow-md:  0 4px 20px rgba(0,0,0,.10);
+  --shadow-lg:  0 12px 40px rgba(0,0,0,.14);
+}
+
+html, body {
+  height: 100%;
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ── App layout ──────────────────────────────────────────────────────────── */
+.mc-app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+/* ── HUD ─────────────────────────────────────────────────────────────────── */
+.mc-hud {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  flex-shrink: 0;
+}
+
+.hud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.hud-pill strong { color: var(--text); }
+.hud-score { background: #faf5ff; border-color: #ddd6fe; color: #7c3aed; }
+.hud-score strong { color: #7c3aed; }
+.time-critical { color: var(--danger) !important; animation: pulse 1s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .5; }
+}
+
+/* ── Demo banner ─────────────────────────────────────────────────────────── */
+.demo-banner {
+  text-align: center;
+  padding: 6px 16px;
+  background: #fef9c3;
+  border-bottom: 1px solid #fde68a;
+  font-size: 12px;
+  color: #92400e;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* ── Stage / board ───────────────────────────────────────────────────────── */
+.mc-stage {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 16px;
+}
+
+.mc-board {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  max-width: 920px;
+  margin: 0 auto;
+}
+
+/* ── Card ────────────────────────────────────────────────────────────────── */
+.mc-card {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  outline: none;
+}
+
+.mc-card:hover:not(:disabled):not(.is-matched) {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: var(--shadow-md);
+  border-color: var(--primary);
+}
+
+.mc-card:focus-visible {
+  box-shadow: 0 0 0 3px var(--primary-lt);
+  border-color: var(--primary);
+}
+
+.mc-card.is-flipped {
+  border-color: var(--primary);
+  background: var(--primary-lt);
+}
+
+.mc-card.is-matched {
+  border-color: var(--success);
+  background: var(--success-lt);
+  cursor: default;
+  animation: matchPop 0.35s ease forwards;
+}
+
+@keyframes matchPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+/* ── Card back ───────────────────────────────────────────────────────────── */
+.card-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #818cf8 0%, #6366f1 50%, #4f46e5 100%);
+  border-radius: inherit;
+}
+
+.card-back-mark {
+  font-size: clamp(1.4rem, 4vw, 2.2rem);
+  font-weight: 700;
+  color: rgba(255,255,255,0.85);
+  user-select: none;
+}
+
+/* ── Card face ───────────────────────────────────────────────────────────── */
+.card-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+}
+
+.card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: calc(var(--radius-md) - 2px);
+  display: block;
+}
+
+/* when image + label both present */
+.card-face .card-img { flex: 1; min-height: 0; }
+
+.card-label {
+  font-size: clamp(0.75rem, 2.5vw, 1.1rem);
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  word-break: break-word;
+  line-height: 1.3;
+  padding: 2px 4px;
+}
+
+/* ── Overlay ─────────────────────────────────────────────────────────────── */
+.mc-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.mc-overlay-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 40px 32px;
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.mc-overlay-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.mc-overlay-msg {
+  font-size: 0.95rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.mc-restart-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 32px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.mc-restart-btn:hover { background: #4f46e5; transform: translateY(-1px); }
+.mc-restart-btn:active { transform: none; }
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .mc-board { gap: 8px; padding: 0; }
+  .mc-stage { padding: 10px; }
+  .hud-pill { font-size: 12px; padding: 3px 10px; }
+}

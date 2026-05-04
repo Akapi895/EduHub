@@ -148,7 +148,7 @@ export default function TeacherGamePackageCreate() {
                 label="Tiêu đề"
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
-                placeholder="VD: Gold Miner - Từ vựng chủ đề động vật"
+                placeholder="VD: Memory Card - Từ vựng chủ đề động vật"
               />
             </div>
             <div className="md:col-span-2">

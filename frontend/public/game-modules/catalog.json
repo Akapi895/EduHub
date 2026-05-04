@@ -4,6 +4,11 @@
       "slug": "gold-miner",
       "manifest": "/game-modules/gold-miner/manifest.json",
       "featured": true
+    },
+    {
+      "slug": "memory-card",
+      "manifest": "/game-modules/memory-card/manifest.json",
+      "featured": true
     }
   ]
 }

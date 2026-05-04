@@ -221,6 +221,40 @@ def _active_game_questions(package: ContentPackage) -> list[QuestionBankItem]:
     )
 
 
+def _is_gold_miner_package(package: ContentPackage) -> bool:
+    module = package.game_config.game_module if package.game_config and package.game_config.game_module else None
+    return bool(module and module.slug == "gold-miner")
+
+
+def _generic_runtime_preview_settings(package: ContentPackage) -> dict[str, Any]:
+    runtime_config = package.game_config.runtime_config if package.game_config and package.game_config.runtime_config else {}
+    runtime_config = runtime_config if isinstance(runtime_config, dict) else {}
+    session_config = runtime_config.get("session") if isinstance(runtime_config.get("session"), dict) else {}
+    memory_card_config = runtime_config.get("memory_card") if isinstance(runtime_config.get("memory_card"), dict) else {}
+    distribution_config = (
+        runtime_config.get("question_distribution")
+        if isinstance(runtime_config.get("question_distribution"), dict)
+        else {}
+    )
+    distribution_mode_raw = distribution_config.get("mode")
+    distribution_mode = "random" if str(distribution_mode_raw).lower() == "random" else "ordered"
+    item_count_per_level = _int_value(
+        memory_card_config.get("board_pair_count", session_config.get("item_count_per_level")),
+        8,
+        minimum=1,
+    )
+    time_limit_seconds = _int_value(
+        session_config.get("time_limit_seconds", session_config.get("default_time_limit_seconds")),
+        DEFAULT_GOLD_MINER_TIME_LIMIT_SECONDS,
+        minimum=10,
+    )
+    return {
+        "distribution_mode": distribution_mode,
+        "item_count_per_level": item_count_per_level,
+        "time_limit_seconds": time_limit_seconds,
+    }
+
+
 def _int_value(value: Any, default: int, *, minimum: int = 0) -> int:
     if isinstance(value, bool):
         return default
@@ -369,6 +403,40 @@ def build_gold_miner_question_plan_preview(package: ContentPackage) -> dict[str,
     }
 
 
+def build_generic_question_plan_preview(package: ContentPackage) -> dict[str, Any]:
+    items = _active_game_questions(package)
+    settings = _generic_runtime_preview_settings(package)
+    questions_by_difficulty = {
+        band: [item for item in items if item.difficulty_band == band]
+        for band in GAME_DIFFICULTY_BAND_ORDER
+    }
+    questions_per_level = [
+        len(questions_by_difficulty[band])
+        for band in GAME_DIFFICULTY_BAND_ORDER
+    ]
+    capture_slots_by_level = [
+        _build_capture_slots(min(count, settings["item_count_per_level"]), item_count_per_level=settings["item_count_per_level"])
+        for count in questions_per_level
+    ]
+    return {
+        "distribution_mode": settings["distribution_mode"],
+        "total_questions": len(items),
+        "level_count": len(questions_per_level),
+        "difficulty_bands": list(GAME_DIFFICULTY_BAND_ORDER),
+        "questions_per_level": questions_per_level,
+        "capture_slots_by_level": capture_slots_by_level,
+        "item_count_per_level": settings["item_count_per_level"],
+        "time_limit_seconds": settings["time_limit_seconds"],
+        "target_scores_by_level": [],
+    }
+
+
+def build_game_question_plan_preview(package: ContentPackage) -> dict[str, Any]:
+    if _is_gold_miner_package(package):
+        return build_gold_miner_question_plan_preview(package)
+    return build_generic_question_plan_preview(package)
+
+
 def build_game_question_stats(package: ContentPackage) -> dict[str, Any]:
     items = _active_game_questions(package)
     by_difficulty: dict[str, int] = {}
@@ -378,7 +446,7 @@ def build_game_question_stats(package: ContentPackage) -> dict[str, Any]:
             by_difficulty[item.difficulty_band] = by_difficulty.get(item.difficulty_band, 0) + 1
         by_type[item.type] = by_type.get(item.type, 0) + 1
 
-    question_plan_preview = build_gold_miner_question_plan_preview(package)
+    question_plan_preview = build_game_question_plan_preview(package)
 
     return {
         "total": len(items),

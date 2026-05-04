@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.crud import class_crud
 from app.crud import game as game_crud
+from app.crud import game_card as card_pair_crud
 from app.models.class_model import ClassStudent
 from app.models.content_package import ContentPackage, ContentPackageAssignment, GamePackageConfig
 from app.models.game_module import GameModule, GameRuntimeEvent
@@ -146,6 +147,31 @@ def _is_gold_miner_package(package: ContentPackage | None) -> bool:
     return package.game_config.game_module.slug == GOLD_MINER_MODULE_ID
 
 
+MEMORY_CARD_MODULE_SLUG = "memory-card"
+
+
+def _is_memory_card_package(package: ContentPackage | None) -> bool:
+    if not package or not package.game_config or not package.game_config.game_module:
+        return False
+    return package.game_config.game_module.slug == MEMORY_CARD_MODULE_SLUG
+
+
+def _card_pairs_for_runtime(db: Session, package_id: str) -> list[dict]:
+    """Return serialised card pairs for injection into runtime_config."""
+    pairs = card_pair_crud.get_card_pairs(db, package_id)
+    return [
+        {
+            "id": p.id,
+            "left_label": p.left_label,
+            "left_image_url": p.left_image_url,
+            "right_label": p.right_label,
+            "right_image_url": p.right_image_url,
+            "order_index": p.order_index,
+        }
+        for p in pairs
+    ]
+
+
 ANSWERED_QUESTION_STATUSES = {
     QuestionAttemptStatus.answered,
     QuestionAttemptStatus.graded,
@@ -173,7 +199,7 @@ def _active_questions_by_difficulty(package: ContentPackage) -> dict[str, list[Q
 
 
 def _build_difficulty_progression_question_plan(package: ContentPackage, *, seed: str) -> dict[str, Any]:
-    question_plan = game_crud.build_gold_miner_question_plan_preview(package)
+    question_plan = game_crud.build_game_question_plan_preview(package)
     questions_by_difficulty = _active_questions_by_difficulty(package)
 
     distribution_mode = question_plan.get("distribution_mode")
@@ -226,6 +252,7 @@ def _runtime_config_for_package(
     *,
     question_plan: dict[str, Any] | None = None,
     progress: dict[str, Any] | None = None,
+    db: Session | None = None,
 ) -> dict[str, Any] | None:
     if not package.game_config:
         return None
@@ -234,9 +261,17 @@ def _runtime_config_for_package(
     session_config = runtime_config.get("session") if isinstance(runtime_config.get("session"), dict) else {}
     runtime_config["session"] = dict(session_config)
 
+    # ── Memory Card: embed card pairs directly in runtime_config ──────────────
+    if _is_memory_card_package(package) and db is not None:
+        runtime_config["card_pairs"] = _card_pairs_for_runtime(db, package.id)
+        if progress:
+            runtime_config["question_progress"] = progress
+        return runtime_config
+
+    # ── Other games: question-plan distribution ────────────────────────────────
     effective_plan = question_plan
-    if effective_plan is None and _is_gold_miner_package(package):
-        effective_plan = game_crud.build_gold_miner_question_plan_preview(package)
+    if effective_plan is None:
+        effective_plan = game_crud.build_game_question_plan_preview(package)
 
     public_plan = _public_question_plan(effective_plan)
     if public_plan:
@@ -639,7 +674,7 @@ def _find_in_progress_attempt(db: Session, *, package_id: str, student_id: str) 
     )
 
 
-def _start_response(attempt: PackageAttempt, *, resume: bool) -> dict:
+def _start_response(db: Session, attempt: PackageAttempt, *, resume: bool) -> dict:
     module = attempt.package.game_config.game_module if attempt.package and attempt.package.game_config else None
     active_question = _active_question_attempt(attempt)
     attempt_totals = _attempt_totals(attempt)
@@ -647,6 +682,7 @@ def _start_response(attempt: PackageAttempt, *, resume: bool) -> dict:
         attempt.package,
         question_plan=_attempt_question_plan(attempt),
         progress=attempt_totals.get("progress"),
+        db=db,
     ) if attempt.package else None
     return {
         "attempt_id": attempt.id,
@@ -690,9 +726,10 @@ def get_play_data(db: Session, *, package_id: str, student: User) -> dict:
                 package,
                 question_plan=_attempt_question_plan(attempt),
                 progress=_attempt_totals(attempt).get("progress"),
+                db=db,
             )
             if attempt
-            else _runtime_config_for_package(package)
+            else _runtime_config_for_package(package, db=db)
         ),
         "access": {
             "allowed": True,
@@ -719,7 +756,7 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
         question_plan = _ensure_gold_miner_question_plan(existing)
         if question_plan is not None:
             db.commit()
-        return _start_response(existing, resume=True)
+        return _start_response(db, existing, resume=True)
 
     max_attempt_index = (
         db.query(PackageAttempt)
@@ -748,7 +785,7 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
             question_plan = _ensure_gold_miner_question_plan(existing_after_race)
             if question_plan is not None:
                 db.commit()
-            return _start_response(existing_after_race, resume=True)
+            return _start_response(db, existing_after_race, resume=True)
         raise HTTPException(status_code=409, detail="Game attempt was started concurrently. Please retry.")
 
     _ensure_gold_miner_question_plan(attempt)
@@ -769,7 +806,7 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
     created = get_game_attempt(db, attempt.id)
     if not created:
         raise HTTPException(status_code=500, detail="Failed to start game attempt")
-    return _start_response(created, resume=False)
+    return _start_response(db, created, resume=False)
 
 
 def _assert_attempt_for_runtime(db: Session, *, package_id: str, attempt_id: str, student_id: str) -> PackageAttempt:

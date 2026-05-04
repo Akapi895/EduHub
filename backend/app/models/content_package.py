@@ -12,6 +12,7 @@ from app.utils.enums import ContentPackageStatus, ContentPackageType
 
 if TYPE_CHECKING:
     from app.models.class_model import Class
+    from app.models.game_card import GameCardPair
     from app.models.game_module import GameModule
     from app.models.package_attempt import GameLeaderboardEntry, PackageAttempt
     from app.models.question_bank import QuestionBank
@@ -59,6 +60,9 @@ class ContentPackage(Base):
     )
     leaderboard_entries: Mapped[list["GameLeaderboardEntry"]] = relationship(
         "GameLeaderboardEntry", back_populates="package", cascade="all, delete-orphan"
+    )
+    card_pairs: Mapped[list["GameCardPair"]] = relationship(
+        "GameCardPair", back_populates="package", cascade="all, delete-orphan"
     )
 
 
