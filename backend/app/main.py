@@ -33,6 +33,7 @@ default_dev_origins = [
     "http://127.0.0.1:5173",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
+    "https://edu-hub-amber-one.vercel.app",
 ]
 cors_origins = settings.cors_origins or default_dev_origins
 cors_origin_regex = settings.cors_origin_regex
