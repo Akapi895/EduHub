@@ -5,10 +5,13 @@ import random
 from typing import Any
 
 from fastapi import HTTPException
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.crud import class_crud
 from app.crud import game as game_crud
+from app.crud import game_card as card_pair_crud
 from app.models.class_model import ClassStudent
 from app.models.content_package import ContentPackage, ContentPackageAssignment, GamePackageConfig
 from app.models.game_module import GameModule, GameRuntimeEvent
@@ -28,6 +31,7 @@ from app.schemas.game import (
     GameRuntimeEventRequest,
     GameRuntimeTriggerRequest,
 )
+from app.services import game_access_service, game_leaderboard_service
 from app.services.game_seed_service import GOLD_MINER_MODULE_ID, ensure_default_game_modules
 from app.services.grading_service import grade_question_attempt, recalculate_attempt_scores
 from app.utils.datetime_utils import now_local_naive
@@ -133,7 +137,7 @@ def _public_question_plan(question_plan: dict[str, Any] | None) -> dict[str, Any
     return {
         key: value
         for key, value in question_plan.items()
-        if key != "question_ids_by_level"
+        if key not in {"question_ids_by_level", "question_ids_by_difficulty"}
     }
 
 
@@ -143,54 +147,94 @@ def _is_gold_miner_package(package: ContentPackage | None) -> bool:
     return package.game_config.game_module.slug == GOLD_MINER_MODULE_ID
 
 
-def _build_gold_miner_question_plan(package: ContentPackage, *, seed: str) -> dict[str, Any]:
-    question_plan = game_crud.build_gold_miner_question_plan_preview(package)
-    active_questions = [
-        item
-        for item in (package.question_bank.items if package.question_bank else [])
-        if item.is_active
+MEMORY_CARD_MODULE_SLUG = "memory-card"
+
+
+def _is_memory_card_package(package: ContentPackage | None) -> bool:
+    if not package or not package.game_config or not package.game_config.game_module:
+        return False
+    return package.game_config.game_module.slug == MEMORY_CARD_MODULE_SLUG
+
+
+def _card_pairs_for_runtime(db: Session, package_id: str) -> list[dict]:
+    """Return serialised card pairs for injection into runtime_config."""
+    pairs = card_pair_crud.get_card_pairs(db, package_id)
+    return [
+        {
+            "id": p.id,
+            "left_label": p.left_label,
+            "left_image_url": p.left_image_url,
+            "right_label": p.right_label,
+            "right_image_url": p.right_image_url,
+            "order_index": p.order_index,
+        }
+        for p in pairs
     ]
 
-    distribution_mode = question_plan.get("distribution_mode")
-    if distribution_mode == "random":
-        rng = random.Random(seed)
-        ordered_questions = list(active_questions)
-        rng.shuffle(ordered_questions)
-    else:
-        ordered_questions = sorted(
-            active_questions,
+
+ANSWERED_QUESTION_STATUSES = {
+    QuestionAttemptStatus.answered,
+    QuestionAttemptStatus.graded,
+    QuestionAttemptStatus.resolved,
+    QuestionAttemptStatus.pending_manual,
+}
+
+
+def _active_questions_by_difficulty(package: ContentPackage) -> dict[str, list[QuestionBankItem]]:
+    result = {band: [] for band in game_crud.GAME_DIFFICULTY_BAND_ORDER}
+    for item in (package.question_bank.items if package.question_bank else []):
+        if item.is_active and item.difficulty_band in result:
+            result[item.difficulty_band].append(item)
+
+    for band, items in result.items():
+        result[band] = sorted(
+            items,
             key=lambda item: (
-                game_crud.GAME_DIFFICULTY_BAND_RANK.get(item.difficulty_band or "", 10**3),
                 item.order_index if item.order_index is not None else 10**9,
                 item.created_at,
                 item.id,
             ),
         )
+    return result
 
-    cursor = 0
+
+def _build_difficulty_progression_question_plan(package: ContentPackage, *, seed: str) -> dict[str, Any]:
+    question_plan = game_crud.build_game_question_plan_preview(package)
+    questions_by_difficulty = _active_questions_by_difficulty(package)
+
+    distribution_mode = question_plan.get("distribution_mode")
+    rng = random.Random(seed)
     question_ids_by_level: list[list[str]] = []
-    for count in question_plan.get("questions_per_level", []):
-        level_count = int(count) if isinstance(count, (int, float)) else 0
-        level_questions = ordered_questions[cursor:cursor + level_count]
+    question_ids_by_difficulty: dict[str, list[str]] = {}
+    for band in game_crud.GAME_DIFFICULTY_BAND_ORDER:
+        level_questions = list(questions_by_difficulty.get(band, []))
+        if distribution_mode == "random":
+            rng.shuffle(level_questions)
         question_ids_by_level.append([item.id for item in level_questions])
-        cursor += level_count
+        question_ids_by_difficulty[band] = [item.id for item in level_questions]
 
     question_plan["question_ids_by_level"] = question_ids_by_level
+    question_plan["question_ids_by_difficulty"] = question_ids_by_difficulty
+    question_plan["difficulty_bands"] = list(game_crud.GAME_DIFFICULTY_BAND_ORDER)
     return question_plan
 
 
-def _ensure_gold_miner_question_plan(attempt: PackageAttempt) -> dict[str, Any] | None:
+def _ensure_difficulty_progression_question_plan(attempt: PackageAttempt) -> dict[str, Any] | None:
     if not _is_gold_miner_package(attempt.package):
         return None
 
     existing = _attempt_question_plan(attempt)
-    if existing and isinstance(existing.get("question_ids_by_level"), list):
+    if (
+        existing
+        and isinstance(existing.get("question_ids_by_level"), list)
+        and isinstance(existing.get("difficulty_bands"), list)
+    ):
         return existing
 
     if not attempt.package:
         return None
 
-    question_plan = _build_gold_miner_question_plan(attempt.package, seed=attempt.id)
+    question_plan = _build_difficulty_progression_question_plan(attempt.package, seed=attempt.id)
     _set_attempt_runtime_state(
         attempt,
         question_plan=question_plan,
@@ -199,10 +243,16 @@ def _ensure_gold_miner_question_plan(attempt: PackageAttempt) -> dict[str, Any] 
     return question_plan
 
 
+def _ensure_gold_miner_question_plan(attempt: PackageAttempt) -> dict[str, Any] | None:
+    return _ensure_difficulty_progression_question_plan(attempt)
+
+
 def _runtime_config_for_package(
     package: ContentPackage,
     *,
     question_plan: dict[str, Any] | None = None,
+    progress: dict[str, Any] | None = None,
+    db: Session | None = None,
 ) -> dict[str, Any] | None:
     if not package.game_config:
         return None
@@ -211,9 +261,17 @@ def _runtime_config_for_package(
     session_config = runtime_config.get("session") if isinstance(runtime_config.get("session"), dict) else {}
     runtime_config["session"] = dict(session_config)
 
+    # ── Memory Card: embed card pairs directly in runtime_config ──────────────
+    if _is_memory_card_package(package) and db is not None:
+        runtime_config["card_pairs"] = _card_pairs_for_runtime(db, package.id)
+        if progress:
+            runtime_config["question_progress"] = progress
+        return runtime_config
+
+    # ── Other games: question-plan distribution ────────────────────────────────
     effective_plan = question_plan
-    if effective_plan is None and _is_gold_miner_package(package):
-        effective_plan = game_crud.build_gold_miner_question_plan_preview(package)
+    if effective_plan is None:
+        effective_plan = game_crud.build_game_question_plan_preview(package)
 
     public_plan = _public_question_plan(effective_plan)
     if public_plan:
@@ -237,6 +295,9 @@ def _runtime_config_for_package(
             "level_count": public_plan.get("level_count", 1),
         }
 
+    if progress:
+        runtime_config["question_progress"] = progress
+
     return runtime_config
 
 
@@ -249,18 +310,94 @@ def _find_question_by_id(package: ContentPackage | None, *, question_id: str) ->
     )
 
 
+def _answered_question_ids(attempt: PackageAttempt) -> set[str]:
+    return {
+        item.question_item_id
+        for item in attempt.question_attempts
+        if item.question_item_id
+        and (item.status in ANSWERED_QUESTION_STATUSES or item.answered_at is not None)
+    }
+
+
+def _presented_question_ids(attempt: PackageAttempt) -> set[str]:
+    return {
+        item.question_item_id
+        for item in attempt.question_attempts
+        if item.question_item_id
+    }
+
+
+def _progress_for_attempt(attempt: PackageAttempt) -> dict[str, Any]:
+    question_plan = _ensure_difficulty_progression_question_plan(attempt) if _is_gold_miner_package(attempt.package) else _attempt_question_plan(attempt)
+    difficulty_bands = (
+        question_plan.get("difficulty_bands")
+        if isinstance(question_plan, dict) and isinstance(question_plan.get("difficulty_bands"), list)
+        else list(game_crud.GAME_DIFFICULTY_BAND_ORDER)
+    )
+    question_ids_by_difficulty = (
+        question_plan.get("question_ids_by_difficulty")
+        if isinstance(question_plan, dict) and isinstance(question_plan.get("question_ids_by_difficulty"), dict)
+        else {}
+    )
+
+    if not question_ids_by_difficulty and attempt.package:
+        questions_by_difficulty = _active_questions_by_difficulty(attempt.package)
+        question_ids_by_difficulty = {
+            band: [item.id for item in questions_by_difficulty.get(band, [])]
+            for band in difficulty_bands
+        }
+
+    answered_ids = _answered_question_ids(attempt)
+    by_difficulty: dict[str, dict[str, Any]] = {}
+    total_questions = 0
+    total_answered = 0
+    current_level = 1
+    current_difficulty_band: str | None = None
+
+    for index, band in enumerate(difficulty_bands):
+        question_ids = [
+            str(question_id)
+            for question_id in (question_ids_by_difficulty.get(band, []) if isinstance(question_ids_by_difficulty, dict) else [])
+        ]
+        answered = [question_id for question_id in question_ids if question_id in answered_ids]
+        remaining = [question_id for question_id in question_ids if question_id not in answered_ids]
+        total_questions += len(question_ids)
+        total_answered += len(answered)
+        by_difficulty[band] = {
+            "total": len(question_ids),
+            "answered": len(answered),
+            "remaining": len(remaining),
+            "remaining_question_ids": remaining,
+            "completed": len(remaining) == 0,
+        }
+        if current_difficulty_band is None and remaining:
+            current_level = index + 1
+            current_difficulty_band = band
+
+    all_questions_complete = total_questions == 0 or total_answered >= total_questions
+    if all_questions_complete:
+        current_level = len(difficulty_bands)
+        current_difficulty_band = None
+
+    return {
+        "total_questions": total_questions,
+        "questions_answered": total_answered,
+        "questions_remaining": max(total_questions - total_answered, 0),
+        "difficulty_bands": difficulty_bands,
+        "by_difficulty": by_difficulty,
+        "current_level": current_level,
+        "current_difficulty_band": current_difficulty_band,
+        "current_level_complete": current_difficulty_band is None or by_difficulty[current_difficulty_band]["remaining"] == 0,
+        "all_questions_complete": all_questions_complete,
+    }
+
+
 def _attempt_has_required_gold_miner_answers(attempt: PackageAttempt) -> bool:
     if not _is_gold_miner_package(attempt.package):
         return True
 
-    totals = _attempt_totals(attempt)
-    questions_total = totals.get("questions_total")
-    questions_answered = totals.get("questions_answered")
-    if not isinstance(questions_total, (int, float)):
-        return True
-    if not isinstance(questions_answered, (int, float)):
-        return False
-    return int(questions_answered) >= int(questions_total)
+    progress = _progress_for_attempt(attempt)
+    return bool(progress.get("all_questions_complete"))
 
 
 def _is_successful_completion(summary_payload: dict[str, Any] | None) -> bool:
@@ -268,34 +405,23 @@ def _is_successful_completion(summary_payload: dict[str, Any] | None) -> bool:
         return False
     outcome = summary_payload.get("outcome")
     status = summary_payload.get("status")
-    return outcome in {"success", "completed"} or status == "completed"
+    return outcome in {"success", "completed", "win"} or status == "completed"
 
 
 def _attempt_totals(attempt: PackageAttempt) -> dict:
     question_attempts = list(attempt.question_attempts)
     active_question_attempt = _active_question_attempt(attempt)
-    question_plan = _attempt_question_plan(attempt)
-    questions_total = question_plan.get("total_questions") if isinstance(question_plan, dict) else None
-    if questions_total is None:
-        question_stats = game_crud.build_game_question_stats(attempt.package) if attempt.package else {}
-        questions_total = question_stats.get("total") if isinstance(question_stats, dict) else None
-    answered_statuses = {
-        QuestionAttemptStatus.answered,
-        QuestionAttemptStatus.graded,
-        QuestionAttemptStatus.resolved,
-        QuestionAttemptStatus.pending_manual,
-    }
+    progress = _progress_for_attempt(attempt)
+    questions_total = progress.get("total_questions")
     questions_answered = sum(
-        1 for item in question_attempts if item.status in answered_statuses or item.answered_at is not None
+        1 for item in question_attempts if item.status in ANSWERED_QUESTION_STATUSES or item.answered_at is not None
     )
     correct_answers = sum(1 for item in question_attempts if item.is_correct is True)
     return {
         "questions_total": questions_total,
         "questions_presented": len(question_attempts),
-        "questions_answered": questions_answered,
-        "questions_remaining": max(int(questions_total) - questions_answered, 0)
-        if isinstance(questions_total, (int, float))
-        else None,
+        "questions_answered": progress.get("questions_answered", questions_answered),
+        "questions_remaining": progress.get("questions_remaining"),
         "questions_pending_manual": sum(1 for item in question_attempts if item.status == QuestionAttemptStatus.pending_manual),
         "questions_correct": correct_answers,
         "correct_answers": correct_answers,
@@ -304,6 +430,17 @@ def _attempt_totals(attempt: PackageAttempt) -> dict:
         "score_context": round(float(attempt.score_context or 0.0), 2),
         "score_total": round(float(attempt.score_total or 0.0), 2),
         "active_question_attempt_id": active_question_attempt.id if active_question_attempt else None,
+        "current_level": progress.get("current_level"),
+        "current_difficulty_band": progress.get("current_difficulty_band"),
+        "remaining_by_difficulty": {
+            band: item["remaining"]
+            for band, item in progress.get("by_difficulty", {}).items()
+        },
+        "answered_by_difficulty": {
+            band: item["answered"]
+            for band, item in progress.get("by_difficulty", {}).items()
+        },
+        "progress": progress,
     }
 
 
@@ -367,10 +504,14 @@ def serialize_attempt_detail(attempt: PackageAttempt) -> dict:
         if attempt.user
         else None,
         "status": attempt.status,
+        "play_context": attempt.play_context,
+        "access_rule_id": attempt.access_rule_id,
         "attempt_index": attempt.attempt_index,
         "started_at": attempt.started_at,
         "submitted_at": attempt.submitted_at,
         "completed_at": attempt.completed_at,
+        "duration_ms": attempt.duration_ms,
+        "leaderboard_eligible": attempt.leaderboard_eligible,
         "score_question": attempt.score_question,
         "score_context": attempt.score_context,
         "score_total": attempt.score_total,
@@ -434,33 +575,27 @@ def get_attempt_detail_for_user(db: Session, *, attempt_id: str, current_user: U
     return serialize_attempt_detail(attempt)
 
 
-def _student_package_access(db: Session, *, package_id: str, student_id: str) -> tuple[ContentPackage, str]:
+def _student_package_access(db: Session, *, package_id: str, student: User) -> tuple[ContentPackage, game_access_service.GameAccessContext]:
     package = game_crud.get_game_package(db, package_id)
     if not package:
         raise HTTPException(status_code=404, detail="Game package not found")
     if package.status == "archived":
         raise HTTPException(status_code=403, detail="Game package is archived")
 
-    for assignment in package.assignments:
-        if assignment.is_active and class_crud.is_member(db, class_id=assignment.class_id, user_id=student_id):
-            return package, assignment.class_id
-    raise HTTPException(status_code=403, detail="Forbidden")
+    access = game_access_service.resolve_student_game_access(db, package=package, student=student)
+    if not access.allowed:
+        raise HTTPException(status_code=403, detail=access.reason or "Forbidden")
+    return package, access
 
 
 def list_my_game_packages(db: Session, *, student: User) -> list[dict]:
     ensure_default_game_modules(db)
-    class_ids = [membership.class_id for membership in db.query(ClassStudent).filter(ClassStudent.student_id == student.id).all()]
-    if not class_ids:
+    accessible_packages = game_access_service.list_accessible_game_packages(db, student=student)
+    if not accessible_packages:
         return []
 
-    packages = (
-        _game_packages_for_student_query(db, class_ids)
-        .filter(ContentPackage.status != "archived")
-        .all()
-    )
-    if not packages:
-        return []
-
+    packages = [package for package, _ in accessible_packages]
+    access_by_package = {package.id: access for package, access in accessible_packages}
     attempts = (
         _attempt_query(db)
         .filter(PackageAttempt.user_id == student.id, PackageAttempt.package_id.in_([package.id for package in packages]))
@@ -472,10 +607,11 @@ def list_my_game_packages(db: Session, *, student: User) -> list[dict]:
 
     payload = []
     for package in packages:
+        access = access_by_package.get(package.id)
         package_attempts = attempts_by_package.get(package.id, [])
         active_attempt = next((item for item in package_attempts if item.status == PackageAttemptStatus.in_progress), None)
         completed_attempts = [item for item in package_attempts if item.status != PackageAttemptStatus.in_progress]
-        data = game_crud.serialize_game_package(package)
+        data = game_crud.serialize_game_package(package, class_id=access.class_id if access else None)
         data["student_status"] = (
             "in_progress"
             if active_attempt
@@ -483,6 +619,8 @@ def list_my_game_packages(db: Session, *, student: User) -> list[dict]:
         )
         data["best_score"] = max((item.score_total for item in completed_attempts if item.score_total is not None), default=None)
         data["active_attempt_id"] = active_attempt.id if active_attempt else None
+        data["access_context"] = access.play_context if access else None
+        data["can_play"] = True
         payload.append(data)
     return payload
 
@@ -536,12 +674,15 @@ def _find_in_progress_attempt(db: Session, *, package_id: str, student_id: str) 
     )
 
 
-def _start_response(attempt: PackageAttempt, *, resume: bool) -> dict:
+def _start_response(db: Session, attempt: PackageAttempt, *, resume: bool) -> dict:
     module = attempt.package.game_config.game_module if attempt.package and attempt.package.game_config else None
     active_question = _active_question_attempt(attempt)
+    attempt_totals = _attempt_totals(attempt)
     runtime_config = _runtime_config_for_package(
         attempt.package,
         question_plan=_attempt_question_plan(attempt),
+        progress=attempt_totals.get("progress"),
+        db=db,
     ) if attempt.package else None
     return {
         "attempt_id": attempt.id,
@@ -551,8 +692,10 @@ def _start_response(attempt: PackageAttempt, *, resume: bool) -> dict:
         "entry": ((module.capability_config or {}).get("entry") if module else None),
         "runtime_config": runtime_config,
         "status": attempt.status,
+        "play_context": attempt.play_context,
+        "class_id": attempt.class_id,
         "resume": resume,
-        "attempt_totals": _attempt_totals(attempt),
+        "attempt_totals": attempt_totals,
         "active_question_attempt": _serialize_question_attempt(active_question) if active_question else None,
         "active_question": (
             game_crud.serialize_game_question(active_question.question_item, package_id=attempt.package_id, include_correct=False)
@@ -564,7 +707,7 @@ def _start_response(attempt: PackageAttempt, *, resume: bool) -> dict:
 
 def get_play_data(db: Session, *, package_id: str, student: User) -> dict:
     ensure_default_game_modules(db)
-    package, class_id = _student_package_access(db, package_id=package_id, student_id=student.id)
+    package, access = _student_package_access(db, package_id=package_id, student=student)
     attempt = _find_in_progress_attempt(db, package_id=package_id, student_id=student.id)
     if attempt:
         question_plan = _ensure_gold_miner_question_plan(attempt)
@@ -574,18 +717,25 @@ def get_play_data(db: Session, *, package_id: str, student: User) -> dict:
     active_question = _active_question_attempt(attempt) if attempt else None
 
     return {
-        "package": game_crud.serialize_game_package(package, class_id=class_id),
+        "package": game_crud.serialize_game_package(package, class_id=access.class_id),
         "module": game_crud.serialize_game_module(module),
         "manifest_url": module.manifest_url if module else None,
         "entry": ((module.capability_config or {}).get("entry") if module else None),
         "runtime_config": (
-            _runtime_config_for_package(package, question_plan=_attempt_question_plan(attempt))
+            _runtime_config_for_package(
+                package,
+                question_plan=_attempt_question_plan(attempt),
+                progress=_attempt_totals(attempt).get("progress"),
+                db=db,
+            )
             if attempt
-            else _runtime_config_for_package(package)
+            else _runtime_config_for_package(package, db=db)
         ),
         "access": {
             "allowed": True,
-            "class_id": class_id,
+            "class_id": access.class_id,
+            "play_context": access.play_context,
+            "access_rule_id": access.access_rule_id,
         },
         "attempt": serialize_attempt_detail(attempt) if attempt else None,
         "active_question_attempt": _serialize_question_attempt(active_question) if active_question else None,
@@ -599,37 +749,56 @@ def get_play_data(db: Session, *, package_id: str, student: User) -> dict:
 
 def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> dict:
     ensure_default_game_modules(db)
-    package, class_id = _student_package_access(db, package_id=package_id, student_id=student.id)
+    package, access = _student_package_access(db, package_id=package_id, student=student)
 
     existing = _find_in_progress_attempt(db, package_id=package_id, student_id=student.id)
     if existing:
         question_plan = _ensure_gold_miner_question_plan(existing)
         if question_plan is not None:
             db.commit()
-        return _start_response(existing, resume=True)
+        return _start_response(db, existing, resume=True)
 
-    attempt_index = (
+    max_attempt_index = (
         db.query(PackageAttempt)
+        .with_entities(func.max(PackageAttempt.attempt_index))
         .filter(PackageAttempt.package_id == package_id, PackageAttempt.user_id == student.id)
-        .count()
-        + 1
+        .scalar()
     )
+    attempt_index = int(max_attempt_index or 0) + 1
     attempt = PackageAttempt(
         package_id=package_id,
         user_id=student.id,
-        class_id=class_id,
+        class_id=access.class_id,
+        play_context=access.play_context or "game_hub",
+        access_rule_id=access.access_rule_id,
         attempt_index=attempt_index,
         status=PackageAttemptStatus.in_progress,
         started_at=now_local_naive(),
     )
     db.add(attempt)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        existing_after_race = _find_in_progress_attempt(db, package_id=package_id, student_id=student.id)
+        if existing_after_race:
+            question_plan = _ensure_gold_miner_question_plan(existing_after_race)
+            if question_plan is not None:
+                db.commit()
+            return _start_response(db, existing_after_race, resume=True)
+        raise HTTPException(status_code=409, detail="Game attempt was started concurrently. Please retry.")
+
     _ensure_gold_miner_question_plan(attempt)
     db.add(
         GameRuntimeEvent(
             package_attempt_id=attempt.id,
             event_type="attempt_started",
-            event_payload={"package_id": package_id, "class_id": class_id},
+            event_payload={
+                "package_id": package_id,
+                "class_id": access.class_id,
+                "play_context": access.play_context,
+                "access_rule_id": access.access_rule_id,
+            },
         )
     )
     db.commit()
@@ -637,7 +806,7 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
     created = get_game_attempt(db, attempt.id)
     if not created:
         raise HTTPException(status_code=500, detail="Failed to start game attempt")
-    return _start_response(created, resume=False)
+    return _start_response(db, created, resume=False)
 
 
 def _assert_attempt_for_runtime(db: Session, *, package_id: str, attempt_id: str, student_id: str) -> PackageAttempt:
@@ -699,24 +868,7 @@ def _log_runtime_event(db: Session, *, attempt_id: str, event_type: str, event_p
     )
 
 
-def _gold_miner_level_question_attempts(attempt: PackageAttempt, *, level_number: int) -> list[PackageQuestionAttempt]:
-    result: list[PackageQuestionAttempt] = []
-    for question_attempt in attempt.question_attempts:
-        payload = question_attempt.source_payload if isinstance(question_attempt.source_payload, dict) else {}
-        try:
-            payload_level = int(payload.get("level", 0))
-        except (TypeError, ValueError):
-            payload_level = 0
-        if payload_level == level_number:
-            result.append(question_attempt)
-
-    return sorted(
-        result,
-        key=lambda row: (row.display_order if row.display_order is not None else 10**9, row.presented_at),
-    )
-
-
-def _should_ask_gold_miner_question(
+def _should_ask_progression_question(
     *,
     capture_index: int,
     item_count_per_level: int,
@@ -736,7 +888,39 @@ def _should_ask_gold_miner_question(
     return False, "adaptive_skip"
 
 
-def _handle_gold_miner_scheduled_trigger(
+def _create_runtime_question_attempt(
+    db: Session,
+    *,
+    attempt: PackageAttempt,
+    question: QuestionBankItem,
+    data: GameRuntimeTriggerRequest,
+    item_instance_id: str | None,
+    source_payload: dict[str, Any],
+) -> PackageQuestionAttempt:
+    question_attempt = PackageQuestionAttempt(
+        package_attempt_id=attempt.id,
+        question_item_id=question.id,
+        source_context=QuestionSourceContext.game_trigger,
+        source_payload={
+            "trigger_type": data.trigger_type,
+            "trigger_key": data.trigger_key,
+            "trigger_value": data.trigger_value,
+            "event_payload": data.event_payload,
+            "item_instance_id": item_instance_id,
+            **source_payload,
+        },
+        display_order=len(attempt.question_attempts),
+        difficulty_band_snapshot=question.difficulty_band,
+        presented_at=now_local_naive(),
+        pause_started_at=now_local_naive(),
+        status=QuestionAttemptStatus.presented,
+    )
+    db.add(question_attempt)
+    db.flush()
+    return question_attempt
+
+
+def _handle_difficulty_progression_trigger(
     db: Session,
     *,
     attempt: PackageAttempt,
@@ -744,7 +928,7 @@ def _handle_gold_miner_scheduled_trigger(
     data: GameRuntimeTriggerRequest,
     item_instance_id: str | None,
 ) -> dict:
-    question_plan = _ensure_gold_miner_question_plan(attempt)
+    question_plan = _ensure_difficulty_progression_question_plan(attempt)
     if not question_plan:
         return {
             "action": "resume",
@@ -760,7 +944,7 @@ def _handle_gold_miner_scheduled_trigger(
         level_number = 0
         capture_index = 0
 
-    if level_number <= 0 or capture_index <= 0:
+    if capture_index <= 0:
         _log_runtime_event(
             db,
             attempt_id=attempt.id,
@@ -774,16 +958,37 @@ def _handle_gold_miner_scheduled_trigger(
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    capture_slots_by_level = question_plan.get("capture_slots_by_level") if isinstance(question_plan.get("capture_slots_by_level"), list) else []
-    question_ids_by_level = question_plan.get("question_ids_by_level") if isinstance(question_plan.get("question_ids_by_level"), list) else []
-    item_count_per_level = int(question_plan.get("item_count_per_level") or 0)
-    level_index = level_number - 1
-    if level_index >= len(capture_slots_by_level) or level_index >= len(question_ids_by_level):
+    progress = _progress_for_attempt(attempt)
+    if progress.get("all_questions_complete"):
         return {
             "action": "resume",
-            "reason": "outside_question_plan",
+            "reason": "all_questions_completed",
             "attempt_totals": _attempt_totals(attempt),
         }
+
+    current_level = int(progress.get("current_level") or 1)
+    current_difficulty = progress.get("current_difficulty_band")
+    if not isinstance(current_difficulty, str):
+        return {
+            "action": "resume",
+            "reason": "level_question_quota_completed",
+            "attempt_totals": _attempt_totals(attempt),
+        }
+
+    if level_number > 0 and level_number != current_level:
+        return {
+            "action": "resume",
+            "reason": "level_locked" if level_number > current_level else "stale_level",
+            "attempt_totals": _attempt_totals(attempt),
+        }
+
+    capture_slots_by_level = question_plan.get("capture_slots_by_level") if isinstance(question_plan.get("capture_slots_by_level"), list) else []
+    question_ids_by_difficulty = (
+        question_plan.get("question_ids_by_difficulty")
+        if isinstance(question_plan.get("question_ids_by_difficulty"), dict)
+        else {}
+    )
+    item_count_per_level = int(question_plan.get("item_count_per_level") or 0)
     if item_count_per_level <= 0 or capture_index > item_count_per_level:
         return {
             "action": "resume",
@@ -791,25 +996,30 @@ def _handle_gold_miner_scheduled_trigger(
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    capture_slots = capture_slots_by_level[level_index] if isinstance(capture_slots_by_level[level_index], list) else []
-    planned_question_ids = question_ids_by_level[level_index] if isinstance(question_ids_by_level[level_index], list) else []
-    level_question_attempts = _gold_miner_level_question_attempts(attempt, level_number=level_number)
-    presented_question_ids = {
-        item.question_item_id
-        for item in level_question_attempts
-        if item.question_item_id
-    }
+    level_index = current_level - 1
+    capture_slots = (
+        capture_slots_by_level[level_index]
+        if level_index < len(capture_slots_by_level) and isinstance(capture_slots_by_level[level_index], list)
+        else []
+    )
+    planned_question_ids = (
+        question_ids_by_difficulty.get(current_difficulty, [])
+        if isinstance(question_ids_by_difficulty, dict)
+        else []
+    )
+    presented_question_ids = _presented_question_ids(attempt)
     remaining_question_ids = [
         question_id
         for question_id in planned_question_ids
         if question_id not in presented_question_ids
     ]
+    remaining_in_level = progress["by_difficulty"][current_difficulty]["remaining"]
 
-    should_ask, trigger_strategy = _should_ask_gold_miner_question(
+    should_ask, trigger_strategy = _should_ask_progression_question(
         capture_index=capture_index,
         item_count_per_level=item_count_per_level,
         capture_slots=capture_slots,
-        remaining_questions=len(remaining_question_ids),
+        remaining_questions=int(remaining_in_level),
     )
     if not should_ask:
         return {
@@ -821,11 +1031,12 @@ def _handle_gold_miner_scheduled_trigger(
     if not remaining_question_ids:
         return {
             "action": "resume",
-            "reason": "question_plan_exhausted",
+            "reason": "level_question_quota_completed",
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    question_id = remaining_question_ids[0]
+    selector_strategy = attempt.package.game_config.selector_strategy if attempt.package and attempt.package.game_config else "random_no_repeat"
+    question_id = random.choice(remaining_question_ids) if selector_strategy == "random_no_repeat" else remaining_question_ids[0]
     question = _find_question_by_id(attempt.package, question_id=question_id)
     if not question:
         _log_runtime_event(
@@ -835,41 +1046,32 @@ def _handle_gold_miner_scheduled_trigger(
             event_payload={
                 **data.model_dump(),
                 "question_item_id": question_id,
-                "level": level_number,
+                "level": current_level,
+                "difficulty_band": current_difficulty,
                 "capture_index_in_level": capture_index,
             },
         )
         db.commit()
         return {
             "action": "resume",
-            "reason": "planned_question_missing",
+            "reason": "question_missing",
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    question_attempt = PackageQuestionAttempt(
-        package_attempt_id=attempt.id,
-        question_item_id=question.id,
-        source_context=QuestionSourceContext.game_trigger,
+    question_attempt = _create_runtime_question_attempt(
+        db,
+        attempt=attempt,
+        question=question,
+        data=data,
+        item_instance_id=item_instance_id,
         source_payload={
-            "trigger_type": data.trigger_type,
-            "trigger_key": data.trigger_key,
-            "trigger_value": data.trigger_value,
-            "event_payload": data.event_payload,
-            "item_instance_id": item_instance_id,
-            "level": level_number,
+            "level": current_level,
+            "difficulty_band": current_difficulty,
             "capture_index_in_level": capture_index,
-            "level_slot_index": len(level_question_attempts) + 1,
             "distribution_mode": question_plan.get("distribution_mode"),
             "trigger_strategy": trigger_strategy,
         },
-        display_order=len(attempt.question_attempts),
-        difficulty_band_snapshot=question.difficulty_band,
-        presented_at=now_local_naive(),
-        pause_started_at=now_local_naive(),
-        status=QuestionAttemptStatus.presented,
     )
-    db.add(question_attempt)
-    db.flush()
     _log_runtime_event(
         db,
         attempt_id=attempt.id,
@@ -878,9 +1080,9 @@ def _handle_gold_miner_scheduled_trigger(
             **data.model_dump(),
             "question_attempt_id": question_attempt.id,
             "question_item_id": question.id,
-            "level": level_number,
+            "level": current_level,
+            "difficulty_band": current_difficulty,
             "capture_index_in_level": capture_index,
-            "level_slot_index": len(level_question_attempts) + 1,
             "trigger_strategy": trigger_strategy,
         },
     )
@@ -927,7 +1129,7 @@ def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRun
             }
 
     if _is_gold_miner_package(attempt.package):
-        return _handle_gold_miner_scheduled_trigger(
+        return _handle_difficulty_progression_trigger(
             db,
             attempt=attempt,
             package_id=package_id,
@@ -1216,6 +1418,20 @@ def _extract_context_score(summary_payload: dict[str, Any], current_score: float
     return current_score
 
 
+def _extract_duration_ms(summary_payload: dict[str, Any], *, started_at, completed_at) -> int | None:
+    for key in ("duration_ms", "elapsed_ms", "time_ms"):
+        value = summary_payload.get(key)
+        if isinstance(value, (int, float)) and value >= 0:
+            return int(value)
+    for key in ("duration_seconds", "elapsed_seconds", "time_seconds"):
+        value = summary_payload.get(key)
+        if isinstance(value, (int, float)) and value >= 0:
+            return int(value * 1000)
+    if started_at and completed_at:
+        return max(int((completed_at - started_at).total_seconds() * 1000), 0)
+    return None
+
+
 def complete_attempt(db: Session, *, package_id: str, student: User, data: GameCompleteRequest) -> dict:
     ensure_default_game_modules(db)
     attempt = get_game_attempt(db, data.attempt_id)
@@ -1241,7 +1457,9 @@ def complete_attempt(db: Session, *, package_id: str, student: User, data: GameC
     recalculate_attempt_scores(attempt, finalize_status=False)
     attempt.completed_at = completed_at
     attempt.submitted_at = attempt.submitted_at or completed_at
+    attempt.duration_ms = _extract_duration_ms(data.summary_payload, started_at=attempt.started_at, completed_at=completed_at)
     attempt.status = PackageAttemptStatus.completed
+    game_leaderboard_service.update_leaderboard_for_attempt(db, attempt=attempt)
 
     _log_runtime_event(
         db,

@@ -6,7 +6,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.content_package import ContentPackage, ContentPackageAssignment, GamePackageConfig
+from app.models.content_package import (
+    ContentPackage,
+    ContentPackageAccessRule,
+    ContentPackageAssignment,
+    ContentPackagePublication,
+    GamePackageConfig,
+)
 from app.models.game_module import GameModule, GameModuleTriggerMapping
 from app.models.question_bank import (
     QuestionBank,
@@ -18,7 +24,7 @@ from app.models.question_bank import (
     QuestionItemTextConfig,
     QuestionItemTextKeyword,
 )
-from app.schemas.game import GamePackageCreate, GamePackageUpdate, GameQuestionCreate, GameQuestionUpdate
+from app.schemas.game import GamePackageCreate, GamePackagePublicationUpdate, GamePackageUpdate, GameQuestionCreate, GameQuestionUpdate
 from app.utils.datetime_utils import now_local_naive
 from app.utils.enums import ContentPackageType, QuestionType, TextGradingMode, TextInputVariant
 
@@ -70,6 +76,8 @@ def _game_query(db: Session):
         db.query(ContentPackage)
         .options(
             selectinload(ContentPackage.assignments).selectinload(ContentPackageAssignment.class_),
+            selectinload(ContentPackage.publications),
+            selectinload(ContentPackage.access_rules),
             selectinload(ContentPackage.game_config)
             .selectinload(GamePackageConfig.game_module)
             .selectinload(GameModule.trigger_mappings),
@@ -213,6 +221,40 @@ def _active_game_questions(package: ContentPackage) -> list[QuestionBankItem]:
     )
 
 
+def _is_gold_miner_package(package: ContentPackage) -> bool:
+    module = package.game_config.game_module if package.game_config and package.game_config.game_module else None
+    return bool(module and module.slug == "gold-miner")
+
+
+def _generic_runtime_preview_settings(package: ContentPackage) -> dict[str, Any]:
+    runtime_config = package.game_config.runtime_config if package.game_config and package.game_config.runtime_config else {}
+    runtime_config = runtime_config if isinstance(runtime_config, dict) else {}
+    session_config = runtime_config.get("session") if isinstance(runtime_config.get("session"), dict) else {}
+    memory_card_config = runtime_config.get("memory_card") if isinstance(runtime_config.get("memory_card"), dict) else {}
+    distribution_config = (
+        runtime_config.get("question_distribution")
+        if isinstance(runtime_config.get("question_distribution"), dict)
+        else {}
+    )
+    distribution_mode_raw = distribution_config.get("mode")
+    distribution_mode = "random" if str(distribution_mode_raw).lower() == "random" else "ordered"
+    item_count_per_level = _int_value(
+        memory_card_config.get("board_pair_count", session_config.get("item_count_per_level")),
+        8,
+        minimum=1,
+    )
+    time_limit_seconds = _int_value(
+        session_config.get("time_limit_seconds", session_config.get("default_time_limit_seconds")),
+        DEFAULT_GOLD_MINER_TIME_LIMIT_SECONDS,
+        minimum=10,
+    )
+    return {
+        "distribution_mode": distribution_mode,
+        "item_count_per_level": item_count_per_level,
+        "time_limit_seconds": time_limit_seconds,
+    }
+
+
 def _int_value(value: Any, default: int, *, minimum: int = 0) -> int:
     if isinstance(value, bool):
         return default
@@ -327,15 +369,19 @@ def _build_capture_slots(question_count: int, *, item_count_per_level: int) -> l
 
 
 def build_gold_miner_question_plan_preview(package: ContentPackage) -> dict[str, Any]:
-    total_questions = len(_active_game_questions(package))
+    items = _active_game_questions(package)
+    total_questions = len(items)
     settings = get_gold_miner_runtime_settings(package)
-    questions_per_level = _build_questions_per_level(
-        total_questions,
-        per_level_cap=settings["questions_per_level"],
-        requested_level_count=settings["requested_level_count"],
-    )
+    questions_by_difficulty = {
+        band: [item for item in items if item.difficulty_band == band]
+        for band in GAME_DIFFICULTY_BAND_ORDER
+    }
+    questions_per_level = [
+        len(questions_by_difficulty[band])
+        for band in GAME_DIFFICULTY_BAND_ORDER
+    ]
     capture_slots_by_level = [
-        _build_capture_slots(count, item_count_per_level=settings["item_count_per_level"])
+        _build_capture_slots(min(count, settings["item_count_per_level"]), item_count_per_level=settings["item_count_per_level"])
         for count in questions_per_level
     ]
     target_scores_by_level: list[int] = []
@@ -348,12 +394,47 @@ def build_gold_miner_question_plan_preview(package: ContentPackage) -> dict[str,
         "distribution_mode": settings["mode"],
         "total_questions": total_questions,
         "level_count": len(questions_per_level),
+        "difficulty_bands": list(GAME_DIFFICULTY_BAND_ORDER),
         "questions_per_level": questions_per_level,
         "capture_slots_by_level": capture_slots_by_level,
         "item_count_per_level": settings["item_count_per_level"],
         "time_limit_seconds": settings["time_limit_seconds"],
         "target_scores_by_level": target_scores_by_level,
     }
+
+
+def build_generic_question_plan_preview(package: ContentPackage) -> dict[str, Any]:
+    items = _active_game_questions(package)
+    settings = _generic_runtime_preview_settings(package)
+    questions_by_difficulty = {
+        band: [item for item in items if item.difficulty_band == band]
+        for band in GAME_DIFFICULTY_BAND_ORDER
+    }
+    questions_per_level = [
+        len(questions_by_difficulty[band])
+        for band in GAME_DIFFICULTY_BAND_ORDER
+    ]
+    capture_slots_by_level = [
+        _build_capture_slots(min(count, settings["item_count_per_level"]), item_count_per_level=settings["item_count_per_level"])
+        for count in questions_per_level
+    ]
+    return {
+        "distribution_mode": settings["distribution_mode"],
+        "total_questions": len(items),
+        "level_count": len(questions_per_level),
+        "difficulty_bands": list(GAME_DIFFICULTY_BAND_ORDER),
+        "questions_per_level": questions_per_level,
+        "capture_slots_by_level": capture_slots_by_level,
+        "item_count_per_level": settings["item_count_per_level"],
+        "time_limit_seconds": settings["time_limit_seconds"],
+        "target_scores_by_level": [],
+    }
+
+
+def build_game_question_plan_preview(package: ContentPackage) -> dict[str, Any]:
+    if _is_gold_miner_package(package):
+        return build_gold_miner_question_plan_preview(package)
+    return build_generic_question_plan_preview(package)
 
 
 def build_game_question_stats(package: ContentPackage) -> dict[str, Any]:
@@ -365,7 +446,7 @@ def build_game_question_stats(package: ContentPackage) -> dict[str, Any]:
             by_difficulty[item.difficulty_band] = by_difficulty.get(item.difficulty_band, 0) + 1
         by_type[item.type] = by_type.get(item.type, 0) + 1
 
-    question_plan_preview = build_gold_miner_question_plan_preview(package)
+    question_plan_preview = build_game_question_plan_preview(package)
 
     return {
         "total": len(items),
@@ -383,6 +464,7 @@ def serialize_game_package(package: ContentPackage, *, class_id: str | None = No
     if not selected_assignment and assignments:
         selected_assignment = assignments[0]
     question_stats = build_game_question_stats(package)
+    hub_publication = next((item for item in package.publications if item.channel == "game_hub"), None)
 
     return {
         "id": package.id,
@@ -404,6 +486,19 @@ def serialize_game_package(package: ContentPackage, *, class_id: str | None = No
         "status": package.status,
         "version": package.version,
         "published_at": package.published_at,
+        "published_to_hub": bool(hub_publication and hub_publication.status == "published"),
+        "hub_publication": {
+            "id": hub_publication.id,
+            "channel": hub_publication.channel,
+            "visibility": hub_publication.visibility,
+            "status": hub_publication.status,
+            "published_at": hub_publication.published_at,
+            "start_at": hub_publication.start_at,
+            "end_at": hub_publication.end_at,
+            "featured": hub_publication.featured,
+            "sort_order": hub_publication.sort_order,
+            "metadata_json": hub_publication.metadata_json,
+        } if hub_publication else None,
         "created_by": package.created_by,
         "created_at": package.created_at,
         "updated_at": package.updated_at,
@@ -436,11 +531,26 @@ def get_game_packages_for_class(db: Session, class_id: str) -> list[ContentPacka
     )
 
 
+def get_game_packages_for_teacher(db: Session, teacher_id: str) -> list[ContentPackage]:
+    return (
+        _game_query(db)
+        .filter(ContentPackage.created_by == teacher_id)
+        .order_by(ContentPackage.created_at.desc())
+        .all()
+    )
+
+
 def get_game_package(db: Session, package_id: str) -> ContentPackage | None:
     return _game_query(db).filter(ContentPackage.id == package_id).first()
 
 
-def create_game_package(db: Session, *, class_id: str, created_by: str, data: GamePackageCreate) -> ContentPackage:
+def create_game_package(
+    db: Session,
+    *,
+    created_by: str,
+    data: GamePackageCreate,
+    class_id: str | None = None,
+) -> ContentPackage:
     package = ContentPackage(
         package_type=ContentPackageType.game,
         title=data.title,
@@ -455,14 +565,15 @@ def create_game_package(db: Session, *, class_id: str, created_by: str, data: Ga
     db.add(package)
     db.flush()
 
-    db.add(
-        ContentPackageAssignment(
-            package_id=package.id,
-            class_id=class_id,
-            assigned_by=created_by,
-            is_active=True,
+    if class_id:
+        db.add(
+            ContentPackageAssignment(
+                package_id=package.id,
+                class_id=class_id,
+                assigned_by=created_by,
+                is_active=True,
+            )
         )
-    )
     db.add(
         GamePackageConfig(
             package_id=package.id,
@@ -473,6 +584,77 @@ def create_game_package(db: Session, *, class_id: str, created_by: str, data: Ga
         )
     )
     db.add(QuestionBank(package_id=package.id, created_by=created_by))
+    db.commit()
+    return get_game_package(db, package.id)  # type: ignore[return-value]
+
+
+def publish_game_package_to_hub(
+    db: Session,
+    *,
+    package: ContentPackage,
+    teacher_id: str,
+    data: GamePackagePublicationUpdate,
+) -> ContentPackage:
+    publication = next((item for item in package.publications if item.channel == "game_hub"), None)
+    if not publication:
+        publication = ContentPackagePublication(
+            package_id=package.id,
+            channel="game_hub",
+            visibility=data.visibility,
+            status="draft",
+        )
+        db.add(publication)
+        db.flush()
+
+    if data.published:
+        publication.status = "published"
+        publication.visibility = data.visibility
+        publication.published_by = teacher_id
+        publication.published_at = publication.published_at or now_local_naive()
+        publication.start_at = data.start_at
+        publication.end_at = data.end_at
+        publication.featured = data.featured
+        publication.sort_order = data.sort_order
+        publication.metadata_json = data.metadata_json
+        if package.status != "published":
+            package.status = "published"
+            package.version += 1
+            package.published_at = now_local_naive()
+
+        access_rule = next(
+            (
+                item
+                for item in package.access_rules
+                if item.permission == "play"
+                and item.audience_type == "all_students"
+                and item.effect == "allow"
+                and item.audience_id is None
+            ),
+            None,
+        )
+        if not access_rule:
+            access_rule = ContentPackageAccessRule(
+                package_id=package.id,
+                permission="play",
+                audience_type="all_students",
+                effect="allow",
+                created_by=teacher_id,
+            )
+            db.add(access_rule)
+        access_rule.is_active = True
+        access_rule.start_at = data.start_at
+        access_rule.end_at = data.end_at
+    else:
+        publication.status = "archived"
+        for access_rule in package.access_rules:
+            if (
+                access_rule.permission == "play"
+                and access_rule.audience_type == "all_students"
+                and access_rule.effect == "allow"
+                and access_rule.audience_id is None
+            ):
+                access_rule.is_active = False
+
     db.commit()
     return get_game_package(db, package.id)  # type: ignore[return-value]
 

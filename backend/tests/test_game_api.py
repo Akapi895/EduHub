@@ -10,6 +10,9 @@ from sqlalchemy.orm import sessionmaker
 from app.core.dependencies import get_db
 from app.db.base import Base
 from app.main import app
+from app.models.package_attempt import PackageAttempt
+from app.utils.datetime_utils import now_local_naive
+from app.utils.enums import PackageAttemptStatus
 
 
 class GameApiFlowTests(unittest.TestCase):
@@ -224,14 +227,21 @@ class GameApiFlowTests(unittest.TestCase):
         self.assertEqual(start_data["attempt_totals"]["questions_total"], 4)
 
         question_plan = start_data["runtime_config"]["question_plan"]
-        self.assertEqual(question_plan["level_count"], 2)
-        self.assertEqual(question_plan["questions_per_level"], [2, 2])
+        self.assertEqual(question_plan["level_count"], 4)
+        self.assertEqual(
+            question_plan["difficulty_bands"],
+            ["recognition", "comprehension", "application_basic", "application_advanced"],
+        )
+        self.assertEqual(question_plan["questions_per_level"], [1, 1, 1, 1])
 
         level_1_slots = question_plan["capture_slots_by_level"][0]
         level_2_slots = question_plan["capture_slots_by_level"][1]
+        level_3_slots = question_plan["capture_slots_by_level"][2]
+        level_4_slots = question_plan["capture_slots_by_level"][3]
         first_level_first_slot = level_1_slots[0]
-        first_level_second_slot = level_1_slots[1]
         second_level_first_slot = level_2_slots[0]
+        third_level_first_slot = level_3_slots[0]
+        fourth_level_first_slot = level_4_slots[0]
 
         non_question_trigger_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/trigger",
@@ -286,6 +296,8 @@ class GameApiFlowTests(unittest.TestCase):
         )
         self.assertEqual(answer_response.status_code, 200, answer_response.text)
         self.assertTrue(answer_response.json()["data"]["is_correct"])
+        self.assertEqual(answer_response.json()["data"]["attempt_totals"]["current_level"], 2)
+        self.assertEqual(answer_response.json()["data"]["attempt_totals"]["current_difficulty_band"], "comprehension")
 
         repeat_trigger_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/trigger",
@@ -305,6 +317,24 @@ class GameApiFlowTests(unittest.TestCase):
         self.assertEqual(repeat_trigger_response.status_code, 200, repeat_trigger_response.text)
         self.assertEqual(repeat_trigger_response.json()["data"]["reason"], "trigger_already_handled")
 
+        locked_level_trigger_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/runtime/trigger",
+            headers=self._auth_header(student_token),
+            json={
+                "attempt_id": attempt_id,
+                "trigger_type": "item_captured",
+                "trigger_key": "item_type",
+                "trigger_value": "big_gold",
+                "event_payload": {
+                    "item_instance_id": "level-3-too-early",
+                    "level": 3,
+                    "capture_index_in_level": third_level_first_slot,
+                },
+            },
+        )
+        self.assertEqual(locked_level_trigger_response.status_code, 200, locked_level_trigger_response.text)
+        self.assertEqual(locked_level_trigger_response.json()["data"]["reason"], "level_locked")
+
         second_trigger_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/trigger",
             headers=self._auth_header(student_token),
@@ -314,14 +344,15 @@ class GameApiFlowTests(unittest.TestCase):
                 "trigger_key": "item_type",
                 "trigger_value": "small_gold",
                 "event_payload": {
-                    "item_instance_id": "level-1-item-b",
-                    "level": 1,
-                    "capture_index_in_level": first_level_second_slot,
+                    "item_instance_id": "level-2-item-a",
+                    "level": 2,
+                    "capture_index_in_level": second_level_first_slot,
                 },
             },
         )
         self.assertEqual(second_trigger_response.status_code, 200, second_trigger_response.text)
         second_question_attempt_id = second_trigger_response.json()["data"]["question_attempt"]["id"]
+        self.assertEqual(second_trigger_response.json()["data"]["question"]["difficulty_band"], "comprehension")
         second_answer_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/answers",
             headers=self._auth_header(student_token),
@@ -333,8 +364,23 @@ class GameApiFlowTests(unittest.TestCase):
         )
         self.assertEqual(second_answer_response.status_code, 200, second_answer_response.text)
         self.assertTrue(second_answer_response.json()["data"]["is_correct"])
+        self.assertEqual(second_answer_response.json()["data"]["attempt_totals"]["questions_answered"], 2)
+        self.assertEqual(second_answer_response.json()["data"]["attempt_totals"]["current_level"], 3)
 
-        level_2_trigger_response = self.client.post(
+        level_failed_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/runtime/events",
+            headers=self._auth_header(student_token),
+            json={
+                "attempt_id": attempt_id,
+                "event_type": "level_failed",
+                "event_payload": {"runtime_state": {"score": 40, "level": 3, "reason": "time-up"}},
+            },
+        )
+        self.assertEqual(level_failed_response.status_code, 200, level_failed_response.text)
+        self.assertEqual(level_failed_response.json()["data"]["attempt_totals"]["questions_answered"], 2)
+        self.assertEqual(level_failed_response.json()["data"]["attempt_totals"]["current_level"], 3)
+
+        level_3_trigger_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/trigger",
             headers=self._auth_header(student_token),
             json={
@@ -343,32 +389,33 @@ class GameApiFlowTests(unittest.TestCase):
                 "trigger_key": "item_type",
                 "trigger_value": "big_gold",
                 "event_payload": {
-                    "item_instance_id": "level-2-item-a",
-                    "level": 2,
-                    "capture_index_in_level": second_level_first_slot,
+                    "item_instance_id": "level-3-item-a",
+                    "level": 3,
+                    "capture_index_in_level": third_level_first_slot,
                 },
             },
         )
-        self.assertEqual(level_2_trigger_response.status_code, 200, level_2_trigger_response.text)
-        level_2_question = level_2_trigger_response.json()["data"]["question"]
+        self.assertEqual(level_3_trigger_response.status_code, 200, level_3_trigger_response.text)
+        level_3_question = level_3_trigger_response.json()["data"]["question"]
+        self.assertEqual(level_3_question["difficulty_band"], "application_basic")
         selected_option_ids = sorted(
-            option["id"] for option in level_2_question["options"] if option["content"] in {"2", "5"}
+            option["id"] for option in level_3_question["options"] if option["content"] in {"2", "5"}
         )
-        level_2_answer_response = self.client.post(
+        level_3_answer_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/answers",
             headers=self._auth_header(student_token),
             json={
                 "attempt_id": attempt_id,
-                "question_attempt_id": level_2_trigger_response.json()["data"]["question_attempt"]["id"],
+                "question_attempt_id": level_3_trigger_response.json()["data"]["question_attempt"]["id"],
                 "selected_option_ids": selected_option_ids,
             },
         )
-        self.assertEqual(level_2_answer_response.status_code, 200, level_2_answer_response.text)
-        self.assertTrue(level_2_answer_response.json()["data"]["is_correct"])
-        self.assertEqual(level_2_answer_response.json()["data"]["attempt_totals"]["questions_answered"], 3)
+        self.assertEqual(level_3_answer_response.status_code, 200, level_3_answer_response.text)
+        self.assertTrue(level_3_answer_response.json()["data"]["is_correct"])
+        self.assertEqual(level_3_answer_response.json()["data"]["attempt_totals"]["questions_answered"], 3)
+        self.assertEqual(level_3_answer_response.json()["data"]["attempt_totals"]["current_level"], 4)
 
-        level_2_second_slot = level_2_slots[1]
-        level_2_second_trigger_response = self.client.post(
+        level_4_trigger_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/trigger",
             headers=self._auth_header(student_token),
             json={
@@ -377,29 +424,31 @@ class GameApiFlowTests(unittest.TestCase):
                 "trigger_key": "item_type",
                 "trigger_value": "diamond",
                 "event_payload": {
-                    "item_instance_id": "level-2-item-b",
-                    "level": 2,
-                    "capture_index_in_level": level_2_second_slot,
+                    "item_instance_id": "level-4-item-a",
+                    "level": 4,
+                    "capture_index_in_level": fourth_level_first_slot,
                 },
             },
         )
-        self.assertEqual(level_2_second_trigger_response.status_code, 200, level_2_second_trigger_response.text)
-        level_2_second_question = level_2_second_trigger_response.json()["data"]["question"]
-        level_2_second_correct_option_id = next(
-            option["id"] for option in level_2_second_question["options"] if option["content"] == "81"
+        self.assertEqual(level_4_trigger_response.status_code, 200, level_4_trigger_response.text)
+        level_4_question = level_4_trigger_response.json()["data"]["question"]
+        self.assertEqual(level_4_question["difficulty_band"], "application_advanced")
+        level_4_correct_option_id = next(
+            option["id"] for option in level_4_question["options"] if option["content"] == "81"
         )
-        level_2_second_answer_response = self.client.post(
+        level_4_answer_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/answers",
             headers=self._auth_header(student_token),
             json={
                 "attempt_id": attempt_id,
-                "question_attempt_id": level_2_second_trigger_response.json()["data"]["question_attempt"]["id"],
-                "selected_option_ids": [level_2_second_correct_option_id],
+                "question_attempt_id": level_4_trigger_response.json()["data"]["question_attempt"]["id"],
+                "selected_option_ids": [level_4_correct_option_id],
             },
         )
-        self.assertEqual(level_2_second_answer_response.status_code, 200, level_2_second_answer_response.text)
-        self.assertTrue(level_2_second_answer_response.json()["data"]["is_correct"])
-        self.assertEqual(level_2_second_answer_response.json()["data"]["attempt_totals"]["questions_answered"], 4)
+        self.assertEqual(level_4_answer_response.status_code, 200, level_4_answer_response.text)
+        self.assertTrue(level_4_answer_response.json()["data"]["is_correct"])
+        self.assertEqual(level_4_answer_response.json()["data"]["attempt_totals"]["questions_answered"], 4)
+        self.assertTrue(level_4_answer_response.json()["data"]["attempt_totals"]["progress"]["all_questions_complete"])
 
         runtime_event_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/runtime/events",
@@ -407,7 +456,7 @@ class GameApiFlowTests(unittest.TestCase):
             json={
                 "attempt_id": attempt_id,
                 "event_type": "state_snapshot",
-                "event_payload": {"runtime_state": {"score": 125, "level": 2}},
+                "event_payload": {"runtime_state": {"score": 125, "level": 4}},
             },
         )
         self.assertEqual(runtime_event_response.status_code, 200, runtime_event_response.text)
@@ -418,7 +467,7 @@ class GameApiFlowTests(unittest.TestCase):
             json={
                 "attempt_id": attempt_id,
                 "summary_payload": {"score": 125, "outcome": "win"},
-                "runtime_state": {"score": 125, "level": 2},
+                "runtime_state": {"score": 125, "level": 4},
             },
         )
         self.assertEqual(complete_response.status_code, 200, complete_response.text)
@@ -434,8 +483,8 @@ class GameApiFlowTests(unittest.TestCase):
         self.assertEqual(attempt_response.status_code, 200, attempt_response.text)
         attempt_data = attempt_response.json()["data"]
         self.assertEqual(attempt_data["attempt_totals"]["questions_answered"], 4)
-        self.assertEqual(attempt_data["runtime_state"]["question_plan"]["questions_per_level"], [2, 2])
-        self.assertEqual(attempt_data["runtime_state"]["game"]["level"], 2)
+        self.assertEqual(attempt_data["runtime_state"]["question_plan"]["questions_per_level"], [1, 1, 1, 1])
+        self.assertEqual(attempt_data["runtime_state"]["game"]["level"], 4)
 
     def test_gold_miner_success_completion_requires_all_planned_questions(self):
         teacher_token, student_token, package_id = self._bootstrap_class_and_package(
@@ -487,7 +536,7 @@ class GameApiFlowTests(unittest.TestCase):
         start_data = start_response.json()["data"]
         attempt_id = start_data["attempt_id"]
         question_plan = start_data["runtime_config"]["question_plan"]
-        self.assertEqual(question_plan["questions_per_level"], [2])
+        self.assertEqual(question_plan["questions_per_level"], [1, 1, 0, 0])
 
         first_slot = question_plan["capture_slots_by_level"][0][0]
         trigger_response = self.client.post(
@@ -562,8 +611,8 @@ class GameApiFlowTests(unittest.TestCase):
         )
         self.assertEqual(play_response.status_code, 200, play_response.text)
         question_plan_preview = play_response.json()["data"]["runtime_config"]["question_plan"]
-        self.assertEqual(question_plan_preview["level_count"], 1)
-        self.assertEqual(question_plan_preview["questions_per_level"], [1])
+        self.assertEqual(question_plan_preview["level_count"], 4)
+        self.assertEqual(question_plan_preview["questions_per_level"], [1, 0, 0, 0])
 
         start_response = self.client.post(
             f"/api/v1/game-packages/{package_id}/start",
@@ -572,8 +621,223 @@ class GameApiFlowTests(unittest.TestCase):
         self.assertEqual(start_response.status_code, 200, start_response.text)
         start_data = start_response.json()["data"]
         self.assertEqual(start_data["attempt_totals"]["questions_total"], 1)
-        self.assertEqual(start_data["runtime_config"]["question_plan"]["questions_per_level"], [1])
+        self.assertEqual(start_data["runtime_config"]["question_plan"]["questions_per_level"], [1, 0, 0, 0])
         self.assertEqual(start_data["runtime_config"]["question_distribution"]["mode"], "random")
+
+    def test_game_hub_publish_flow_and_leaderboard(self):
+        unique_suffix = uuid.uuid4().hex
+        teacher_email = f"teacher.hub.{unique_suffix}@example.com"
+        student_email = f"student.hub.{unique_suffix}@example.com"
+        password = "TestPass123"
+
+        self._register(full_name="Hub Teacher", email=teacher_email, password=password, role="teacher")
+        self._register(full_name="Hub Student", email=student_email, password=password, role="student")
+        teacher_token = self._login(email=teacher_email, password=password)
+        student_token = self._login(email=student_email, password=password)
+
+        modules_response = self.client.get(
+            "/api/v1/game-modules",
+            headers=self._auth_header(teacher_token),
+        )
+        self.assertEqual(modules_response.status_code, 200, modules_response.text)
+        module = modules_response.json()["data"][0]
+
+        package_response = self.client.post(
+            "/api/v1/game-packages",
+            headers=self._auth_header(teacher_token),
+            json={
+                "title": "Public Gold Miner",
+                "description": "Visible in the shared game hub",
+                "game_module_id": module["id"],
+                "runtime_config": {"question_distribution": {"questions_per_level": 2}},
+            },
+        )
+        self.assertEqual(package_response.status_code, 201, package_response.text)
+        package_id = package_response.json()["data"]["id"]
+        self.assertFalse(package_response.json()["data"]["published_to_hub"])
+
+        blocked_play_response = self.client.get(
+            f"/api/v1/game-packages/{package_id}/play",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(blocked_play_response.status_code, 403, blocked_play_response.text)
+
+        publish_response = self.client.put(
+            f"/api/v1/game-packages/{package_id}/publication",
+            headers=self._auth_header(teacher_token),
+            json={"published": True, "visibility": "public", "featured": True},
+        )
+        self.assertEqual(publish_response.status_code, 200, publish_response.text)
+        self.assertTrue(publish_response.json()["data"]["published_to_hub"])
+
+        hub_response = self.client.get(
+            "/api/v1/game-hub/games",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(hub_response.status_code, 200, hub_response.text)
+        hub_items = hub_response.json()["data"]
+        self.assertTrue(any(item["id"] == package_id and item["access_context"] == "game_hub" for item in hub_items))
+
+        start_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/start",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(start_response.status_code, 200, start_response.text)
+        start_data = start_response.json()["data"]
+        self.assertEqual(start_data["play_context"], "game_hub")
+        self.assertIsNone(start_data["class_id"])
+        attempt_id = start_data["attempt_id"]
+
+        complete_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/complete",
+            headers=self._auth_header(student_token),
+            json={
+                "attempt_id": attempt_id,
+                "summary_payload": {"score": 88, "outcome": "completed", "duration_ms": 42000},
+                "runtime_state": {"score": 88, "level": 1},
+            },
+        )
+        self.assertEqual(complete_response.status_code, 200, complete_response.text)
+        complete_data = complete_response.json()["data"]
+        self.assertEqual(complete_data["status"], "completed")
+        self.assertEqual(complete_data["play_context"], "game_hub")
+        self.assertEqual(complete_data["score_total"], 88.0)
+        self.assertEqual(complete_data["duration_ms"], 42000)
+
+        leaderboard_response = self.client.get(
+            f"/api/v1/game-packages/{package_id}/leaderboard",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(leaderboard_response.status_code, 200, leaderboard_response.text)
+        leaderboard = leaderboard_response.json()["data"]
+        self.assertEqual(leaderboard["total_entries"], 1)
+        self.assertEqual(leaderboard["entries"][0]["rank"], 1)
+        self.assertEqual(leaderboard["entries"][0]["best_score_total"], 88.0)
+        self.assertTrue(leaderboard["entries"][0]["is_current_user"])
+
+    def test_start_attempt_uses_max_attempt_index_when_previous_indexes_have_gaps(self):
+        unique_suffix = uuid.uuid4().hex
+        teacher_email = f"teacher.gap.{unique_suffix}@example.com"
+        student_email = f"student.gap.{unique_suffix}@example.com"
+        password = "TestPass123"
+
+        self._register(full_name="Gap Teacher", email=teacher_email, password=password, role="teacher")
+        student = self._register(full_name="Gap Student", email=student_email, password=password, role="student")
+        teacher_token = self._login(email=teacher_email, password=password)
+        student_token = self._login(email=student_email, password=password)
+
+        modules_response = self.client.get(
+            "/api/v1/game-modules",
+            headers=self._auth_header(teacher_token),
+        )
+        self.assertEqual(modules_response.status_code, 200, modules_response.text)
+        module = modules_response.json()["data"][0]
+
+        package_response = self.client.post(
+            "/api/v1/game-packages",
+            headers=self._auth_header(teacher_token),
+            json={
+                "title": "Attempt Gap Pack",
+                "description": "Regression test for attempt indexes",
+                "game_module_id": module["id"],
+                "runtime_config": {},
+            },
+        )
+        self.assertEqual(package_response.status_code, 201, package_response.text)
+        package_id = package_response.json()["data"]["id"]
+
+        publish_response = self.client.put(
+            f"/api/v1/game-packages/{package_id}/publication",
+            headers=self._auth_header(teacher_token),
+            json={"published": True, "visibility": "public"},
+        )
+        self.assertEqual(publish_response.status_code, 200, publish_response.text)
+
+        db = self.SessionLocal()
+        try:
+            db.add_all([
+                PackageAttempt(
+                    package_id=package_id,
+                    user_id=student["id"],
+                    attempt_index=1,
+                    status=PackageAttemptStatus.completed,
+                    play_context="game_hub",
+                    started_at=now_local_naive(),
+                    completed_at=now_local_naive(),
+                    score_total=10,
+                ),
+                PackageAttempt(
+                    package_id=package_id,
+                    user_id=student["id"],
+                    attempt_index=3,
+                    status=PackageAttemptStatus.completed,
+                    play_context="game_hub",
+                    started_at=now_local_naive(),
+                    completed_at=now_local_naive(),
+                    score_total=20,
+                ),
+            ])
+            db.commit()
+        finally:
+            db.close()
+
+        start_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/start",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(start_response.status_code, 200, start_response.text)
+        self.assertEqual(start_response.json()["data"]["resume"], False)
+        self.assertEqual(start_response.json()["data"]["attempt_totals"]["questions_total"], 0)
+
+        db = self.SessionLocal()
+        try:
+            created_attempt = (
+                db.query(PackageAttempt)
+                .filter(
+                    PackageAttempt.package_id == package_id,
+                    PackageAttempt.user_id == student["id"],
+                    PackageAttempt.status == PackageAttemptStatus.in_progress,
+                )
+                .first()
+            )
+            self.assertIsNotNone(created_attempt)
+            self.assertEqual(created_attempt.attempt_index, 4)
+        finally:
+            db.close()
+
+    def test_start_attempt_reuses_in_progress_attempt(self):
+        _teacher_token, student_token, package_id = self._bootstrap_class_and_package(runtime_config={})
+
+        first_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/start",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(first_response.status_code, 200, first_response.text)
+        first_data = first_response.json()["data"]
+        self.assertEqual(first_data["resume"], False)
+
+        second_response = self.client.post(
+            f"/api/v1/game-packages/{package_id}/start",
+            headers=self._auth_header(student_token),
+        )
+        self.assertEqual(second_response.status_code, 200, second_response.text)
+        second_data = second_response.json()["data"]
+        self.assertEqual(second_data["resume"], True)
+        self.assertEqual(second_data["attempt_id"], first_data["attempt_id"])
+
+        db = self.SessionLocal()
+        try:
+            in_progress_count = (
+                db.query(PackageAttempt)
+                .filter(
+                    PackageAttempt.package_id == package_id,
+                    PackageAttempt.status == PackageAttemptStatus.in_progress,
+                )
+                .count()
+            )
+            self.assertEqual(in_progress_count, 1)
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":

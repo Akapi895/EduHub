@@ -6,7 +6,14 @@ from app.db.session import SessionLocal, engine
 from app.models.user import User  # noqa: F401
 from app.models.class_model import Class, ClassStudent, Chapter, ClassMaterial  # noqa: F401
 from app.models.material import Material, Folder, MaterialView  # noqa: F401
-from app.models.content_package import ContentPackage, ContentPackageAssignment, ExamPackageConfig, GamePackageConfig  # noqa: F401
+from app.models.content_package import (  # noqa: F401
+    ContentPackage,
+    ContentPackageAccessRule,
+    ContentPackageAssignment,
+    ContentPackagePublication,
+    ExamPackageConfig,
+    GamePackageConfig,
+)
 from app.models.question_bank import (  # noqa: F401
     QuestionBank,
     QuestionBankItem,
@@ -19,6 +26,7 @@ from app.models.question_bank import (  # noqa: F401
     QuestionItemTextKeyword,
 )
 from app.models.package_attempt import (  # noqa: F401
+    GameLeaderboardEntry,
     PackageAttempt,
     PackageQuestionAttempt,
     QuestionAttemptMatchingAnswer,
@@ -27,6 +35,7 @@ from app.models.package_attempt import (  # noqa: F401
     QuestionAttemptUploadedAsset,
 )
 from app.models.game_module import GameModule, GameModuleTriggerMapping, GameRuntimeEvent  # noqa: F401
+from app.models.game_card import GameCardPair  # noqa: F401
 from app.models.message import Conversation, ConversationMember, Message  # noqa: F401
 from app.models.notification import Notification  # noqa: F401
 from app.models.interactive_book import (  # noqa: F401

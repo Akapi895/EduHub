@@ -1,29 +1,33 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  EyeOff,
+  Globe2,
   Layers3,
   Loader2,
   Save,
   Sparkles,
+  Trophy,
   Trash2,
+  UploadCloud,
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import GameQuestionEditor from '@/components/games/GameQuestionEditor';
+import MemoryCardPairEditor from '@/components/games/MemoryCardPairEditor';
 import {
   GAME_DIFFICULTY_BANDS,
   getBandMeta,
   getDistributionModeLabel,
   getLevelDistributionLabel,
   getQuestionPlanPreview,
-  parseJsonInput,
-  prettyPrintJson,
 } from '@/features/games/helpers';
+import api from '@/services/api';
 import { gameService } from '@/services/game.service';
 import { showErrorToast, showSuccessToast } from '@/store/toast.store';
-import type { DifficultyBand, GamePackage, Question } from '@/types';
+import type { DifficultyBand, GameLeaderboardResponse, GamePackage, Question } from '@/types';
 import { generateId } from '@/utils/helpers';
 
 function unwrapApiData<T>(response: { data?: { data?: T } & T }): T {
@@ -99,13 +103,14 @@ export default function TeacherGamePackageDetail() {
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingQuestions, setSavingQuestions] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<GameLeaderboardResponse | null>(null);
   const [activeBand, setActiveBand] = useState<DifficultyBand>('recognition');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
-  const [runtimeConfigText, setRuntimeConfigText] = useState('');
-  const [runtimeConfigError, setRuntimeConfigError] = useState<string | null>(null);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,8 +123,9 @@ export default function TeacherGamePackageDetail() {
     Promise.all([
       gameService.getGamePackage(packageId),
       gameService.getGamePackageQuestions(packageId),
+      gameService.getGameLeaderboard(packageId, { limit: 5 }).catch(() => null),
     ])
-      .then(([packageResponse, questionsResponse]) => {
+      .then(([packageResponse, questionsResponse, leaderboardResponse]) => {
         if (cancelled) return;
         const packageData = unwrapApiData<GamePackage>(packageResponse);
         const questionItems = unwrapApiData<Question[]>(questionsResponse) ?? [];
@@ -128,7 +134,9 @@ export default function TeacherGamePackageDetail() {
         setTitle(packageData.title);
         setDescription(packageData.description || '');
         setThumbnailUrl(packageData.thumbnail_url || '');
-        setRuntimeConfigText(prettyPrintJson(packageData.runtime_config ?? null));
+        if (leaderboardResponse) {
+          setLeaderboard(unwrapApiData<GameLeaderboardResponse>(leaderboardResponse));
+        }
       })
       .catch(() => {
         if (cancelled) return;
@@ -175,14 +183,35 @@ export default function TeacherGamePackageDetail() {
     ?? gamePackage?.assignment?.class_id
     ?? gamePackage?.assignments?.[0]?.class_id
     ?? null;
-  const goldMinerPackage = gamePackage?.game_module?.slug === 'gold-miner';
+  const gameModuleName = gamePackage?.game_module?.title || 'Game';
+  const hasQuestionDistribution = gamePackage?.game_module?.slug !== undefined;
+  const goldMinerPackage = gamePackage?.game_module?.slug === 'gold-miner' ||
+    gamePackage?.game_module_id === 'gold-miner';
+  const isMemoryCard = gamePackage?.game_module?.slug === 'memory-card';
+
+  const handleThumbnailUpload = async (file: File) => {
+    setUploadingThumbnail(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/upload?sub_dir=thumbnails', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const uploadedUrl = response.data?.data?.url;
+      if (!uploadedUrl) {
+        throw new Error('Upload response is missing url');
+      }
+      setThumbnailUrl(uploadedUrl);
+      showSuccessToast('Đã tải ảnh đại diện.');
+    } catch {
+      showErrorToast('Không thể tải ảnh đại diện.');
+    } finally {
+      setUploadingThumbnail(false);
+    }
+  };
 
   const handleSaveMeta = async () => {
-    if (!packageId || !gamePackage) return;
-
-    const parsedConfig = parseJsonInput(runtimeConfigText);
-    setRuntimeConfigError(parsedConfig.error);
-    if (parsedConfig.error) return;
+    if (!packageId || !gamePackage || uploadingThumbnail) return;
 
     setSavingMeta(true);
     try {
@@ -190,7 +219,6 @@ export default function TeacherGamePackageDetail() {
         title: title.trim(),
         description: description.trim() || undefined,
         thumbnail_url: thumbnailUrl.trim() || undefined,
-        runtime_config: parsedConfig.parsed,
       });
       const updatedPackage = unwrapApiData<GamePackage>(response);
       setGamePackage(updatedPackage);
@@ -199,6 +227,29 @@ export default function TeacherGamePackageDetail() {
       showErrorToast('Không thể cập nhật gói trò chơi.');
     } finally {
       setSavingMeta(false);
+    }
+  };
+
+  const handleToggleHubPublication = async () => {
+    if (!packageId || !gamePackage) return;
+
+    setPublishing(true);
+    try {
+      const nextPublished = !gamePackage.published_to_hub;
+      const response = await gameService.updateGamePackagePublication(packageId, {
+        published: nextPublished,
+        visibility: gamePackage.hub_publication?.visibility === 'unlisted' ? 'unlisted' : 'public',
+        featured: gamePackage.hub_publication?.featured ?? false,
+        sort_order: gamePackage.hub_publication?.sort_order ?? 0,
+        metadata_json: gamePackage.hub_publication?.metadata_json ?? null,
+      });
+      const updatedPackage = unwrapApiData<GamePackage>(response);
+      setGamePackage(updatedPackage);
+      showSuccessToast(nextPublished ? 'Đã publish trò chơi lên Game Hub.' : 'Đã gỡ trò chơi khỏi Game Hub.');
+    } catch {
+      showErrorToast('Không thể cập nhật trạng thái publish.');
+    } finally {
+      setPublishing(false);
     }
   };
 
@@ -301,7 +352,7 @@ export default function TeacherGamePackageDetail() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={handleSaveMeta} isLoading={savingMeta}>
+          <Button variant="secondary" onClick={handleSaveMeta} isLoading={savingMeta} disabled={uploadingThumbnail}>
             <Save className="mr-2 h-4 w-4" />
             Lưu thông tin
           </Button>
@@ -311,6 +362,65 @@ export default function TeacherGamePackageDetail() {
           </Button>
         </div>
       </div>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                <Globe2 className="h-4 w-4 text-sky-500" />
+                Game Hub
+              </div>
+              <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                {gamePackage.published_to_hub ? 'Đang mở cho mọi học sinh' : 'Chưa publish lên khu game chung'}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Publish để học sinh có thể thấy trò chơi trong Game Hub mà không cần thuộc lớp nào.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={gamePackage.published_to_hub ? 'secondary' : 'primary'}
+              onClick={handleToggleHubPublication}
+              isLoading={publishing}
+              className="justify-center"
+            >
+              {gamePackage.published_to_hub ? (
+                <>
+                  <EyeOff className="mr-1.5 h-4 w-4" />
+                  Gỡ khỏi Game Hub
+                </>
+              ) : (
+                <>
+                  <Globe2 className="mr-1.5 h-4 w-4" />
+                  Publish Game Hub
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <Trophy className="h-4 w-4 text-amber-500" />
+            Leaderboard
+          </div>
+          {leaderboard?.entries?.length ? (
+            <div className="mt-4 space-y-2">
+              {leaderboard.entries.slice(0, 3).map((entry) => (
+                <div key={entry.user_id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <span className="font-medium text-slate-700">#{entry.rank} {entry.student_name || 'Học sinh'}</span>
+                  <strong className="text-slate-900">{entry.best_score_total ?? 0}</strong>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm leading-6 text-slate-500">
+              Bảng xếp hạng sẽ xuất hiện sau khi học sinh hoàn thành lượt chơi đầu tiên.
+            </p>
+          )}
+        </div>
+      </section>
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
         <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -335,32 +445,47 @@ export default function TeacherGamePackageDetail() {
               />
             </div>
             <div className="md:col-span-2">
-              <Input
-                label="Ảnh đại diện"
-                value={thumbnailUrl}
-                onChange={(event) => setThumbnailUrl(event.target.value)}
-                placeholder="https://..."
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Thiết lập nâng cao (JSON)</label>
-              <textarea
-                value={runtimeConfigText}
-                onChange={(event) => {
-                  setRuntimeConfigText(event.target.value);
-                  if (runtimeConfigError) {
-                    setRuntimeConfigError(null);
-                  }
-                }}
-                rows={10}
-                className={`w-full rounded-2xl border px-4 py-3 font-mono text-sm outline-none transition ${
-                  runtimeConfigError
-                    ? 'border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-200'
-                    : 'border-slate-200 focus:border-primary focus:ring-2 focus:ring-blue-200'
-                }`}
-                placeholder={prettyPrintJson(gamePackage.runtime_config ?? {})}
-              />
-              {runtimeConfigError && <p className="mt-2 text-sm text-red-600">{runtimeConfigError}</p>}
+              <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện</label>
+              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                <Input
+                  value={thumbnailUrl}
+                  onChange={(event) => setThumbnailUrl(event.target.value)}
+                  placeholder="Dán liên kết ảnh hoặc tải file lên"
+                />
+                <label
+                  className={`inline-flex h-[42px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
+                    uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
+                  }`}
+                >
+                  {uploadingThumbnail ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                  )}
+                  {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={uploadingThumbnail}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      await handleThumbnailUpload(file);
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
+              {thumbnailUrl && (
+                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                  <img
+                    src={thumbnailUrl}
+                    alt="Ảnh đại diện trò chơi"
+                    className="h-40 w-full object-cover"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -399,13 +524,13 @@ export default function TeacherGamePackageDetail() {
             })}
           </div>
 
-          {goldMinerPackage && (
+          {hasQuestionDistribution && (
             <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Gold Miner sẽ phân phối câu hỏi theo level</p>
+              <p className="font-semibold text-slate-900">{gameModuleName} sẽ phân phối câu hỏi theo mức độ</p>
               <p className="mt-2 leading-6">
-                Giáo viên chỉ cần soạn bộ câu hỏi tổng thể. Hệ thống sẽ tự chia theo từng màn chơi,
-                cho phép có vật phẩm không kèm câu hỏi nhưng vẫn bảo đảm học sinh làm hết toàn bộ bộ câu hỏi
-                khi hoàn thành hết các màn.
+                Giáo viên chỉ cần soạn bộ câu hỏi tổng thể. Hệ thống sẽ tự chia theo từng phần chơi,
+                cho phép có mục không kèm câu hỏi nhưng vẫn bảo đảm học sinh làm hết toàn bộ bộ câu hỏi
+                khi hoàn thành hết trò chơi.
               </p>
               {questionPlanPreview && (
                 <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 sm:grid-cols-3">
@@ -430,58 +555,65 @@ export default function TeacherGamePackageDetail() {
         </div>
       </section>
 
-      <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Đang chỉnh sửa
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getBandMeta(activeBand).label}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              {getBandMeta(activeBand).description}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Button variant="secondary" onClick={() => handleAddQuestion(activeBand)}>
-              Thêm câu hỏi mới
-            </Button>
-            <Button onClick={handleSaveQuestions} isLoading={savingQuestions}>
-              <Save className="mr-2 h-4 w-4" />
-              Lưu bộ câu hỏi
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-4">
-          {currentBandQuestions.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-              <p className="text-lg font-semibold text-slate-900">Mức độ này chưa có câu hỏi</p>
-              <p className="mt-2 text-sm text-slate-500">
-                Tạo ít nhất một câu hỏi để học sinh có nội dung làm bài khi chơi tới mức độ này.
+      {/* Question bank / Pair editor section */}
+      {isMemoryCard ? (
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <MemoryCardPairEditor packageId={packageId!} />
+        </section>
+      ) : (
+        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Đang chỉnh sửa
               </p>
-              <Button className="mt-4" onClick={() => handleAddQuestion(activeBand)}>
-                Thêm câu hỏi đầu tiên
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getBandMeta(activeBand).label}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                {getBandMeta(activeBand).description}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button variant="secondary" onClick={() => handleAddQuestion(activeBand)}>
+                Thêm câu hỏi mới
+              </Button>
+              <Button onClick={handleSaveQuestions} isLoading={savingQuestions}>
+                <Save className="mr-2 h-4 w-4" />
+                Lưu bộ câu hỏi
               </Button>
             </div>
-          ) : (
-            currentBandQuestions.map((question, index) => (
-              <GameQuestionEditor
-                key={question.id}
-                question={question}
-                index={index}
-                band={activeBand}
-                warnOnManualText={goldMinerPackage}
-                onChange={(updatedQuestion) => {
-                  setQuestions((current) => current.map((item) => (
-                    item.id === updatedQuestion.id ? updatedQuestion : item
-                  )));
-                }}
-                onDelete={() => handleDeleteQuestion(question.id)}
-              />
-            ))
-          )}
-        </div>
-      </section>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {currentBandQuestions.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
+                <p className="text-lg font-semibold text-slate-900">Mức độ này chưa có câu hỏi</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Tạo ít nhất một câu hỏi để học sinh có nội dung làm bài khi chơi tới mức độ này.
+                </p>
+                <Button className="mt-4" onClick={() => handleAddQuestion(activeBand)}>
+                  Thêm câu hỏi đầu tiên
+                </Button>
+              </div>
+            ) : (
+              currentBandQuestions.map((question, index) => (
+                <GameQuestionEditor
+                  key={question.id}
+                  question={question}
+                  index={index}
+                  band={activeBand}
+                  warnOnManualText={goldMinerPackage}
+                  onChange={(updatedQuestion) => {
+                    setQuestions((current) => current.map((item) => (
+                      item.id === updatedQuestion.id ? updatedQuestion : item
+                    )));
+                  }}
+                  onDelete={() => handleDeleteQuestion(question.id)}
+                />
+              ))
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

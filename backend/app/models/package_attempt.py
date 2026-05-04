@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -12,7 +12,7 @@ from app.utils.enums import PackageAttemptStatus, QuestionAttemptStatus, Questio
 
 if TYPE_CHECKING:
     from app.models.class_model import Class
-    from app.models.content_package import ContentPackage
+    from app.models.content_package import ContentPackage, ContentPackageAccessRule
     from app.models.game_module import GameRuntimeEvent
     from app.models.question_bank import (
         QuestionBankItem,
@@ -34,9 +34,15 @@ class PackageAttempt(Base):
     class_id: Mapped[str | None] = mapped_column(String, ForeignKey("classes.id", ondelete="CASCADE"), nullable=True)
     attempt_index: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     status: Mapped[str] = mapped_column(String, default=PackageAttemptStatus.in_progress, nullable=False)
+    play_context: Mapped[str] = mapped_column(String, default="class_assignment", nullable=False)
+    access_rule_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("content_package_access_rules.id", ondelete="SET NULL"), nullable=True
+    )
     started_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    leaderboard_eligible: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     score_total: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_question: Mapped[float | None] = mapped_column(Float, nullable=True)
     score_context: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -48,12 +54,47 @@ class PackageAttempt(Base):
     package: Mapped["ContentPackage"] = relationship("ContentPackage", back_populates="attempts")
     user: Mapped["User"] = relationship("User", back_populates="package_attempts")
     class_: Mapped["Class | None"] = relationship("Class")
+    access_rule: Mapped["ContentPackageAccessRule | None"] = relationship("ContentPackageAccessRule")
     question_attempts: Mapped[list["PackageQuestionAttempt"]] = relationship(
         "PackageQuestionAttempt", back_populates="package_attempt", cascade="all, delete-orphan"
     )
     runtime_events: Mapped[list["GameRuntimeEvent"]] = relationship(
         "GameRuntimeEvent", back_populates="package_attempt", cascade="all, delete-orphan"
     )
+
+
+class GameLeaderboardEntry(Base):
+    __tablename__ = "game_leaderboard_entries"
+    __table_args__ = (
+        UniqueConstraint("package_id", "user_id", "scope_type", "scope_id", name="uq_game_leaderboard_package_user_scope"),
+        Index("ix_game_leaderboard_package_scope", "package_id", "scope_type", "scope_id"),
+        Index("ix_game_leaderboard_rank_lookup", "package_id", "scope_type", "scope_id", "best_score_total", "best_duration_ms"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    package_id: Mapped[str] = mapped_column(String, ForeignKey("content_packages.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
+    scope_type: Mapped[str] = mapped_column(String, default="global", nullable=False)
+    scope_id: Mapped[str] = mapped_column(String, default="", nullable=False)
+    best_attempt_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("package_attempts.id", ondelete="SET NULL"), nullable=True
+    )
+    last_attempt_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("package_attempts.id", ondelete="SET NULL"), nullable=True
+    )
+    best_score_total: Mapped[float | None] = mapped_column(Float, nullable=True)
+    best_score_context: Mapped[float | None] = mapped_column(Float, nullable=True)
+    best_score_question: Mapped[float | None] = mapped_column(Float, nullable=True)
+    best_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempts_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_played_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    package: Mapped["ContentPackage"] = relationship("ContentPackage", back_populates="leaderboard_entries")
+    user: Mapped["User"] = relationship("User")
+    best_attempt: Mapped["PackageAttempt | None"] = relationship("PackageAttempt", foreign_keys=[best_attempt_id])
+    last_attempt: Mapped["PackageAttempt | None"] = relationship("PackageAttempt", foreign_keys=[last_attempt_id])
 
 
 class PackageQuestionAttempt(Base):

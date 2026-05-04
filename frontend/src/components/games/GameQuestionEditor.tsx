@@ -428,7 +428,7 @@ export default function GameQuestionEditor({
 
               {warnOnManualText && question.text_config?.grading_mode === 'manual' && (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                  Với Gold Miner, không nên dùng câu hỏi tự luận chấm tay. Hãy chuyển sang chế độ chấm tự động trước khi giao cho học sinh.
+                  Trò chơi không hỗ trợ chấm điểm tự luận. Hãy chuyển sang chế độ chấm tự động hoặc sử dụng loại câu hỏi khác trước khi giao cho học sinh.
                 </div>
               )}
 

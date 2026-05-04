@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduHub – Lật Thẻ Ghi Nhớ</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="mc-app">
+
+    <!-- HUD -->
+    <header class="mc-hud" id="hud">
+      <div class="hud-pill">⏱ <strong id="time-val">3:00</strong></div>
+      <div class="hud-pill">🔄 Lượt: <strong id="moves-val">0</strong></div>
+      <div class="hud-pill">✅ Cặp: <strong id="pairs-val">0/0</strong></div>
+      <div class="hud-pill hud-score">⭐ <strong id="score-val">0</strong></div>
+    </header>
+
+    <!-- Demo banner (hidden by default) -->
+    <div class="demo-banner" id="demo-banner" hidden>
+      🎮 Đang chạy bản demo — giáo viên chưa thêm cặp thẻ nào.
+    </div>
+
+    <!-- Board -->
+    <main class="mc-stage">
+      <div id="board" class="mc-board" role="grid" aria-label="Bảng thẻ"></div>
+    </main>
+
+    <!-- Result overlay -->
+    <div class="mc-overlay" id="overlay" hidden>
+      <div class="mc-overlay-card">
+        <p class="mc-overlay-title" id="overlay-title">🎉 Hoàn thành!</p>
+        <p class="mc-overlay-msg"  id="overlay-msg"></p>
+        <button class="mc-restart-btn" id="restart-btn" type="button">Chơi lại</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="./bridge.js"></script>
+  <script src="./script.js"></script>
+</body>
+</html>
