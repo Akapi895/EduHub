@@ -1,3 +1,7 @@
+// ============================================================
+// Gold Miner - EduHub Game Module
+// ============================================================
+
 let game_W = 20;
 let game_H = 20;
 let XXX = 0;
@@ -15,23 +19,38 @@ let angle = 90;
 let ChAngle = -1;
 let index = -1;
 let level = -1;
-let time = 60;
-let tager = 0;
 let timeH = 0;
 let vlH = 0;
 
 const bridge = window.EduHubGameBridge || null;
+
+// Item types: 15 items per level
 const ITEM_TYPE_PLAN = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
+
+// Game constants
 const DEFAULT_TIME_LIMIT_SECONDS = 60;
 const DEFAULT_TARGET_SCORE_BASE = 1000;
 const DEFAULT_TARGET_SCORE_STEP = 180;
 const N = ITEM_TYPE_PLAN.length;
+
+// Lives constants
+const INITIAL_LIVES = 3;
+
+// Difficulty bands
 const DIFFICULTY_BANDS = ['recognition', 'comprehension', 'application_basic', 'application_advanced'];
 const DIFFICULTY_LABELS = {
   recognition: 'Nhận biết',
   comprehension: 'Thông hiểu',
   application_basic: 'Vận dụng thấp',
   application_advanced: 'Vận dụng cao',
+};
+
+// Difficulty to itemType mapping
+const DIFFICULTY_ITEM_TYPES = {
+  recognition: 'rock',
+  comprehension: 'medium_gold',
+  application_basic: 'big_gold',
+  application_advanced: 'diamond',
 };
 
 function isImageReady(image) {
@@ -56,6 +75,68 @@ levelIM.src = 'images/level.png';
 const clockIM = new Image();
 clockIM.src = 'images/clock.png';
 
+// Lives icons (drawn via canvas if images not available)
+const heartFullIM = new Image();
+heartFullIM.src = 'images/heart_full.png';
+
+const heartEmptyIM = new Image();
+heartEmptyIM.src = 'images/heart_empty.png';
+
+// Helper to draw heart using canvas (fallback)
+function drawHeartOnCanvas(ctx, x, y, size, filled) {
+  const width = size;
+  const height = size;
+  ctx.save();
+  ctx.translate(x - width / 2, y - height / 2);
+  
+  ctx.beginPath();
+  const topCurveHeight = height * 0.3;
+  ctx.moveTo(width / 2, topCurveHeight);
+  
+  // Left curve
+  ctx.bezierCurveTo(
+    width * 0.1, 0,
+    0, height * 0.3,
+    0, height * 0.5
+  );
+  
+  // Bottom left
+  ctx.bezierCurveTo(
+    0, height * 0.7,
+    width * 0.2, height * 0.9,
+    width / 2, height
+  );
+  
+  // Bottom right
+  ctx.bezierCurveTo(
+    width * 0.8, height * 0.9,
+    width, height * 0.7,
+    width, height * 0.5
+  );
+  
+  // Right curve
+  ctx.bezierCurveTo(
+    width, height * 0.3,
+    width * 0.9, 0,
+    width / 2, topCurveHeight
+  );
+  
+  ctx.closePath();
+  
+  if (filled) {
+    ctx.fillStyle = '#FF0000';
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = '#666666';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(200, 200, 200, 0.3)';
+    ctx.fill();
+  }
+  
+  ctx.restore();
+}
+
 class game {
   constructor() {
     this.canvas = null;
@@ -76,6 +157,26 @@ class game {
     this.completedQuestionAttemptIds = new Set();
     this.timeLimitSeconds = DEFAULT_TIME_LIMIT_SECONDS;
     this.maxLevels = 1;
+    
+    // Lives system
+    this.lives = INITIAL_LIVES;
+    this.maxLives = INITIAL_LIVES;
+    
+    // Target score for current level
+    this.targetScore = 0;
+    
+    // Runtime config from host (populated via host:init message)
+    this.runtimeConfig = null;
+    
+    // Time tracking (count-up)
+    this.elapsedTimeSeconds = 0;
+    this.questionStartTime = null;
+    this.totalQuestionTimeMs = 0;
+    
+    // Question tracking for retry logic
+    this.wrongAnswerQuestionIds = new Set();
+    this.allQuestionIdsInLevel = [];
+    
     this.questionPlan = {
       level_count: 1,
       difficulty_bands: DIFFICULTY_BANDS,
@@ -107,6 +208,13 @@ class game {
     if (!bridge) {
       this.resetSession();
     }
+    // Set targetScore first, before any bridge calls
+    // Use runtimeConfig if provided via host:init, otherwise use default
+    const targetScoreFromConfig = this.runtimeConfig && typeof this.runtimeConfig.targetScore === 'number' 
+      ? this.runtimeConfig.targetScore 
+      : this.getTargetForLevel(1);
+    this.targetScore = targetScoreFromConfig;
+
     this.safeLoop();
     this.listenKeyboard();
     this.listenMouse();
@@ -199,9 +307,9 @@ class game {
     this.context.fillStyle = '#FFFFFF';
     this.context.textAlign = 'center';
     this.context.font = `bold ${Math.max(22, this.getWidth() * 0.8)}px Arial`;
-    this.context.fillText('Äang khá»Ÿi Ä‘á»™ng láº¡i mÃ n chÆ¡i', game_W / 2, game_H / 2 - this.getWidth() * 0.4);
+    this.context.fillText('Dang khoi dong lai man choi', game_W / 2, game_H / 2 - this.getWidth() * 0.4);
     this.context.font = `${Math.max(14, this.getWidth() * 0.42)}px Arial`;
-    this.context.fillText(message || 'EduHub Ä‘ang khá»ôi phá»¥c module trÃ² chÆ¡i.', game_W / 2, game_H / 2 + this.getWidth() * 0.4);
+    this.context.fillText(message || 'EduHub dang khoi phuc module tro choi.', game_W / 2, game_H / 2 + this.getWidth() * 0.4);
     this.context.textAlign = 'start';
   }
 
@@ -212,6 +320,10 @@ class game {
 
     bridge.onHostMessage((type, payload) => {
       if (type === 'host:pause') {
+        // Track question start time when pausing for question
+        if (!this.questionStartTime && payload && payload.trigger) {
+          this.questionStartTime = Date.now();
+        }
         this.isPaused = true;
         this.reportState('paused', true);
         return;
@@ -222,11 +334,16 @@ class game {
           window.clearInterval(this.readyHeartbeatId);
           this.readyHeartbeatId = null;
         }
-        this.applyRuntimeConfig(payload && payload.runtimeConfig ? payload.runtimeConfig : null);
+        this.runtimeConfig = (payload && payload.runtimeConfig) ? payload.runtimeConfig : null;
+        this.applyRuntimeConfig(this.runtimeConfig);
         this.applyAttemptTotals(payload && payload.attemptTotals ? payload.attemptTotals : null);
         this.resetSession();
         this.didHostInit = true;
         this.isPaused = false;
+        // Update targetScore based on runtimeConfig now that it's available
+        this.targetScore = (this.runtimeConfig && typeof this.runtimeConfig.targetScore === 'number')
+          ? this.runtimeConfig.targetScore
+          : this.getTargetForLevel(Math.max(level + 1, 1));
         this.reportState('host-init', true, {
           questionResult: payload && payload.questionResult ? payload.questionResult : null,
         });
@@ -236,7 +353,21 @@ class game {
       if (type === 'host:resume') {
         this.applyAttemptTotals(payload && payload.attemptTotals ? payload.attemptTotals : null);
         if (payload && payload.questionResult) {
-          this.recordQuestionCompletion(payload.questionResult);
+          const result = payload.questionResult;
+          
+          // Track question answer time
+          if (this.questionStartTime) {
+            const questionTimeMs = Date.now() - this.questionStartTime;
+            this.totalQuestionTimeMs += questionTimeMs;
+            this.questionStartTime = null;
+          }
+          
+          // Handle wrong answer
+          if (result.isCorrect === false || result.is_correct === false) {
+            this.handleWrongAnswer(result);
+          } else {
+            this.recordQuestionCompletion(payload.questionResult);
+          }
         }
         this.isPaused = false;
         this.reportState('resumed', true, {
@@ -250,6 +381,53 @@ class game {
         window.location.reload();
       }
     });
+  }
+
+  handleWrongAnswer(result) {
+    // Deduct one life
+    this.lives -= 1;
+    
+    // Report wrong answer event
+    if (bridge && typeof bridge.state === 'function') {
+      bridge.state({
+        status: 'running',
+        reason: 'wrong-answer',
+        lives: this.lives,
+        maxLives: this.maxLives,
+        feedbackMessage: result.feedbackMessage || result.feedback_message || 'Tra loi sai! Con lai ' + this.lives + ' mang.',
+      });
+    }
+    
+    // Check if game over
+    if (this.lives <= 0) {
+      this.handleGameOver();
+    }
+    // Note: We do NOT mark the question as completed
+    // The question stays in the incomplete pool
+  }
+
+  handleGameOver() {
+    this.isFinished = true;
+    this.resultOutcome = 'game_over';
+    this.reportState('game-over', true, {
+      status: 'completed',
+      outcome: 'game_over',
+      lives: 0,
+      maxLives: this.maxLives,
+    });
+    
+    if (bridge && typeof bridge.complete === 'function') {
+      bridge.complete({
+        status: 'completed',
+        outcome: 'game_over',
+        reason: 'lives-depleted',
+        score: this.score,
+        level: Math.max(level + 1, 1),
+        lives: 0,
+        maxLives: this.maxLives,
+        totalQuestionTimeMs: this.totalQuestionTimeMs,
+      });
+    }
   }
 
   applyRuntimeConfig(runtimeConfig) {
@@ -284,6 +462,12 @@ class game {
       ? Number(session.time_limit_seconds)
       : DEFAULT_TIME_LIMIT_SECONDS;
 
+    // Apply lives if provided in config
+    if (session && typeof session.max_lives === 'number') {
+      this.maxLives = session.max_lives;
+      this.lives = session.max_lives;
+    }
+
     if (runtimeConfig && runtimeConfig.question_progress) {
       this.applyProgress(runtimeConfig.question_progress);
     }
@@ -302,9 +486,19 @@ class game {
     this.capturedItemsInLevel = 0;
     this.syncAnsweredQuestionsFromProgress();
     this.completedQuestionAttemptIds = new Set();
+    
+    // Reset lives
+    this.lives = this.maxLives;
+    
+    // Reset time tracking
+    this.elapsedTimeSeconds = 0;
+    this.questionStartTime = null;
+    this.totalQuestionTimeMs = 0;
+    
+    // Reset wrong answer tracking
+    this.wrongAnswerQuestionIds = new Set();
+    
     level = this.getCurrentProgressLevel() - 2;
-    time = this.timeLimitSeconds;
-    tager = this.getTargetForLevel(1);
     this.newGold();
     this.sessionReady = true;
   }
@@ -325,6 +519,11 @@ class game {
           by_difficulty: {},
         };
     this.applyProgress(progress);
+    
+    // Restore wrong answer question IDs from attempt totals
+    if (attemptTotals.wrong_answer_question_ids) {
+      this.wrongAnswerQuestionIds = new Set(attemptTotals.wrong_answer_question_ids);
+    }
   }
 
   applyProgress(progress) {
@@ -510,8 +709,10 @@ class game {
         level: Math.max(level + 1, 1),
         nextLevel,
         score: this.score,
-        targetScore: tager,
-        timeRemaining: Math.max(0, Math.floor(time)),
+        targetScore: this.targetScore,
+        elapsedTime: Math.floor(this.elapsedTimeSeconds),
+        lives: this.lives,
+        maxLives: this.maxLives,
       });
     }
 
@@ -558,9 +759,8 @@ class game {
     drag = false;
     timeH = -1;
     vlH = 0;
-    time = this.timeLimitSeconds;
     level += 1;
-    tager = this.getTargetForLevel(Math.max(level + 1, 1));
+    this.targetScore = this.getTargetForLevel(Math.max(level + 1, 1));
     this.capturedItemsInLevel = 0;
     this.resultOutcome = null;
     this.levelEndReason = null;
@@ -570,19 +770,51 @@ class game {
     this.reportState('level-start', true, {
       questionsPlannedInLevel: this.getQuestionQuotaForLevel(Math.max(level + 1, 1)),
       difficultyBand: this.getDifficultyForLevel(Math.max(level + 1, 1)),
+      lives: this.lives,
+      maxLives: this.maxLives,
     });
   }
 
   listenKeyboard() {
     document.addEventListener('keydown', () => {
+      if (this.isFinished) {
+        this.restartGame();
+        return;
+      }
       this.solve();
     });
   }
 
   listenMouse() {
     document.addEventListener('mousedown', () => {
+      if (this.isFinished) {
+        this.restartGame();
+        return;
+      }
       this.solve();
     });
+  }
+
+  restartGame() {
+    // Reset all game state for restart
+    this.lives = this.maxLives;
+    this.score = 0;
+    this.gg = [];
+    this.isFinished = false;
+    this.isLevelEnded = false;
+    this.resultOutcome = null;
+    this.levelEndReason = null;
+    this.runtimeErrorCount = 0;
+    this.capturedItemsInLevel = 0;
+    this.elapsedTimeSeconds = 0;
+    this.questionStartTime = null;
+    this.totalQuestionTimeMs = 0;
+    this.wrongAnswerQuestionIds = new Set();
+    this.completedQuestionAttemptIds = new Set();
+    this.syncAnsweredQuestionsFromProgress();
+    level = this.getCurrentProgressLevel() - 2;
+    this.newGold();
+    this.reportState('restarted', true);
   }
 
   solve() {
@@ -626,6 +858,9 @@ class game {
       return;
     }
 
+    // Count-up time (elapsed time)
+    this.elapsedTimeSeconds += 0.01;
+    
     this.update();
     this.draw();
     this.reportState('tick');
@@ -641,16 +876,9 @@ class game {
       return;
     }
 
-    if (time <= 0) {
-      if (this.levelQuestionScheduleCompleted(currentLevel)) {
-        this.advanceToNextLevel('time-up-level-complete');
-        return;
-      }
-
-      this.handleLevelFail('time-up');
-      return;
-    }
-
+    // No time limit - game continues until all questions answered
+    // or player chooses to restart
+    
     this.scheduleNextLoop(10);
   }
 
@@ -663,7 +891,8 @@ class game {
       status: 'paused',
       outcome: 'level_failed',
       reason: this.levelEndReason,
-      timeRemaining: 0,
+      lives: this.lives,
+      maxLives: this.maxLives,
     });
     this.scheduleNextLoop(100);
   }
@@ -687,7 +916,10 @@ class game {
       status: 'completed',
       outcome: 'success',
       reason,
-      timeRemaining: Math.max(0, Math.floor(time)),
+      elapsedTime: Math.floor(this.elapsedTimeSeconds),
+      totalQuestionTimeMs: this.totalQuestionTimeMs,
+      lives: this.lives,
+      maxLives: this.maxLives,
     });
 
     if (bridge && typeof bridge.complete === 'function') {
@@ -697,8 +929,11 @@ class game {
         reason,
         score: this.score,
         level: Math.max(level + 1, 1),
-        targetScore: tager,
-        timeRemaining: Math.max(0, Math.floor(time)),
+        targetScore: this.targetScore,
+        elapsedTime: Math.floor(this.elapsedTimeSeconds),
+        totalQuestionTimeMs: this.totalQuestionTimeMs,
+        lives: this.lives,
+        maxLives: this.maxLives,
       });
     }
   }
@@ -721,9 +956,10 @@ class game {
       level: Math.max(level + 1, 1),
       difficultyBand: this.getDifficultyForLevel(Math.max(level + 1, 1)),
       difficultyLabel: DIFFICULTY_LABELS[this.getDifficultyForLevel(Math.max(level + 1, 1))] || '',
-      targetScore: tager,
-      timeRemaining: Math.max(0, Math.floor(time)),
-      timeRemainingPrecise: Math.max(0, Number(time.toFixed(2))),
+      targetScore: this.targetScore,
+      // Time is now count-up (elapsed time)
+      elapsedTime: Math.floor(this.elapsedTimeSeconds),
+      elapsedTimePrecise: Number(this.elapsedTimeSeconds.toFixed(2)),
       dragging: drag,
       capturesInLevel: this.capturedItemsInLevel,
       answeredQuestionsInLevel: this.getAnsweredQuestionsForLevel(Math.max(level + 1, 1)),
@@ -734,13 +970,17 @@ class game {
       questionsRemaining: this.questionProgress.questions_remaining,
       currentUnlockedLevel: this.getCurrentProgressLevel(),
       allQuestionsComplete: this.allQuestionsCompleted(),
+      // Lives system
+      lives: this.lives,
+      maxLives: this.maxLives,
+      // Wrong answer tracking
+      wrongAnswerCount: this.wrongAnswerQuestionIds ? this.wrongAnswerQuestionIds.size : 0,
       ...extra,
     });
   }
 
   update() {
     this.render();
-    time -= 0.01;
     Xh = XXX + r * Math.cos(this.toRadian(angle));
     Yh = YYY + r * Math.sin(this.toRadian(angle));
 
@@ -770,7 +1010,7 @@ class game {
             this.gg[i].alive = false;
             this.score += this.gg[i].score;
             this.capturedItemsInLevel += 1;
-            timeH = time - 0.7;
+            timeH = this.elapsedTimeSeconds - 0.7;
             vlH = this.gg[i].score;
 
             const currentLevel = Math.max(level + 1, 1);
@@ -790,8 +1030,8 @@ class game {
                   level: currentLevel,
                   difficulty_band: this.getDifficultyForLevel(currentLevel),
                   remaining_questions_in_level: this.getRemainingQuestionsForLevel(currentLevel),
-                  targetScore: tager,
-                  timeRemaining: Math.max(0, Math.floor(time)),
+                  targetScore: this.targetScore,
+                  elapsedTime: Math.floor(this.elapsedTimeSeconds),
                 },
               });
             }
@@ -803,6 +1043,8 @@ class game {
               captureIndexInLevel: this.capturedItemsInLevel,
               difficultyBand: this.getDifficultyForLevel(currentLevel),
               questionScheduled: shouldTriggerQuestion,
+              lives: this.lives,
+              maxLives: this.maxLives,
             });
             break;
           }
@@ -892,7 +1134,7 @@ class game {
     this.context.font = `bold ${Math.max(28, this.getWidth())}px Arial`;
     this.context.fillText('Đang chuẩn bị màn chơi', game_W / 2, game_H / 2 - this.getWidth() * 0.4);
     this.context.font = `${Math.max(16, this.getWidth() * 0.45)}px Arial`;
-    this.context.fillText('EduHub đang đồng bộ dữ liệu câu hỏi và phiên chơi.', game_W / 2, game_H / 2 + this.getWidth() * 0.4);
+    this.context.fillText('Chuẩn bị sẵn sàng để chinh phục thử thách này nhé.', game_W / 2, game_H / 2 + this.getWidth() * 0.4);
     this.context.textAlign = 'start';
   }
 
@@ -903,20 +1145,32 @@ class game {
     this.context.fillStyle = '#FFFFFF';
     this.context.textAlign = 'center';
     this.context.font = `bold ${Math.max(32, this.getWidth() * 1.3)}px Arial`;
-    this.context.fillText(this.resultOutcome === 'success' ? 'Hoàn thành' : 'Màn chơi kết thúc', game_W / 2, game_H / 2 - this.getWidth());
+    
+    let message = '';
+    if (this.resultOutcome === 'success') {
+      message = 'Hoan thanh';
+    } else if (this.resultOutcome === 'game_over') {
+      message = 'Het mang! Tro choi ket thuc';
+    } else {
+      message = 'Man choi ket thuc';
+    }
+    
+    this.context.fillText(message, game_W / 2, game_H / 2 - this.getWidth());
 
     this.context.font = `${Math.max(20, this.getWidth() * 0.6)}px Arial`;
     this.context.fillText(`Score: ${this.score}`, game_W / 2, game_H / 2);
-    this.context.fillText(
-      this.resultOutcome === 'success'
-        ? 'Em đã hoàn thành toàn bộ câu hỏi.'
-        : 'Nhấn chuột hoặc bấm phím bất kỳ để chơi lại màn này.',
-      game_W / 2,
-      game_H / 2 + this.getWidth(),
-    );
+    
+    if (this.resultOutcome === 'success') {
+      this.context.fillText('Em da hoan thanh toan bo cau hoi.', game_W / 2, game_H / 2 + this.getWidth());
+    } else if (this.resultOutcome === 'game_over') {
+      this.context.fillText('Nhan chuot hoac bam phim bat ky de choi lai.', game_W / 2, game_H / 2 + this.getWidth());
+    } else {
+      this.context.fillText('Nhan chuot hoac bam phim bat ky de choi lai man nay.', game_W / 2, game_H / 2 + this.getWidth());
+    }
+    
     if (this.resultOutcome !== 'success') {
       this.context.fillText(
-        `Còn ${this.getRemainingQuestionsForLevel(Math.max(level + 1, 1))} câu trong mức này`,
+        `Con ${this.getRemainingQuestionsForLevel(Math.max(level + 1, 1))} cau trong muc nay`,
         game_W / 2,
         game_H / 2 + this.getWidth() * 1.8,
       );
@@ -927,7 +1181,7 @@ class game {
   drawText() {
     this.drawImageSafe(dolarIM, this.getWidth() / 2, this.getWidth() / 2, this.getWidth(), this.getWidth());
     this.context.fillStyle = 'red';
-    if (this.score > tager) {
+    if (this.score > this.targetScore) {
       this.context.fillStyle = '#FF6600';
     }
     this.context.font = `${this.getWidth()}px Stencil`;
@@ -936,7 +1190,7 @@ class game {
     this.drawImageSafe(targetIM, this.getWidth() / 2, this.getWidth() / 2 + this.getWidth(), this.getWidth(), this.getWidth());
     this.context.fillStyle = '#FF6600';
     this.context.font = `${this.getWidth()}px Stencil`;
-    this.context.fillText(tager, this.getWidth() * 1.5, this.getWidth() * 2.35);
+    this.context.fillText(this.targetScore, this.getWidth() * 1.5, this.getWidth() * 2.35);
 
     this.drawImageSafe(levelIM, game_W - 3 * this.getWidth(), this.getWidth() / 2, this.getWidth(), this.getWidth());
     this.context.fillStyle = '#FFFFCC';
@@ -946,20 +1200,51 @@ class game {
     const difficultyLabel = DIFFICULTY_LABELS[this.getDifficultyForLevel(Math.max(level + 1, 1))] || '';
     this.context.fillText(difficultyLabel, game_W - 4.4 * this.getWidth(), this.getWidth() * 1.75);
 
+    // Draw elapsed time instead of countdown
     this.drawImageSafe(clockIM, game_W - 3 * this.getWidth(), this.getWidth() / 2 + this.getWidth(), this.getWidth(), this.getWidth());
-    this.context.fillStyle = '#FF00FF';
+    this.context.fillStyle = '#00FF00';
     this.context.font = `${this.getWidth()}px Stencil`;
-    this.context.fillText(Math.floor(time), game_W - 2 * this.getWidth(), this.getWidth() * 2.35);
+    this.context.fillText(Math.floor(this.elapsedTimeSeconds), game_W - 2 * this.getWidth(), this.getWidth() * 2.35);
     this.context.font = `${Math.max(12, this.getWidth() * 0.35)}px Arial`;
+    this.context.fillStyle = '#FFFF00';
     this.context.fillText(
-      `Câu còn lại: ${this.getRemainingQuestionsForLevel(Math.max(level + 1, 1))}`,
+      `Cau con lai: ${this.getRemainingQuestionsForLevel(Math.max(level + 1, 1))}`,
       game_W - 4.4 * this.getWidth(),
       this.getWidth() * 2.75,
     );
 
-    if (Math.abs(timeH - time) <= 0.7) {
+    // Draw lives
+    this.drawLives();
+
+    // Draw elapsed time indicator
+    this.context.font = `${Math.max(10, this.getWidth() * 0.3)}px Arial`;
+    this.context.fillStyle = '#00FF00';
+    this.context.fillText('TG', game_W - 4.4 * this.getWidth(), this.getWidth() * 3.15);
+
+    if (Math.abs(timeH - this.elapsedTimeSeconds) <= 0.7) {
       this.context.fillStyle = 'red';
       this.context.fillText(`+${vlH}`, XXX, YYY * 0.8);
+    }
+  }
+
+  drawLives() {
+    const heartSize = this.getWidth() * 1.2;
+    const startX = this.getWidth() * 1.5;
+    const startY = this.getWidth() * 0.3;
+    
+    for (let i = 0; i < this.maxLives; i++) {
+      const x = startX + i * (heartSize + this.getWidth() * 0.2);
+      const filled = i < this.lives;
+      
+      // Try to use image if available, otherwise draw on canvas
+      if (filled && isImageReady(heartFullIM)) {
+        this.drawImageSafe(heartFullIM, x, startY, heartSize, heartSize);
+      } else if (!filled && isImageReady(heartEmptyIM)) {
+        this.drawImageSafe(heartEmptyIM, x, startY, heartSize, heartSize);
+      } else {
+        // Draw heart using canvas
+        drawHeartOnCanvas(this.context, x + heartSize / 2, startY + heartSize / 2, heartSize, filled);
+      }
     }
   }
 

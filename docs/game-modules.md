@@ -41,10 +41,71 @@ frontend/public/game-modules/
     ├── index.html
     ├── css/
     ├── js/
+    │   ├── game.js      # Main game logic
+    │   └── gold.js      # Item definitions
     └── images/
 ```
 
 Game chạy như một web app độc lập trong `iframe` sandbox và giao tiếp với hệ thống chính bằng `postMessage`.
+
+## Kiến trúc Gold Miner (Phiên bản 2.0)
+
+### Tính năng chính
+
+1. **Hệ thống 3 mạng**: Mỗi lần trả lời sai mất 1 mạng. Hết 3 mạng → restart game nhưng câu hỏi sai vẫn giữ lại trong danh sách cần hoàn thành.
+
+2. **Thời gian đếm xuôi**: Không còn đếm ngược. Thời gian là elapsed time (count-up) trong mỗi màn.
+
+3. **Màn chơi 10 câu**: Mỗi màn lấy ngẫu nhiên 10 câu hỏi từ tập đã tạo. Nếu tổng số câu > 10 → chia thành nhiều màn.
+
+4. **15 vật phẩm/màn**: Mỗi màn có ~15 vật phẩm với capture slots phân bổ câu hỏi đều.
+
+5. **Mapping mới**:
+   - Nhận biết → `rock` (types 5, 6, 7)
+   - Thông hiểu → `medium_gold` (types 2, 13)
+   - Vận dụng thấp → `big_gold` (types 0, 1, 3, 4, 12, 14)
+   - Vận dụng cao → `diamond` (types 8, 9, 10, 11)
+
+6. **Xử lý câu sai**: Khi trả lời sai → hiển thị thông báo → câu hỏi được đưa lại vào danh sách chưa hoàn thành.
+
+7. **Ranking**: Ưu tiên tổng điểm. Nếu bằng điểm → so sánh theo tổng thời gian trả lời câu hỏi (chỉ tính thời gian khi modal hiển thị).
+
+8. **Modal fullscreen**: Sử dụng React Portal để render modal ngoài iframe, tự động exit fullscreen khi modal hiển thị.
+
+### Cấu hình runtime (Backend)
+
+```python
+GOLD_MINER_CAPABILITY_CONFIG = {
+    "session": {
+        "default_levels": 4,
+        "item_count_per_level": 15,
+        "default_time_limit_seconds": 0,  # No time limit
+        "max_lives": 3,
+    },
+    "question_distribution": {
+        "mode": "random_per_level",
+        "questions_per_level": 10,
+    },
+    "supports_lives": True,
+    "supports_wrong_answer_retry": True,
+    "question_time_tracking": True,
+    "ranking_by_time": True,
+}
+```
+
+### Message protocol (postMessage)
+
+**Game → Host:**
+- `game:ready`: Game loaded
+- `game:state`: State update (score, lives, time, level...)
+- `game:question-trigger`: Request question
+- `game:complete`: Game finished
+
+**Host → Game:**
+- `host:init`: Initialize with runtimeConfig
+- `host:pause`: Pause for question
+- `host:resume`: Resume after answer
+- `host:restart`: Reload
 
 ## Vì sao `iframe` vẫn là mặc định đúng
 
@@ -133,3 +194,5 @@ Manifest tối thiểu nên có:
 - Không đặt business logic teacher/student vào trong bundle game.
 - Không để game tự quyết định phân quyền hay dữ liệu câu hỏi.
 - Chỉ frontend shell và backend runtime service mới được quyết định session, attempt, pause/resume và ghi nhận kết quả.
+- Với Gold Miner v2: Lives system, wrong answer retry, và question time tracking được xử lý đồng thời ở game (frontend) và backend.
+

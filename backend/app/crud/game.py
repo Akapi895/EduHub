@@ -38,9 +38,9 @@ GAME_DIFFICULTY_BAND_RANK = {
     band: index for index, band in enumerate(GAME_DIFFICULTY_BAND_ORDER)
 }
 DEFAULT_GOLD_MINER_ITEM_COUNT_PER_LEVEL = 15
-DEFAULT_GOLD_MINER_QUESTIONS_PER_LEVEL = 4
-DEFAULT_GOLD_MINER_LEVEL_COUNT = 1
-DEFAULT_GOLD_MINER_TIME_LIMIT_SECONDS = 60
+DEFAULT_GOLD_MINER_QUESTIONS_PER_LEVEL = 10
+DEFAULT_GOLD_MINER_LEVEL_COUNT = 4  # Based on 4 difficulty bands
+DEFAULT_GOLD_MINER_TIME_LIMIT_SECONDS = 0  # No time limit (count-up mode)
 DEFAULT_GOLD_MINER_TARGET_SCORE_BASE = 1000
 DEFAULT_GOLD_MINER_TARGET_SCORE_STEP = 180
 
@@ -307,7 +307,15 @@ def get_gold_miner_runtime_settings(package: ContentPackage) -> dict[str, Any]:
     time_limit_seconds = _int_value(
         runtime_config.get("time_limit_seconds", session_config.get("default_time_limit_seconds")),
         DEFAULT_GOLD_MINER_TIME_LIMIT_SECONDS,
-        minimum=10,
+        minimum=0,  # 0 means no time limit
+    )
+    # If time_limit_seconds is 0, it's count-up mode (no time limit)
+    if time_limit_seconds == 0:
+        time_limit_seconds = 0  # No time limit
+    max_lives = _int_value(
+        session_config.get("max_lives"),
+        3,  # Default 3 lives
+        minimum=1,
     )
     target_score_base = _int_value(
         runtime_config.get("target_score_base", session_config.get("target_score_base")),
@@ -327,6 +335,7 @@ def get_gold_miner_runtime_settings(package: ContentPackage) -> dict[str, Any]:
         "time_limit_seconds": time_limit_seconds,
         "target_score_base": target_score_base,
         "target_score_step": target_score_step,
+        "max_lives": max_lives,
     }
 
 
@@ -372,34 +381,48 @@ def build_gold_miner_question_plan_preview(package: ContentPackage) -> dict[str,
     items = _active_game_questions(package)
     total_questions = len(items)
     settings = get_gold_miner_runtime_settings(package)
-    questions_by_difficulty = {
-        band: [item for item in items if item.difficulty_band == band]
-        for band in GAME_DIFFICULTY_BAND_ORDER
-    }
+    
+    questions_per_level_target = settings["questions_per_level"]
+    item_count = settings["item_count_per_level"]
+    
+    # Calculate number of levels needed
+    if total_questions == 0:
+        level_count = 1
+    else:
+        level_count = max(1, math.ceil(total_questions / questions_per_level_target))
+    
+    # Distribute questions across levels (approximately 10 per level)
+    base_per_level = total_questions // level_count
+    remainder = total_questions % level_count
     questions_per_level = [
-        len(questions_by_difficulty[band])
-        for band in GAME_DIFFICULTY_BAND_ORDER
+        base_per_level + (1 if index < remainder else 0)
+        for index in range(level_count)
     ]
+    
+    # Build capture slots for each level
     capture_slots_by_level = [
-        _build_capture_slots(min(count, settings["item_count_per_level"]), item_count_per_level=settings["item_count_per_level"])
+        _build_capture_slots(count, item_count_per_level=item_count)
         for count in questions_per_level
     ]
+    
+    # Target scores accumulate per level
     target_scores_by_level: list[int] = []
     running_target = 0
-    for index in range(len(questions_per_level)):
+    for index in range(level_count):
         running_target += settings["target_score_base"] + settings["target_score_step"] * index
         target_scores_by_level.append(running_target)
 
     return {
         "distribution_mode": settings["mode"],
         "total_questions": total_questions,
-        "level_count": len(questions_per_level),
+        "level_count": level_count,
         "difficulty_bands": list(GAME_DIFFICULTY_BAND_ORDER),
         "questions_per_level": questions_per_level,
         "capture_slots_by_level": capture_slots_by_level,
-        "item_count_per_level": settings["item_count_per_level"],
+        "item_count_per_level": item_count,
         "time_limit_seconds": settings["time_limit_seconds"],
         "target_scores_by_level": target_scores_by_level,
+        "max_lives": settings["max_lives"],
     }
 
 
@@ -414,8 +437,9 @@ def build_generic_question_plan_preview(package: ContentPackage) -> dict[str, An
         len(questions_by_difficulty[band])
         for band in GAME_DIFFICULTY_BAND_ORDER
     ]
+    item_count = settings["item_count_per_level"]
     capture_slots_by_level = [
-        _build_capture_slots(min(count, settings["item_count_per_level"]), item_count_per_level=settings["item_count_per_level"])
+        _build_capture_slots(min(count, item_count), item_count_per_level=item_count)
         for count in questions_per_level
     ]
     return {
@@ -425,7 +449,7 @@ def build_generic_question_plan_preview(package: ContentPackage) -> dict[str, An
         "difficulty_bands": list(GAME_DIFFICULTY_BAND_ORDER),
         "questions_per_level": questions_per_level,
         "capture_slots_by_level": capture_slots_by_level,
-        "item_count_per_level": settings["item_count_per_level"],
+        "item_count_per_level": item_count,
         "time_limit_seconds": settings["time_limit_seconds"],
         "target_scores_by_level": [],
     }

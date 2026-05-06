@@ -1,21 +1,89 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Cloud, X } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import { classService } from '@/services/class.service';
 import { showErrorToast } from '@/store/toast.store';
 
+const DRAFT_KEY = 'exam-create-draft:';
+
+interface DraftData {
+  title: string;
+  description: string;
+  start_time: string;
+  end_time: string;
+  savedAt: number;
+}
+
+function loadDraft(classId: string): DraftData | null {
+  try {
+    const raw = localStorage.getItem(`${DRAFT_KEY}${classId}`);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as DraftData;
+    if (Date.now() - data.savedAt > 7 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(`${DRAFT_KEY}${classId}`);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(classId: string, data: Omit<DraftData, 'savedAt'>) {
+  try {
+    localStorage.setItem(`${DRAFT_KEY}${classId}`, JSON.stringify({ ...data, savedAt: Date.now() }));
+  } catch { /* ignore */ }
+}
+
+function clearDraft(classId: string) {
+  try { localStorage.removeItem(`${DRAFT_KEY}${classId}`); } catch { /* ignore */ }
+}
+
 export default function CreateExam() {
   const { classId } = useParams();
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
   const [form, setForm] = useState({
     title: '',
     description: '',
     start_time: '',
     end_time: '',
   });
+
+  // Load draft on mount
+  useEffect(() => {
+    if (!classId) return;
+    const draft = loadDraft(classId);
+    if (draft) {
+      setForm({
+        title: draft.title,
+        description: draft.description,
+        start_time: draft.start_time,
+        end_time: draft.end_time,
+      });
+      setHasDraft(true);
+    }
+  }, [classId]);
+
+  // Auto-save draft on form change
+  useEffect(() => {
+    if (!classId) return;
+    const timeout = setTimeout(() => {
+      saveDraft(classId, form);
+      setHasDraft(true);
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [form, classId]);
+
+  const handleClearDraft = () => {
+    if (!classId) return;
+    clearDraft(classId);
+    setHasDraft(false);
+    setForm({ title: '', description: '', start_time: '', end_time: '' });
+  };
 
   const handleCreate = async () => {
     if (!classId || !form.title) return;
@@ -29,7 +97,7 @@ export default function CreateExam() {
       };
       const res = await classService.createExam(classId, payload);
       const newExam = res.data.data;
-      // Navigate to exam detail to add questions
+      clearDraft(classId);
       navigate(`/teacher/exams/${newExam.id}`);
     } catch (err: any) {
       showErrorToast(err.response?.data?.message || 'Tạo bài kiểm tra thất bại');
@@ -44,7 +112,22 @@ export default function CreateExam() {
         <Link to={`/teacher/classes/${classId}`} className="text-gray-400 hover:text-gray-600">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-2xl font-bold text-gray-800">Tạo bài kiểm tra</h1>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-gray-800">Tạo bài kiểm tra</h1>
+          {hasDraft && (
+            <div className="mt-1 inline-flex items-center gap-1.5 text-xs text-emerald-600">
+              <Cloud className="w-3.5 h-3.5" />
+              <span>Đã lưu bản nháp</span>
+              <button
+                type="button"
+                onClick={handleClearDraft}
+                className="ml-0.5 rounded bg-emerald-100 px-1.5 py-0.5 hover:bg-emerald-200"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="bg-white rounded-card shadow-sm p-6 space-y-5">

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 
 import { getAttemptMetric, getAttemptProgressPercent } from '@/features/games/helpers';
@@ -122,8 +123,8 @@ export default function GameQuestionModal({
     matchingAnswers,
   );
 
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
       <div
         className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_35px_100px_rgba(15,23,42,0.35)]"
         role="dialog"
@@ -141,7 +142,7 @@ export default function GameQuestionModal({
                   Dừng lại một chút để trả lời
                 </h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                  Trò chơi đang tạm dừng. Hoàn thành câu hỏi này để tiếp tục phần chơi.
+                Hãy trả lời câu hỏi này để tiếp tục chơi nhé!
                 </p>
               </div>
             </div>
@@ -303,6 +304,7 @@ export default function GameQuestionModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

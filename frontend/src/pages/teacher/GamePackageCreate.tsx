@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ArrowLeft, Gamepad2, Loader2, Sparkles, UploadCloud } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { ArrowLeft, Gamepad2, Loader2, Sparkles, UploadCloud, Cloud, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import Button from '@/components/common/Button';
@@ -14,6 +14,52 @@ function unwrapApiData<T>(response: { data?: { data?: T } & T }): T {
   return (response.data?.data ?? response.data) as T;
 }
 
+const DRAFT_KEY_PREFIX = 'game-package-draft:';
+
+function getDraftKey(classId?: string) {
+  return `${DRAFT_KEY_PREFIX}${classId ?? 'global'}`;
+}
+
+interface DraftData {
+  title: string;
+  description: string;
+  thumbnailUrl: string;
+  selectedModuleId: string;
+  savedAt: number;
+}
+
+function loadDraft(key: string): DraftData | null {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as DraftData;
+    // Draft expires after 7 days
+    if (Date.now() - data.savedAt > 7 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(key: string, data: Omit<DraftData, 'savedAt'>) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ ...data, savedAt: Date.now() }));
+  } catch {
+    // Storage full or unavailable
+  }
+}
+
+function clearDraft(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
+
 export default function TeacherGamePackageCreate() {
   const { classId } = useParams();
   const navigate = useNavigate();
@@ -26,6 +72,60 @@ export default function TeacherGamePackageCreate() {
   const [description, setDescription] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const draftKey = getDraftKey(classId);
+
+  // Refs to capture latest values for debounce
+  const titleRef = useRef(title);
+  const descRef = useRef(description);
+  const thumbRef = useRef(thumbnailUrl);
+  const moduleRef = useRef(selectedModuleId);
+
+  titleRef.current = title;
+  descRef.current = description;
+  thumbRef.current = thumbnailUrl;
+  moduleRef.current = selectedModuleId;
+
+  // Load draft on mount
+  useEffect(() => {
+    const draft = loadDraft(draftKey);
+    if (draft) {
+      setTitle(draft.title);
+      setDescription(draft.description);
+      setThumbnailUrl(draft.thumbnailUrl);
+      setSelectedModuleId(draft.selectedModuleId);
+      setHasDraft(true);
+    }
+    setDraftLoaded(true);
+  }, [draftKey]);
+
+  // Auto-save draft to localStorage when fields change
+  const persistDraft = useCallback(() => {
+    if (!draftLoaded) return;
+    saveDraft(draftKey, {
+      title: titleRef.current,
+      description: descRef.current,
+      thumbnailUrl: thumbRef.current,
+      selectedModuleId: moduleRef.current,
+    });
+    setHasDraft(true);
+  }, [draftKey, draftLoaded]);
+
+  useEffect(() => {
+    persistDraft();
+  }, [title, description, thumbnailUrl, selectedModuleId, persistDraft]);
+
+  const handleClearDraft = () => {
+    clearDraft(draftKey);
+    setHasDraft(false);
+    setTitle('');
+    setDescription('');
+    setThumbnailUrl('');
+    if (modules.length > 0) {
+      setSelectedModuleId(modules[0]?.id ?? '');
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +194,7 @@ export default function TeacherGamePackageCreate() {
         ? await gameService.createClassGamePackage(classId, payload)
         : await gameService.createGamePackage(payload);
       const createdPackage = unwrapApiData<{ id: string }>(response);
+      clearDraft(draftKey);
       showSuccessToast('Đã tạo gói trò chơi.');
       navigate(`/teacher/games/${createdPackage.id}`);
     } catch {
@@ -130,6 +231,19 @@ export default function TeacherGamePackageCreate() {
               ? `Gói này sẽ được gắn vào lớp ${classItem?.name ? `"${classItem.name}"` : 'hiện tại'} để học sinh vào chơi và trả lời câu hỏi theo từng mức độ.`
               : 'Gói này sẽ được tạo độc lập. Sau khi soạn xong, bạn có thể publish lên Game Hub để mọi học sinh cùng truy cập.'}
           </p>
+          {hasDraft && (
+            <div className="mt-2 inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700">
+              <Cloud className="h-3.5 w-3.5" />
+              <span>Bản nháp đã được lưu tự động</span>
+              <button
+                type="button"
+                onClick={handleClearDraft}
+                className="ml-1 rounded-lg bg-emerald-100 px-1.5 py-0.5 hover:bg-emerald-200"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

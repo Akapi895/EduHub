@@ -1419,6 +1419,13 @@ def _extract_context_score(summary_payload: dict[str, Any], current_score: float
 
 
 def _extract_duration_ms(summary_payload: dict[str, Any], *, started_at, completed_at) -> int | None:
+    # Priority 1: total_question_time_ms (time spent on questions - tie-breaker for ranking)
+    for key in ("total_question_time_ms", "question_time_ms", "question_duration_ms"):
+        value = summary_payload.get(key)
+        if isinstance(value, (int, float)) and value >= 0:
+            return int(value)
+    
+    # Priority 2: duration_ms
     for key in ("duration_ms", "elapsed_ms", "time_ms"):
         value = summary_payload.get(key)
         if isinstance(value, (int, float)) and value >= 0:

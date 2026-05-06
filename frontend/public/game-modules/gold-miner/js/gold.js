@@ -1,24 +1,18 @@
 // ── Image Assets ──────────────────────────────────────────────────────────────
-var tinyGoldIm = new Image();
-tinyGoldIm.src = "images/tiny_gold.png";
+var bigGoldIm = new Image();
+bigGoldIm.src = "images/big_gold.png";
 
-var smallGoldIm = new Image();
-smallGoldIm.src = "images/small_gold.png";
+var goldIm = new Image();
+goldIm.src = "images/gold.png";
 
 var mediumGoldIm = new Image();
 mediumGoldIm.src = "images/medium_gold.png";
 
-var bigGoldIm = new Image();
-bigGoldIm.src = "images/big_gold.png";
-
-var goldIngotIm = new Image();
-goldIngotIm.src = "images/gold_ingot.png";
-
 var rockIm = new Image();
 rockIm.src = "images/rock.png";
 
-var diamondIM = new Image();
-diamondIM.src = "images/kim_cuong.png";
+var diamondIm = new Image();
+diamondIm.src = "images/diamond.png";
 
 var blueJewelryIm = new Image();
 blueJewelryIm.src = "images/blue_jewelry.png";
@@ -31,12 +25,6 @@ heartJewelryIm.src = "images/heart_jewelry.png";
 
 var moneyIm = new Image();
 moneyIm.src = "images/money.png";
-
-var mysteryBagIm = new Image();
-mysteryBagIm.src = "images/mystery_bag.png";
-
-var magnetIm = new Image();
-magnetIm.src = "images/magnet.png";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getScaledSpriteSize(image, maxDimension, fallbackRatio) {
@@ -53,22 +41,34 @@ function getScaledSpriteSize(image, maxDimension, fallbackRatio) {
 
 // ── Gold / Item class ─────────────────────────────────────────────────────────
 //
-//  Type plan  (must match ITEM_TYPE_PLAN in game.js):
-//   0  = tiny gold        (50 pts,  very fast)
-//   1  = small gold       (100 pts, fast)
-//   2  = medium gold      (200 pts, medium)
-//   3  = big gold         (350 pts, slow)
-//   4  = gold ingot       (450 pts, very slow)
-//   5  = small rock       (15 pts,  fast)
-//   6  = medium rock      (25 pts,  medium)
-//   7  = large rock       (35 pts,  slow)
-//   8  = diamond          (700 pts, fast)
-//   9  = blue jewelry     (300 pts, medium)
-//  10  = pink jewelry     (280 pts, medium)
-//  11  = heart jewelry    (260 pts, medium)
-//  12  = money bag        (400 pts, medium)
-//  13  = mystery bag      (150 pts, medium)  ← unknown bonus
-//  14  = magnet           (80 pts,  fast)
+//  ITEM_TYPE_PLAN in game.js maps to these types (9 unique items, 15 total per level):
+//   0  = rock          (15 pts,  fast)            → rock      (recognition)
+//   1  = rock          (25 pts,  medium)          → rock      (recognition)
+//   2  = rock          (35 pts,  slow)            → rock      (recognition)
+//   3  = medium_gold   (150 pts, medium)          → medium_gold (comprehension)
+//   4  = medium_gold   (200 pts, medium)          → medium_gold (comprehension)
+//   5  = big_gold      (300 pts, slow)            → big_gold  (application_basic)
+//   6  = gold          (400 pts, very slow)       → big_gold  (application_basic)
+//   7  = gold          (500 pts, very slow)       → big_gold  (application_basic)
+//   8  = money         (450 pts, slow)            → big_gold  (application_basic)
+//   9  = diamond       (700 pts, fast)            → diamond   (application_advanced)
+//  10  = blue_jewelry  (280 pts, medium)          → diamond   (application_advanced)
+//  11  = pink_jewelry  (260 pts, medium)          → diamond   (application_advanced)
+//  12  = heart_jewelry (240 pts, medium)          → diamond   (application_advanced)
+//  13  = diamond       (600 pts, fast)            → diamond   (application_advanced)
+//  14  = blue_jewelry  (320 pts, medium)          → diamond   (application_advanced)
+//
+//  Distribution per level (15 items):
+//   - rock: 3 items (types 0, 1, 2)
+//   - medium_gold: 2 items (types 3, 4)
+//   - big_gold: 3 items (types 5, 6, 7)
+//   - diamond: 7 items (types 8, 9, 10, 11, 12, 13, 14)
+//
+//  Item type to difficulty mapping:
+//   - rock → recognition
+//   - medium_gold → comprehension
+//   - big_gold → application_basic
+//   - diamond → application_advanced
 //
 class gold {
     constructor(game, type, instanceId) {
@@ -95,117 +95,117 @@ class gold {
     update() {
         const W = this.game.getWidth();
         switch (this.type) {
-            // ── Gold nuggets ──────────────────────────────────────────────
-            case 0: // tiny gold
-                this.speed   = W / 4;
-                this.IM      = tinyGoldIm;
-                this.itemType = "small_gold";
-                this.score   = 50;
-                this.applyImageSize(W * 1.3, 1);
-                break;
-            case 1: // small gold
+            // ── rock (recognition) ──────────────────────────────────────────
+            case 0: // rock small
                 this.speed   = W / 6;
-                this.IM      = smallGoldIm;
-                this.itemType = "small_gold";
-                this.score   = 100;
-                this.applyImageSize(W * 1.8, 1);
-                break;
-            case 2: // medium gold
-                this.speed   = W / 12;
-                this.IM      = mediumGoldIm;
-                this.itemType = "big_gold";
-                this.score   = 200;
-                this.applyImageSize(W * 2.5, 1);
-                break;
-            case 3: // big gold
-                this.speed   = W / 22;
-                this.IM      = bigGoldIm;
-                this.itemType = "big_gold";
-                this.score   = 350;
-                this.applyImageSize(W * 3.2, 1);
-                break;
-            case 4: // gold ingot
-                this.speed   = W / 30;
-                this.IM      = goldIngotIm;
-                this.itemType = "big_gold";
-                this.score   = 450;
-                this.applyImageSize(W * 2.2, 1.8);
-                break;
-
-            // ── Rocks ─────────────────────────────────────────────────────
-            case 5: // small rock
-                this.speed   = W / 14;
                 this.IM      = rockIm;
                 this.itemType = "rock";
                 this.score   = 15;
-                this.applyImageSize(W * 1.8, 1);
+                this.applyImageSize(W * 1.5, 1);
                 break;
-            case 6: // medium rock
-                this.speed   = W / 30;
+            case 1: // rock medium
+                this.speed   = W / 15;
                 this.IM      = rockIm;
                 this.itemType = "rock";
                 this.score   = 25;
-                this.applyImageSize(W * 2.3, 1);
+                this.applyImageSize(W * 2.2, 1);
                 break;
-            case 7: // large rock
-                this.speed   = W / 50;
+            case 2: // rock large
+                this.speed   = W / 30;
                 this.IM      = rockIm;
                 this.itemType = "rock";
                 this.score   = 35;
                 this.applyImageSize(W * 2.8, 1);
                 break;
 
-            // ── Gems & Jewelry ────────────────────────────────────────────
-            case 8: // diamond
+            // ── medium_gold (comprehension) ─────────────────────────────────
+            case 3: // medium gold small
+                this.speed   = W / 10;
+                this.IM      = mediumGoldIm;
+                this.itemType = "medium_gold";
+                this.score   = 150;
+                this.applyImageSize(W * 2.0, 1);
+                break;
+            case 4: // medium gold large
+                this.speed   = W / 18;
+                this.IM      = mediumGoldIm;
+                this.itemType = "medium_gold";
+                this.score   = 200;
+                this.applyImageSize(W * 2.8, 1);
+                break;
+
+            // ── big_gold (application_basic) ─────────────────────────────────
+            case 5: // big gold
+                this.speed   = W / 25;
+                this.IM      = bigGoldIm;
+                this.itemType = "big_gold";
+                this.score   = 300;
+                this.applyImageSize(W * 3.0, 1);
+                break;
+            case 6: // gold
+                this.speed   = W / 35;
+                this.IM      = goldIm;
+                this.itemType = "big_gold";
+                this.score   = 400;
+                this.applyImageSize(W * 2.5, 1);
+                break;
+            case 7: // gold ingot
+                this.speed   = W / 40;
+                this.IM      = goldIm;
+                this.itemType = "big_gold";
+                this.score   = 500;
+                this.applyImageSize(W * 3.2, 1);
+                break;
+            case 8: // money bag
+                this.speed   = W / 30;
+                this.IM      = moneyIm;
+                this.itemType = "big_gold";
+                this.score   = 450;
+                this.applyImageSize(W * 2.5, 1);
+                break;
+
+            // ── diamond (application_advanced) ─────────────────────────────
+            case 9: // diamond
                 this.speed   = W / 3;
-                this.IM      = diamondIM;
+                this.IM      = diamondIm;
                 this.itemType = "diamond";
                 this.score   = 700;
-                this.applyImageSize(W * 1.4, 1);
+                this.applyImageSize(W * 1.3, 1);
                 break;
-            case 9: // blue jewelry
-                this.speed   = W / 10;
+            case 10: // blue jewelry
+                this.speed   = W / 8;
                 this.IM      = blueJewelryIm;
-                this.itemType = "diamond";
-                this.score   = 300;
-                this.applyImageSize(W * 1.8, 1);
-                break;
-            case 10: // pink jewelry
-                this.speed   = W / 10;
-                this.IM      = pinkJewelryIm;
                 this.itemType = "diamond";
                 this.score   = 280;
                 this.applyImageSize(W * 1.8, 1);
                 break;
-            case 11: // heart jewelry
-                this.speed   = W / 10;
-                this.IM      = heartJewelryIm;
+            case 11: // pink jewelry
+                this.speed   = W / 8;
+                this.IM      = pinkJewelryIm;
                 this.itemType = "diamond";
                 this.score   = 260;
                 this.applyImageSize(W * 1.8, 1);
                 break;
-
-            // ── Special items ─────────────────────────────────────────────
-            case 12: // money bag
-                this.speed   = W / 18;
-                this.IM      = moneyIm;
-                this.itemType = "big_gold";
-                this.score   = 400;
-                this.applyImageSize(W * 2.0, 1);
+            case 12: // heart jewelry
+                this.speed   = W / 8;
+                this.IM      = heartJewelryIm;
+                this.itemType = "diamond";
+                this.score   = 240;
+                this.applyImageSize(W * 1.8, 1);
                 break;
-            case 13: // mystery bag
-                this.speed   = W / 15;
-                this.IM      = mysteryBagIm;
-                this.itemType = "small_gold";
-                this.score   = 150;
-                this.applyImageSize(W * 2.0, 1);
-                break;
-            case 14: // magnet
+            case 13: // diamond small
                 this.speed   = W / 4;
-                this.IM      = magnetIm;
-                this.itemType = "small_gold";
-                this.score   = 80;
+                this.IM      = diamondIm;
+                this.itemType = "diamond";
+                this.score   = 600;
                 this.applyImageSize(W * 1.6, 1);
+                break;
+            case 14: // blue jewelry 2
+                this.speed   = W / 10;
+                this.IM      = blueJewelryIm;
+                this.itemType = "diamond";
+                this.score   = 320;
+                this.applyImageSize(W * 2.0, 1);
                 break;
         }
     }

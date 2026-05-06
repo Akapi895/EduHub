@@ -16,6 +16,11 @@ MEMORY_CARD_MANIFEST_URL = "/game-modules/memory-card/manifest.json"
 MEMORY_CARD_ENTRY_URL = "/game-modules/memory-card/index.html"
 MEMORY_CARD_THUMBNAIL_URL = "/game-modules/memory-card/thumbnail.svg"
 
+# New mapping: difficulty -> itemType
+# - recognition -> rock (types 0, 1, 2)
+# - comprehension -> medium_gold (types 3, 4)
+# - application_basic -> big_gold (types 5, 6, 7, 8)
+# - application_advanced -> diamond (types 9, 10, 11, 12, 13, 14)
 GOLD_MINER_TRIGGER_MAPPINGS = (
     {
         "trigger_type": "item_captured",
@@ -27,7 +32,7 @@ GOLD_MINER_TRIGGER_MAPPINGS = (
     {
         "trigger_type": "item_captured",
         "trigger_key": "item_type",
-        "trigger_value": "small_gold",
+        "trigger_value": "medium_gold",
         "difficulty_band": DifficultyBand.comprehension,
         "selector_strategy": "ordered_no_repeat",
     },
@@ -78,11 +83,16 @@ MEMORY_CARD_TRIGGER_MAPPINGS = (
     },
 )
 
+# Item distribution per level (15 items total)
+# - rock (recognition): 3 items
+# - medium_gold (comprehension): 2 items
+# - big_gold (application_basic): 4 items
+# - diamond (application_advanced): 6 items
 GOLD_MINER_ITEM_DISTRIBUTION = {
-    "rock": 6,
-    "small_gold": 4,
-    "big_gold": 2,
-    "diamond": 3,
+    "rock": 3,
+    "medium_gold": 2,
+    "big_gold": 4,
+    "diamond": 6,
 }
 
 GOLD_MINER_CAPABILITY_CONFIG = {
@@ -109,21 +119,26 @@ GOLD_MINER_CAPABILITY_CONFIG = {
         "aspect_ratio": "16 / 9",
     },
     "session": {
-        "default_levels": 1,
-        "item_count_per_level": sum(GOLD_MINER_ITEM_DISTRIBUTION.values()),
-        "default_time_limit_seconds": 60,
+        "default_levels": 4,
+        "item_count_per_level": sum(GOLD_MINER_ITEM_DISTRIBUTION.values()),  # 15 items
+        "default_time_limit_seconds": 0,  # No time limit (count-up instead)
         "target_score_base": 1000,
         "target_score_step": 180,
+        "max_lives": 3,
         "ends_when_board_cleared": True,
     },
     "question_distribution": {
-        "mode": "progressive",
-        "questions_per_level_cap": 4,
+        "mode": "random_per_level",
+        "questions_per_level": 10,
         "allow_non_question_items": True,
         "trigger_strategy": "adaptive_capture_quota",
     },
     "supports_blocking_modal": True,
     "supports_timer_pause": True,
+    "supports_lives": True,
+    "supports_wrong_answer_retry": True,
+    "question_time_tracking": True,
+    "ranking_by_time": True,
     "supported_question_types": [
         QuestionType.single_choice,
         QuestionType.multi_choice,

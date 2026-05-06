@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2, Eye, Cloud } from 'lucide-react';
 import QuestionEditor from '@/components/exam/QuestionEditor';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
 import { examService } from '@/services/exam.service';
 import { showErrorToast, showSuccessToast } from '@/store/toast.store';
 import { formatDate } from '@/utils/helpers';
+import { useAutoSave } from '@/hooks/useAutoSave';
 import type { Question, Exam, Submission } from '@/types';
-import { generateId } from '@/utils/helpers';
 
 export default function TeacherExamDetail() {
   const { id } = useParams();
@@ -17,6 +17,8 @@ export default function TeacherExamDetail() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastAutoSaved, setLastAutoSaved] = useState<Date | null>(null);
   const [activeTab, setActiveTab] = useState<'questions' | 'settings' | 'results'>('questions');
   const [settings, setSettings] = useState({
     duration_minutes: 45, shuffle_questions: false, max_attempts: 1,
@@ -24,6 +26,51 @@ export default function TeacherExamDetail() {
     allow_review: true, show_answers_policy: 'never',
   });
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+
+  // Track pending changes to trigger auto-save
+  const settingsRef = useRef(settings);
+  const questionsRef = useRef(questions);
+  settingsRef.current = settings;
+  questionsRef.current = questions;
+
+  const doAutoSave = useCallback(async () => {
+    if (!id) return;
+    setAutoSaving(true);
+    try {
+      await examService.updateExam(id, settingsRef.current);
+      const currentQuestions = questionsRef.current;
+      for (const q of currentQuestions) {
+        const payload: Record<string, unknown> = {
+          type: q.type,
+          content: q.content,
+          instruction: q.instruction,
+          points: q.points,
+          required: q.required,
+          order_index: q.order_index,
+          options: q.options.map((o) => ({ content: o.content, is_correct: o.is_correct })),
+        };
+        if (q.type === 'matching' && q.matching_pairs) {
+          payload.matching_pairs = q.matching_pairs.map((p) => ({
+            left_text: p.left_text,
+            right_text: p.right_text,
+            correct_match: p.right_text,
+          }));
+        }
+        await examService.updateQuestion(q.id, payload);
+      }
+      setLastAutoSaved(new Date());
+    } catch {
+      // Silent fail for auto-save, let manual save show error
+    } finally {
+      setAutoSaving(false);
+    }
+  }, [id]);
+
+  const { trigger: triggerAutoSave, saveNow: saveNow } = useAutoSave({
+    delay: 3000,
+    onSave: doAutoSave,
+    disabled: !id,
+  });
 
   const fetchExamData = useCallback(async () => {
     if (!id) return;
@@ -61,6 +108,18 @@ export default function TeacherExamDetail() {
     fetchExamData();
   }, [fetchExamData]);
 
+  // Trigger auto-save when questions change (after mount completes)
+  useEffect(() => {
+    if (loading) return;
+    triggerAutoSave();
+  }, [questions, triggerAutoSave, loading]);
+
+  // Trigger auto-save when settings change
+  useEffect(() => {
+    if (loading) return;
+    triggerAutoSave();
+  }, [settings, triggerAutoSave, loading]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -97,19 +156,27 @@ export default function TeacherExamDetail() {
         ],
       });
       setQuestions([...questions, res.data.data]);
+      triggerAutoSave();
     } catch (err: any) {
       showErrorToast(err.response?.data?.message || 'Thêm câu hỏi thất bại');
     }
   };
 
   const handleChangeQuestion = async (updated: Question) => {
-    setQuestions(questions.map((q) => (q.id === updated.id ? updated : q)));
+    setQuestions((prev) => {
+      const next = prev.map((q) => (q.id === updated.id ? updated : q));
+      return next;
+    });
+    triggerAutoSave();
   };
 
   const handleDeleteQuestion = async (qId: string) => {
     try {
       await examService.deleteQuestion(qId);
-      setQuestions(questions.filter((q) => q.id !== qId));
+      const next = questions.filter((q) => q.id !== qId);
+      setQuestions(next);
+      // Trigger auto-save after state update
+      triggerAutoSave();
     } catch (err: any) {
       showErrorToast(err.response?.data?.message || 'Xóa câu hỏi thất bại');
     }
@@ -118,22 +185,8 @@ export default function TeacherExamDetail() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await examService.updateExam(exam.id, settings);
-      for (const q of questions) {
-        const payload: Record<string, unknown> = {
-          type: q.type,
-          content: q.content,
-          instruction: q.instruction,
-          points: q.points,
-          required: q.required,
-          order_index: q.order_index,
-          options: q.options.map((o) => ({ content: o.content, is_correct: o.is_correct })),
-        };
-        if (q.type === 'matching' && q.matching_pairs) {
-          payload.matching_pairs = q.matching_pairs.map((p) => ({ left_text: p.left_text, right_text: p.right_text, correct_match: p.right_text }));
-        }
-        await examService.updateQuestion(q.id, payload);
-      }
+      await saveNow(); // Cancel pending auto-save and save everything immediately
+      await examService.updateExam(exam!.id, settings);
       showSuccessToast('Đã lưu thành công!');
       fetchExamData();
     } catch (err: any) {
@@ -144,6 +197,15 @@ export default function TeacherExamDetail() {
   };
 
   const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+
+  const formatAutoSaveTime = (date: Date | null) => {
+    if (!date) return '';
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 60_000) return 'vừa xong';
+    const mins = Math.floor(diffMs / 60_000);
+    return `${mins} phút trước`;
+  };
 
   return (
     <div className="space-y-6">
@@ -158,8 +220,17 @@ export default function TeacherExamDetail() {
             <Badge variant={statusColor}>{statusLabel}</Badge>
           </div>
           <p className="text-gray-500 mt-1">{exam.description}</p>
+          {lastAutoSaved && (
+            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-400">
+              <Cloud className="w-3.5 h-3.5" />
+              <span>Đã lưu tự động {formatAutoSaveTime(lastAutoSaved)}</span>
+              {autoSaving && (
+                <span className="ml-1 text-primary">· Đang lưu...</span>
+              )}
+            </div>
+          )}
         </div>
-        <Button onClick={handleSave} disabled={saving}>
+        <Button onClick={handleSave} disabled={saving || autoSaving}>
           <Save className="w-4 h-4 mr-2" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
         </Button>
       </div>
