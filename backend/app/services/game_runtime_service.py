@@ -167,6 +167,7 @@ def _card_pairs_for_runtime(db: Session, package_id: str) -> list[dict]:
             "right_label": p.right_label,
             "right_image_url": p.right_image_url,
             "order_index": p.order_index,
+            "match_mode": p.match_mode,
         }
         for p in pairs
     ]
@@ -261,9 +262,22 @@ def _runtime_config_for_package(
     session_config = runtime_config.get("session") if isinstance(runtime_config.get("session"), dict) else {}
     runtime_config["session"] = dict(session_config)
 
-    # ── Memory Card: embed card pairs directly in runtime_config ──────────────
+    # ── Memory Card: embed card pairs + config directly in runtime_config ────────────
     if _is_memory_card_package(package) and db is not None:
         runtime_config["card_pairs"] = _card_pairs_for_runtime(db, package.id)
+        # Pass background image URL from package thumbnail or runtime_config
+        background_url = (
+            runtime_config.get("background_image_url")
+            or package.thumbnail_url
+        )
+        if background_url:
+            runtime_config["background_image_url"] = background_url
+        # Pass max moves (null = unlimited)
+        move_limit = runtime_config.get("move_limit")
+        if move_limit is None:
+            move_limit = runtime_config.get("max_moves")
+        if move_limit is not None:
+            runtime_config["move_limit"] = move_limit
         if progress:
             runtime_config["question_progress"] = progress
         return runtime_config

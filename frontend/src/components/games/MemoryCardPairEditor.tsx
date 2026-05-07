@@ -21,6 +21,7 @@ interface DraftPair {
   right_label: string;
   right_image_url: string;
   order_index: number;
+  match_mode: 'image_image' | 'text_image';
   saving: boolean;
   dirty: boolean;
 }
@@ -38,6 +39,7 @@ function pairToDraft(pair: GameCardPair): DraftPair {
     right_label: pair.right_label ?? '',
     right_image_url: pair.right_image_url ?? '',
     order_index: pair.order_index,
+    match_mode: pair.match_mode ?? 'image_image',
     saving: false,
     dirty: false,
   };
@@ -98,12 +100,6 @@ function CardSide({
       </div>
 
       <Input
-        placeholder="URL ảnh"
-        value={imageUrl}
-        onChange={(e) => onImageUrlChange(e.target.value)}
-        className="text-xs"
-      />
-      <Input
         placeholder="Nhãn văn bản (tuỳ chọn)"
         value={label}
         onChange={(e) => onLabelChange(e.target.value)}
@@ -152,6 +148,7 @@ export default function MemoryCardPairEditor({ packageId }: Props) {
       right_label: pair.right_label.trim() || null,
       right_image_url: pair.right_image_url.trim() || null,
       order_index: pair.order_index,
+      match_mode: pair.match_mode,
     };
 
     try {
@@ -203,6 +200,7 @@ export default function MemoryCardPairEditor({ packageId }: Props) {
       right_label: '',
       right_image_url: '',
       order_index: pairs.length,
+      match_mode: 'image_image',
       saving: false,
       dirty: true,
     };
@@ -319,6 +317,29 @@ export default function MemoryCardPairEditor({ packageId }: Props) {
                   onImageUpload={(f) => uploadImage(pair._localId, 'right', f)}
                   uploading={uploadingId === `${pair._localId}-right`}
                 />
+              </div>
+
+              {/* Match mode selector */}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor={`match-mode-${pair._localId}`} className="text-[11px] font-semibold uppercase tracking-[0.15em] text-slate-400">
+                    Chế độ ghép thẻ
+                  </label>
+                  <select
+                    id={`match-mode-${pair._localId}`}
+                    value={pair.match_mode}
+                    onChange={(e) => {
+                      const val = e.target.value as 'image_image' | 'text_image';
+                      setPairs((prev) =>
+                        prev.map((p) => p._localId === pair._localId ? { ...p, match_mode: val, dirty: true } : p),
+                      );
+                    }}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  >
+                    <option value="image_image">📷 Ảnh - Ảnh (cả 2 thẻ là ảnh)</option>
+                    <option value="text_image">📝 Text - Ảnh (Trái: Text, Phải: Ảnh)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Save button */}

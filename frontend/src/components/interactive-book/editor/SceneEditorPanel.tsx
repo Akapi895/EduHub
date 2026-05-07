@@ -838,47 +838,46 @@ export default function SceneEditorPanel({
   };
 
   const renderUnifiedMediaContent = (scene: InteractiveScene) => {
-    const mediaKind = getSceneMediaKind(scene);
     const imageUrl = getStringFromContent(scene, 'image_url');
     const videoUrl = getStringFromContent(scene, 'video_url');
     const posterUrl = getStringFromContent(scene, 'poster_url');
     const backgroundAudioUrl = getStringFromContent(scene, 'background_audio_url');
+
+    const handlePrimaryMediaChange = (url: string) => {
+      updateSelectedUnifiedMediaScene((currentScene) => {
+        const content = ensureContentRecord(currentScene);
+        // naive detection by extension
+        if (/\.(mp4|webm|ogg|m4v)(\?|$)/i.test(url)) {
+          content.media_kind = 'video';
+          content.video_url = url;
+        } else {
+          content.media_kind = 'image';
+          content.image_url = url;
+        }
+      });
+    };
 
     return (
       <div className="space-y-4">
         {renderCommonSceneFields(scene)}
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
-            <label className="mb-2 block text-sm font-medium text-slate-700">Loại nội dung chính</label>
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  name={`media-kind-${scene.id}`}
-                  checked={mediaKind === 'image'}
-                  disabled={readOnly}
-                  onChange={() => updateSelectedUnifiedMediaScene((currentScene) => {
-                    ensureContentRecord(currentScene).media_kind = 'image';
-                  })}
-                />
-                Dùng ảnh
-              </label>
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-                <input
-                  type="radio"
-                  name={`media-kind-${scene.id}`}
-                  checked={mediaKind === 'video'}
-                  disabled={readOnly}
-                  onChange={() => updateSelectedUnifiedMediaScene((currentScene) => {
-                    ensureContentRecord(currentScene).media_kind = 'video';
-                  })}
-                />
-                Dùng video
-              </label>
+            <p className="text-sm font-semibold text-slate-900">Nội dung chính</p>
+            <p className="mt-1 text-sm text-slate-500">Tải lên ảnh hoặc video cho cảnh (chọn 1 file). Hệ thống sẽ tự nhận dạng loại và lưu vào trường phù hợp.</p>
+            <div className="mt-3">
+              {renderMediaField({
+                fieldKey: `${scene.id}:primary-media`,
+                label: 'Ảnh/Video chính',
+                url: imageUrl || videoUrl || '',
+                accept: 'image/*,video/*',
+                subDir: 'interactive-books',
+                kind: 'file',
+                disabled: readOnly,
+                onChange: (url) => {
+                  handlePrimaryMediaChange(url);
+                },
+              })}
             </div>
-            <p className="mt-3 text-sm text-slate-500">
-              Phần trình bày sẽ cho phép chèn chữ, ghi chú hoặc nút trực tiếp lên nội dung này.
-            </p>
           </div>
 
           <div className="space-y-4">
@@ -901,69 +900,35 @@ export default function SceneEditorPanel({
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {mediaKind === 'video'
-            ? renderMediaField({
-              fieldKey: `${scene.id}:video`,
-              label: 'Video chính',
-              url: videoUrl,
-              accept: 'video/*',
-              subDir: 'interactive-books',
-              kind: 'video',
-              disabled: readOnly,
-              onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
-                const content = ensureContentRecord(currentScene);
-                content.media_kind = 'video';
-                content.video_url = url;
-              }),
-            })
-            : renderMediaField({
-              fieldKey: `${scene.id}:image`,
-              label: 'Ảnh chính',
-              url: imageUrl,
+          <div className="space-y-4">
+            {renderMediaField({
+              fieldKey: `${scene.id}:poster`,
+              label: 'Ảnh poster (cho video)',
+              url: posterUrl,
               accept: 'image/*',
               subDir: 'interactive-books',
               kind: 'image',
               disabled: readOnly,
               onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
-                const content = ensureContentRecord(currentScene);
-                content.media_kind = 'image';
-                content.image_url = url;
+                ensureContentRecord(currentScene).poster_url = url;
               }),
             })}
-
-          {mediaKind === 'video'
-            ? (
-              <div className="space-y-4">
-                {renderMediaField({
-                  fieldKey: `${scene.id}:poster`,
-                  label: 'Ảnh poster',
-                  url: posterUrl,
-                  accept: 'image/*',
-                  subDir: 'interactive-books',
-                  kind: 'image',
-                  disabled: readOnly,
-                  onChange: (url) => updateSelectedUnifiedMediaScene((currentScene) => {
-                    ensureContentRecord(currentScene).poster_url = url;
-                  }),
+            <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={getBooleanFromContent(scene, 'autoplay')}
+                disabled={readOnly}
+                onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
+                  ensureContentRecord(currentScene).autoplay = event.target.checked;
                 })}
-                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={getBooleanFromContent(scene, 'autoplay')}
-                    disabled={readOnly}
-                    onChange={(event) => updateSelectedUnifiedMediaScene((currentScene) => {
-                      ensureContentRecord(currentScene).autoplay = event.target.checked;
-                    })}
-                  />
-                  Tự phát video khi vào cảnh
-                </label>
-              </div>
-            )
-            : (
-              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                Ảnh chính sẽ hiển thị toàn màn hình. Giáo viên có thể chèn text hoặc ghi chú ở tab trình bày.
-              </div>
-            )}
+              />
+              Tự phát video khi vào cảnh
+            </label>
+          </div>
+
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+            Ảnh/Video chính sẽ hiển thị toàn màn hình. Giáo viên có thể chèn text hoặc ghi chú ở tab trình bày.
+          </div>
         </div>
       </div>
     );

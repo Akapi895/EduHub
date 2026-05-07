@@ -42,6 +42,9 @@ class GameCardPair(Base):
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Match mode per pair: "image_image" | "image_text" (auto-convert text to image)
+    match_mode: Mapped[str] = mapped_column(String, default="image_image", nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

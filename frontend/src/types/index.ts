@@ -628,6 +628,7 @@ export interface GameCardPair {
   right_image_url: string | null;
   order_index: number;
   is_active: boolean;
+  match_mode: 'image_image' | 'text_image'; // image_image: both sides have images; text_image: left is text, right is image
   created_at?: string;
   updated_at?: string;
 }
@@ -638,6 +639,7 @@ export interface GameCardPairPayload {
   right_label?: string | null;
   right_image_url?: string | null;
   order_index?: number;
+  match_mode?: 'image_image' | 'text_image';
 }
 
 // ====== Messaging ======

@@ -64,7 +64,7 @@ export default function TeacherGames() {
           </div>
           <Button
             type="button"
-            className="w-full justify-center bg-white text-slate-950 hover:bg-slate-100 lg:w-auto"
+            className="w-full justify-center bg-white !text-slate-950 hover:bg-slate-100 lg:w-auto"
             onClick={() => navigate('/teacher/games/create')}
           >
             <Plus className="mr-1.5 h-4 w-4" />

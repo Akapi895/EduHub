@@ -101,6 +101,9 @@
       this.timerHandle = null;
       this.isDemo = false;
       this.matchedPairIds = new Set();
+      // ---- Game-wide runtime config ----
+      this.backgroundImageUrl = null;  // from runtime_config.background_image_url
+      this.moveLimit = null;            // from runtime_config.move_limit (null = unlimited)
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -108,6 +111,7 @@
     mount() {
       log('mount() called');
       this.$board = document.getElementById('board');
+      this.$stage = this.$board ? this.$board.closest('.mc-stage') : null;
       this.$hud = document.getElementById('hud');
       this.$time = document.getElementById('time-val');
       this.$moves = document.getElementById('moves-val');
@@ -202,6 +206,15 @@
       this.cfg.timeSecs  = parseIntSafe(ses.time_limit_seconds, 180, 30);
       this.cfg.revealMs  = parseIntSafe(mc.reveal_delay_ms, 750, 200);
       this.cfg.pointsPerMatch = parseIntSafe(mc.points_per_match, 100, 0);
+
+      // ── Extract game-wide runtime config ───────────────────────────────────
+      this.backgroundImageUrl = rc.background_image_url || null;
+      const moveLimitRaw = rc.move_limit;
+      this.moveLimit = (moveLimitRaw && moveLimitRaw !== 'unlimited') 
+        ? parseIntSafe(moveLimitRaw, null, 0) 
+        : null;
+
+      log('applyInit() — backgroundImageUrl:', Boolean(this.backgroundImageUrl), 'moveLimit:', this.moveLimit);
       log('applyInit() — config:', this.cfg);
     }
 
@@ -302,10 +315,55 @@
         return;
       }
 
-      const cols = clamp(Math.ceil(Math.sqrt(total)), 3, 7);
-      log('renderBoard() — total:', total, 'cols:', cols);
+      // ── Calculate flexible grid: rows <= cols ──────────────────────────────
+      // Find a balance where we maximize cols and keep rows <= cols
+      const minCols = 2;
+      const maxCols = 8;
+      let bestCols = minCols, bestRows = Math.ceil(total / minCols);
 
-      this.$board.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+      for (let c = minCols; c <= maxCols; c++) {
+        const r = Math.ceil(total / c);
+        if (r <= c) {
+          // Found a configuration where rows <= cols
+          bestCols = c;
+          bestRows = r;
+          break;
+        }
+        // Otherwise, keep this as fallback
+        if (r < bestRows) {
+          bestCols = c;
+          bestRows = r;
+        }
+      }
+
+      log('renderBoard() — total:', total, 'cols:', bestCols, 'rows:', bestRows);
+
+      const boardStyles = globalScope.getComputedStyle(this.$stage || this.$board.parentElement || this.$board);
+      const horizontalPadding = parseFloat(boardStyles.paddingLeft || '0') + parseFloat(boardStyles.paddingRight || '0');
+      const verticalPadding = parseFloat(boardStyles.paddingTop || '0') + parseFloat(boardStyles.paddingBottom || '0');
+      const availWidth = Math.max(0, (this.$stage?.clientWidth || this.$board.clientWidth || globalScope.innerWidth) - horizontalPadding);
+      const availHeight = Math.max(0, (this.$stage?.clientHeight || this.$board.clientHeight || globalScope.innerHeight) - verticalPadding);
+      const gap = 8;
+      const cardRatio = 3 / 4;
+      const widthFromWidth = Math.floor((availWidth - gap * (bestCols - 1)) / bestCols);
+      const widthFromHeight = Math.floor(((availHeight - gap * (bestRows - 1)) / bestRows) * cardRatio);
+      const cardSize = clamp(Math.min(widthFromWidth, widthFromHeight), 44, 160);
+      const boardWidth = cardSize * bestCols + gap * (bestCols - 1);
+
+      this.$board.style.gridTemplateColumns = `repeat(${bestCols}, ${cardSize}px)`;
+      this.$board.style.width = `${boardWidth}px`;
+      this.$board.style.gap = `${gap}px`;
+      this.$board.style.justifyContent = 'center';
+
+      // Apply background image if provided
+      if (this.backgroundImageUrl) {
+        this.$board.style.backgroundImage = `url('${escHtml(this.backgroundImageUrl)}')`;
+        this.$board.style.backgroundSize = 'cover';
+        this.$board.style.backgroundPosition = 'center';
+        this.$board.style.backgroundAttachment = 'fixed';
+        this.$board.style.backgroundRepeat = 'no-repeat';
+      }
+
       this.$board.innerHTML = '';
       this.cards.forEach((card, idx) => {
         const btn = document.createElement('button');
@@ -333,7 +391,12 @@
 
     lockCard(idx) {
       const el = this.cardEl(idx);
-      if (el) { el.classList.add('is-matched'); el.disabled = true; }
+      if (el) {
+        el.classList.add('is-matched');
+        el.disabled = true;
+        // Add matched effect with animation
+        el.classList.add('matched-pop');
+      }
     }
 
     // ── Interaction ──────────────────────────────────────────────────────────
@@ -348,6 +411,14 @@
       if (this.openIdxs.length < 2) return;
 
       this.moves++;
+
+      // Check if exceeded move limit
+      if (this.moveLimit !== null && this.moves > this.moveLimit) {
+        log('pick() — exceeded move limit:', this.moves, '>', this.moveLimit);
+        this.finish('timeout', 'exceeded_move_limit');
+        return;
+      }
+
       const [iA, iB] = this.openIdxs;
       this.openIdxs = [];
       const cA = this.cards[iA], cB = this.cards[iB];
@@ -431,7 +502,18 @@
 
     updateHud() {
       if (this.$time)  this.$time.textContent  = formatTime(this.timeLeft);
-      if (this.$moves) this.$moves.textContent = String(this.moves);
+      if (this.$moves) {
+        const movesDisplay = this.moveLimit !== null
+          ? `${this.moves}/${this.moveLimit}`
+          : String(this.moves);
+        this.$moves.textContent = movesDisplay;
+        // Warn if near move limit
+        if (this.moveLimit !== null && this.moves >= this.moveLimit * 0.8) {
+          this.$moves.classList.add('time-critical');
+        } else {
+          this.$moves.classList.remove('time-critical');
+        }
+      }
       if (this.$pairs) this.$pairs.textContent = `${this.matched}/${this.pairs.length}`;
       if (this.$score) this.$score.textContent = String(this.score);
       // Colour timer red when low

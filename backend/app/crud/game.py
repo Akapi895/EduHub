@@ -598,15 +598,22 @@ def create_game_package(
                 is_active=True,
             )
         )
-    db.add(
-        GamePackageConfig(
-            package_id=package.id,
-            game_module_id=data.game_module_id,
-            selector_strategy=data.selector_strategy,
-            runtime_config=data.runtime_config,
-            scoring_config=data.scoring_config,
-        )
+    # Memory Card specific: build runtime_config with background_image_url and max_moves
+    rc = dict(data.runtime_config) if data.runtime_config else {}
+    if data.background_image_url:
+        rc["background_image_url"] = data.background_image_url
+    if data.max_moves is not None:
+        rc["max_moves"] = data.max_moves
+
+    game_config = GamePackageConfig(
+        package_id=package.id,
+        game_module_id=data.game_module_id,
+        selector_strategy=data.selector_strategy,
+        runtime_config=rc if rc else None,
+        scoring_config=data.scoring_config,
     )
+    db.add(game_config)
+
     db.add(QuestionBank(package_id=package.id, created_by=created_by))
     db.commit()
     return get_game_package(db, package.id)  # type: ignore[return-value]
@@ -687,6 +694,7 @@ def update_game_package(db: Session, *, package: ContentPackage, data: GamePacka
     update_data = data.model_dump(exclude_unset=True)
     package_fields = {"title", "description", "subject", "grade", "thumbnail_url", "status"}
     config_fields = {"game_module_id", "selector_strategy", "runtime_config", "scoring_config"}
+    memory_card_fields = {"background_image_url", "max_moves"}
 
     previous_status = package.status
 
@@ -704,6 +712,18 @@ def update_game_package(db: Session, *, package: ContentPackage, data: GamePacka
     for field in config_fields:
         if field in update_data:
             setattr(package.game_config, field, update_data[field])
+
+    # Memory Card specific: store background_image_url and max_moves in runtime_config
+    for field in memory_card_fields:
+        if field in update_data and update_data[field] is not None:
+            current_rc = dict(package.game_config.runtime_config or {})
+            current_rc[field] = update_data[field]
+            package.game_config.runtime_config = current_rc
+        elif field in update_data and update_data[field] is None:
+            # Allow explicit null to clear
+            current_rc = dict(package.game_config.runtime_config or {})
+            current_rc.pop(field, None)
+            package.game_config.runtime_config = current_rc if current_rc else None
 
     db.commit()
     return get_game_package(db, package.id)  # type: ignore[return-value]

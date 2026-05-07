@@ -20,6 +20,9 @@ class GamePackageCreate(BaseModel):
     subject: str | None = None
     grade: str | None = None
     status: ContentPackageStatus = ContentPackageStatus.published
+    # Memory Card specific
+    background_image_url: str | None = None
+    max_moves: int | None = None
 
 
 class GamePackageUpdate(BaseModel):
@@ -33,6 +36,10 @@ class GamePackageUpdate(BaseModel):
     subject: str | None = None
     grade: str | None = None
     status: ContentPackageStatus | None = None
+    # Memory Card specific: background image URL
+    background_image_url: str | None = None
+    # Memory Card specific: max moves (null = unlimited)
+    max_moves: int | None = None
 
 
 class GamePackagePublicationUpdate(BaseModel):
@@ -125,6 +132,7 @@ class GameCardPairCreate(BaseModel):
     right_label: str | None = None
     right_image_url: str | None = None
     order_index: int = 0
+    match_mode: str = "image_image"
 
 
 class GameCardPairUpdate(BaseModel):
@@ -134,3 +142,4 @@ class GameCardPairUpdate(BaseModel):
     right_label: str | None = None
     right_image_url: str | None = None
     order_index: int | None = None
+    match_mode: str | None = None

@@ -19,6 +19,7 @@ def serialize_card_pair(pair: GameCardPair) -> dict:
         "right_label": pair.right_label,
         "right_image_url": pair.right_image_url,
         "order_index": pair.order_index,
+        "match_mode": pair.match_mode,
         "is_active": pair.is_active,
         "created_at": pair.created_at,
         "updated_at": pair.updated_at,
@@ -44,6 +45,14 @@ def get_card_pair(db: Session, pair_id: str) -> GameCardPair | None:
 # ── Mutations ─────────────────────────────────────────────────────────────────
 
 def create_card_pair(db: Session, *, package_id: str, data: GameCardPairCreate) -> GameCardPair:
+    # Enforce max 15 pairs per package
+    existing = db.query(GameCardPair).filter(
+        GameCardPair.package_id == package_id,
+        GameCardPair.is_active.is_(True),
+    ).count()
+    if existing >= 15:
+        raise ValueError("Tối đa 15 cặp thẻ được phép cho mỗi game.")
+
     pair = GameCardPair(
         package_id=package_id,
         left_label=data.left_label,
@@ -51,6 +60,7 @@ def create_card_pair(db: Session, *, package_id: str, data: GameCardPairCreate) 
         right_label=data.right_label,
         right_image_url=data.right_image_url,
         order_index=data.order_index,
+        match_mode=data.match_mode,
     )
     db.add(pair)
     db.commit()

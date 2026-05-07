@@ -1076,8 +1076,8 @@ class game {
       game_W = this.canvas.width;
       game_H = this.canvas.height;
       XXX = game_W / 2;
-      YYY = game_H * 0.18;
-      R = this.getWidth() * 2;
+      YYY = game_H * 0.31; // Lower pivot so rope starts from the seated character hand area
+      R = this.getWidth() * 3.5; // Increased from 2 to prevent hook overlapping character
       if (!drag) {
         r = R;
       }
@@ -1105,7 +1105,12 @@ class game {
     this.context.strokeStyle = '#FF0000';
     this.context.lineWidth = Math.floor(this.getWidth() / 10);
     this.context.moveTo(XXX, YYY);
-    this.context.lineTo(Xh, Yh);
+    // Attach rope to the top joint of hook instead of passing through its body.
+    const hookAngle = this.toRadian(angle - 90);
+    const hookJointOffsetY = -this.getWidth() / 8;
+    const hookJointX = Xh - hookJointOffsetY * Math.sin(hookAngle);
+    const hookJointY = Yh + hookJointOffsetY * Math.cos(hookAngle);
+    this.context.lineTo(hookJointX, hookJointY);
     this.context.stroke();
 
     this.context.beginPath();
@@ -1179,61 +1184,86 @@ class game {
   }
 
   drawText() {
-    this.drawImageSafe(dolarIM, this.getWidth() / 2, this.getWidth() / 2, this.getWidth(), this.getWidth());
-    this.context.fillStyle = 'red';
-    if (this.score > this.targetScore) {
-      this.context.fillStyle = '#FF6600';
+    const unit = this.getWidth();
+
+    const leftBoxX = unit * 0.18;
+    const leftBoxY = unit * 0.24;
+    const leftBoxW = unit * 3.25;
+    const leftBoxH = unit * 2.55;
+    const leftPadX = unit * 0.22;
+
+    const rightBoxX = game_W - unit * 4.3;
+    const rightBoxY = unit * 0.24;
+    const rightBoxW = unit * 4.05;
+    const rightBoxH = unit * 3.45;
+    const rightPadX = unit * 0.34;
+
+    // Semi-transparent HUD panels.
+    this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    this.context.fillRect(leftBoxX, leftBoxY, leftBoxW, leftBoxH);
+    this.context.fillRect(rightBoxX, rightBoxY, rightBoxW, rightBoxH);
+
+    // Draw target score (left panel) with safe padding.
+    this.drawImageSafe(targetIM, leftBoxX + leftPadX, leftBoxY + unit * 0.30, unit, unit);
+    this.context.fillStyle = '#FFB84D';
+    this.context.font = `bold ${unit * 0.8}px Stencil`;
+    this.context.fillText(this.targetScore, leftBoxX + unit * 1.35, leftBoxY + unit * 1.05);
+
+    // Set right-aligned text for right HUD with inner right padding.
+    const rightAlignX = rightBoxX + rightBoxW - rightPadX;
+    this.context.textAlign = 'right';
+
+    // Draw level row.
+    this.drawImageSafe(levelIM, rightBoxX + unit * 0.18, rightBoxY + unit * 0.35, unit, unit);
+    this.context.fillStyle = '#FFB84D';
+    this.context.font = `bold ${unit * 0.78}px Stencil`;
+    this.context.fillText(`LVL ${level + 1}`, rightAlignX, rightBoxY + unit * 1.00);
+
+    // Draw difficulty label (skip recognition)
+    const difficulty = this.getDifficultyForLevel(Math.max(level + 1, 1));
+    if (difficulty && difficulty !== 'recognition') {
+      this.context.font = `${unit * 0.44}px Stencil`;
+      this.context.fillStyle = '#FFB84D';
+      const difficultyLabel = DIFFICULTY_LABELS[difficulty] || '';
+      this.context.fillText(difficultyLabel, rightAlignX, rightBoxY + unit * 1.52);
     }
-    this.context.font = `${this.getWidth()}px Stencil`;
-    this.context.fillText(this.score, this.getWidth() * 1.5, this.getWidth() * 1.35);
 
-    this.drawImageSafe(targetIM, this.getWidth() / 2, this.getWidth() / 2 + this.getWidth(), this.getWidth(), this.getWidth());
-    this.context.fillStyle = '#FF6600';
-    this.context.font = `${this.getWidth()}px Stencil`;
-    this.context.fillText(this.targetScore, this.getWidth() * 1.5, this.getWidth() * 2.35);
+    // Draw current score row.
+    this.context.fillStyle = this.score > this.targetScore ? '#00FF00' : '#FFB84D';
+    this.context.font = `bold ${unit * 0.64}px Stencil`;
+    this.context.fillText(`SCORE: ${this.score}`, rightAlignX, rightBoxY + unit * 2.10);
 
-    this.drawImageSafe(levelIM, game_W - 3 * this.getWidth(), this.getWidth() / 2, this.getWidth(), this.getWidth());
-    this.context.fillStyle = '#FFFFCC';
-    this.context.font = `${this.getWidth()}px Stencil`;
-    this.context.fillText(level + 1, game_W - 2 * this.getWidth(), this.getWidth() * 1.35);
-    this.context.font = `${Math.max(12, this.getWidth() * 0.35)}px Arial`;
-    const difficultyLabel = DIFFICULTY_LABELS[this.getDifficultyForLevel(Math.max(level + 1, 1))] || '';
-    this.context.fillText(difficultyLabel, game_W - 4.4 * this.getWidth(), this.getWidth() * 1.75);
-
-    // Draw elapsed time instead of countdown
-    this.drawImageSafe(clockIM, game_W - 3 * this.getWidth(), this.getWidth() / 2 + this.getWidth(), this.getWidth(), this.getWidth());
-    this.context.fillStyle = '#00FF00';
-    this.context.font = `${this.getWidth()}px Stencil`;
-    this.context.fillText(Math.floor(this.elapsedTimeSeconds), game_W - 2 * this.getWidth(), this.getWidth() * 2.35);
-    this.context.font = `${Math.max(12, this.getWidth() * 0.35)}px Arial`;
-    this.context.fillStyle = '#FFFF00';
-    this.context.fillText(
-      `Cau con lai: ${this.getRemainingQuestionsForLevel(Math.max(level + 1, 1))}`,
-      game_W - 4.4 * this.getWidth(),
-      this.getWidth() * 2.75,
-    );
-
-    // Draw lives
+    // Draw elapsed time row with clock icon kept inside the right panel.
+    const clockSize = unit * 1.05;
+    const timeRowY = rightBoxY + unit * 2.88;
+    const clockX = rightBoxX + unit * 0.26;
+    const clockY = timeRowY - unit * 0.78;
+    this.drawImageSafe(clockIM, clockX, clockY, clockSize, clockSize);
+    this.context.fillStyle = '#FFB84D';
+    this.context.font = `bold ${unit * 0.7}px Stencil`;
+    this.context.fillText(`${Math.floor(this.elapsedTimeSeconds)}S`, rightAlignX, timeRowY);
+    
+    // Reset text alignment
+    this.context.textAlign = 'start';
+    
+    // Draw lives below target
     this.drawLives();
-
-    // Draw elapsed time indicator
-    this.context.font = `${Math.max(10, this.getWidth() * 0.3)}px Arial`;
-    this.context.fillStyle = '#00FF00';
-    this.context.fillText('TG', game_W - 4.4 * this.getWidth(), this.getWidth() * 3.15);
-
+    
+    // Draw score popup indicator
     if (Math.abs(timeH - this.elapsedTimeSeconds) <= 0.7) {
       this.context.fillStyle = 'red';
+      this.context.font = `bold ${this.getWidth() * 0.7}px Arial`;
       this.context.fillText(`+${vlH}`, XXX, YYY * 0.8);
     }
   }
 
   drawLives() {
-    const heartSize = this.getWidth() * 1.2;
-    const startX = this.getWidth() * 1.5;
-    const startY = this.getWidth() * 0.3;
+    const heartSize = this.getWidth() * 0.75; // Increased for better visibility and balance
+    const startX = this.getWidth() * 0.42;
+    const startY = this.getWidth() * 1.43; // Keep hearts grouped with target while preserving top padding
     
     for (let i = 0; i < this.maxLives; i++) {
-      const x = startX + i * (heartSize + this.getWidth() * 0.2);
+      const x = startX + i * (heartSize + this.getWidth() * 0.1); // Reduced spacing from 0.2 to 0.1
       const filled = i < this.lives;
       
       // Try to use image if available, otherwise draw on canvas

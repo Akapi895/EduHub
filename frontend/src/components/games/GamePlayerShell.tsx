@@ -3,15 +3,13 @@ import {
   ArrowLeft,
   BookOpen,
   Loader2,
-  Maximize2,
-  Minimize2,
   PauseCircle,
   PlayCircle,
   RefreshCcw,
   Sparkles,
   Trophy,
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import Button from '@/components/common/Button';
 import GameQuestionModal from '@/components/games/GameQuestionModal';
@@ -192,6 +190,21 @@ function sanitizeSandboxPolicy(value?: string) {
   return tokens.join(' ');
 }
 
+function sanitizeAllowPolicy(value?: string) {
+  const raw = (value ?? 'fullscreen').trim();
+  if (!raw) return '';
+
+  // Remove fullscreen permission from iframe so fullscreen ownership stays at host viewport.
+  // This guarantees host overlays (question modal) remain visible in fullscreen mode.
+  const normalized = raw
+    .split(/[;,\s]+/)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .filter((token) => token.toLowerCase() !== 'fullscreen');
+
+  return normalized.join('; ');
+}
+
 function buildMatchingShape(question: GameRuntimeQuestion | null) {
   if (!question) {
     return { leftItems: [] as MatchingLeftItem[], rightItems: [] as MatchingRightItem[] };
@@ -244,10 +257,11 @@ function createDraftState(question: GameRuntimeQuestion | null) {
 }
 
 export default function GamePlayerShell({ playBundle, initialManifest = null }: GamePlayerShellProps) {
-  const navigate = useNavigate();
   const gamePackage = playBundle.package;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const postGameInfoRef = useRef<HTMLDivElement | null>(null);
+  const [viewportEl, setViewportEl] = useState<HTMLDivElement | null>(null);
   const completionAttemptRef = useRef<string | null>(null);
   const initTokenRef = useRef<string>('');
   const questionFlowActiveRef = useRef(false);
@@ -290,22 +304,26 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const [lastQuestionResult, setLastQuestionResult] = useState<GameRuntimeAnswerResponse | null>(null);
   const [leaderboard, setLeaderboard] = useState<GameLeaderboardResponse | null>(null);
 
-  // Fullscreen state
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [autoFullscreenTriggered, setAutoFullscreenTriggered] = useState(false);
-
   const moduleEntry = resolveGameModule(playBundle, startBundle);
   const manifestUrl = resolveManifestUrl(playBundle, startBundle, moduleEntry);
   const runtimeConfig = resolveRuntimeConfig(playBundle, startBundle);
   const gameEntry = resolveGameEntry(manifest, playBundle, startBundle);
   const aspectRatio = manifest?.runtime?.aspect_ratio || '16 / 9';
   const sandboxPolicy = sanitizeSandboxPolicy(manifest?.runtime?.sandbox);
-  const allowPolicy = manifest?.runtime?.allow || 'fullscreen';
+  const allowPolicy = sanitizeAllowPolicy(manifest?.runtime?.allow);
   const questionFlowActive = Boolean(questionFlow) || questionBusy || submittingAnswer;
   const questionPlanPreview = getQuestionPlanPreview(gamePackage);
   const levelDistributionLabel = getLevelDistributionLabel(gamePackage);
   const isMemoryCardGame = manifest?.id === 'memory-card' ||
     (gamePackage as { game_module?: { slug?: string } })?.game_module?.slug === 'memory-card';
+
+  const setViewportNode = useCallback((node: HTMLDivElement | null) => {
+    viewportRef.current = node;
+    setViewportEl(node);
+    console.info('[QFLOW] viewportRef:update', {
+      hasNode: Boolean(node),
+    });
+  }, []);
 
   const sendHostCommand = (
     type: GameHostCommandType,
@@ -451,6 +469,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   };
 
   const handleQuestionTrigger = async (trigger: GameQuestionTriggerPayload) => {
+    console.info('[QFLOW] trigger:received', {
+      triggerType: trigger.triggerType,
+      triggerKey: trigger.triggerKey,
+      triggerValue: trigger.triggerValue,
+      hasAttemptId: Boolean(attemptId),
+      hasViewportEl: Boolean(viewportEl),
+    });
+
     if (!attemptId) {
       resumeRuntime('question-trigger-without-attempt', { trigger });
       return;
@@ -483,17 +509,20 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
       setAttemptTotals(data.attempt_totals ?? null);
 
       if (data.action === 'ask_question') {
+        console.info('[QFLOW] trigger:ask_question', {
+          questionId: data.question?.id,
+          questionAttemptId: data.question_attempt?.id,
+          hasViewportEl: Boolean(viewportEl),
+        });
+
         resetQuestionDraft(data.question);
         setQuestionFlow({
           question: data.question,
           questionAttempt: data.question_attempt,
           trigger,
         });
-        
-        // Exit fullscreen when question modal appears so it's visible
-        if (document.fullscreenElement) {
-          document.exitFullscreen().catch(() => {});
-        }
+
+        // Keep fullscreen active; modal is rendered via portal into the fullscreen element.
         return;
       }
 
@@ -884,47 +913,23 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     pauseRuntime('host-toggle');
   };
 
-  const handleFullscreen = useCallback(async () => {
-    if (!viewportRef.current) return;
-    if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      return;
-    }
-    await viewportRef.current.requestFullscreen();
-  }, []);
-
-  // Track fullscreen changes
   useEffect(() => {
-    const onFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
-  }, []);
+    if (!questionFlow) return;
 
-  // Auto fullscreen when game starts running (first time only)
-  useEffect(() => {
-    if (runtimeStatus === 'running' && !autoFullscreenTriggered && !isFullscreen && !questionFlow) {
-      setAutoFullscreenTriggered(true);
-      if (viewportRef.current) {
-        viewportRef.current.requestFullscreen().catch(() => {
-          // Fullscreen might fail in some browsers or contexts, ignore
-        });
-      }
-    }
-  }, [runtimeStatus, autoFullscreenTriggered, isFullscreen, questionFlow]);
+    console.info('[QFLOW] modal:intent-open', {
+      questionId: questionFlow.question.id,
+      questionAttemptId: questionFlow.questionAttempt.id,
+      runtimeStatus,
+      hasViewportEl: Boolean(viewportEl),
+    });
+  }, [questionFlow, runtimeStatus, viewportEl]);
 
-  // Exit fullscreen when game completes
   useEffect(() => {
-    if (runtimeStatus === 'completed' && isFullscreen) {
-      document.exitFullscreen().catch(() => {});
-    }
-  }, [runtimeStatus, isFullscreen]);
-
-  // Reset auto-fullscreen trigger on new session
-  useEffect(() => {
-    setAutoFullscreenTriggered(false);
-  }, [sessionKey]);
+    if (runtimeStatus !== 'completed') return;
+    window.requestAnimationFrame(() => {
+      postGameInfoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [runtimeStatus]);
 
   if (playerError || manifestError) {
     return (
@@ -952,6 +957,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.22),_transparent_28%),radial-gradient(circle_at_top_right,_rgba(14,165,233,0.18),_transparent_26%),linear-gradient(180deg,#f8fafc_0%,#f1f5f9_55%,#e2e8f0_100%)] text-slate-900">
       <GameQuestionModal
         isOpen={Boolean(questionFlow)}
+        portalContainer={null}
         question={questionFlow?.question ?? null}
         questionAttempt={questionFlow?.questionAttempt ?? null}
         totals={attemptTotals}
@@ -1057,24 +1063,6 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
                 <RefreshCcw className="mr-1.5 h-4 w-4" />
                 Chơi lại
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleFullscreen}
-                className="border-sky-300/60 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800"
-              >
-                {isFullscreen ? (
-                  <>
-                    <Minimize2 className="mr-1.5 h-4 w-4" />
-                    Thoát toàn màn hình
-                  </>
-                ) : (
-                  <>
-                    <Maximize2 className="mr-1.5 h-4 w-4" />
-                    Toàn màn hình
-                  </>
-                )}
-              </Button>
               <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                 <Trophy className="h-3.5 w-3.5" />
                 {outcomeLabel}
@@ -1083,30 +1071,20 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
           </div>
         </header>
 
-        <div className="mt-6 grid flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="mt-6 flex flex-1 flex-col gap-6">
           <section className="min-w-0 space-y-6">
             <div
-              ref={viewportRef}
+              ref={setViewportNode}
               className="relative overflow-hidden rounded-[32px] border border-slate-200/80 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.14)]"
             >
-              {/* Back button overlay - visible in fullscreen mode */}
-              {isFullscreen && (
-                <div className="absolute left-4 top-4 z-50">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/student/games')}
-                    className="flex items-center gap-2 rounded-2xl border border-white/30 bg-black/60 px-4 py-2.5 text-sm font-medium text-white backdrop-blur-md transition hover:bg-black/80"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Quay lại danh sách
-                  </button>
-                </div>
-              )}
               <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600">
                 {manifest.short_description || manifest.description
                   || 'Trò chơi sẽ tạm dừng khi cần để em trả lời câu hỏi rồi mới tiếp tục.'}
               </div>
-              <div className="relative w-full bg-black" style={{ aspectRatio }}>
+              <div
+                className="relative w-full bg-black"
+                style={{ aspectRatio, minHeight: 'clamp(520px, 72vh, 920px)' }}
+              >
                 <iframe
                   key={`${gamePackage.id}-${sessionKey}`}
                   ref={frameRef}
@@ -1194,7 +1172,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
             )}
           </section>
 
-          <aside className="space-y-6 self-start xl:sticky xl:top-6">
+          <section ref={postGameInfoRef} className="space-y-6">
             <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_20px_60px_rgba(15,23,42,0.1)]">
               <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-slate-600">
                 <Trophy className="h-4 w-4 text-amber-500" />
@@ -1310,7 +1288,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
                 </div>
               </section>
             )}
-          </aside>
+          </section>
         </div>
       </div>
     </div>

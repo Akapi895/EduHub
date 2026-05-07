@@ -278,23 +278,9 @@ export default function TeacherGamePackageCreate() {
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện (tùy chọn)</label>
               <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                <Input
-                  value={thumbnailUrl}
-                  onChange={(event) => setThumbnailUrl(event.target.value)}
-                  placeholder="Dán liên kết ảnh hoặc tải file lên"
-                />
-                <label
-                  className={`inline-flex h-[42px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
-                    uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
-                  }`}
-                >
-                  {uploadingThumbnail ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                  )}
-                  {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+                <div className="flex items-center gap-3">
                   <input
+                    id="thumbnail-upload-input"
                     type="file"
                     accept="image/*"
                     className="hidden"
@@ -303,10 +289,26 @@ export default function TeacherGamePackageCreate() {
                       const file = event.target.files?.[0];
                       if (!file) return;
                       await handleThumbnailUpload(file);
-                      event.target.value = '';
+                      event.currentTarget.value = '';
                     }}
                   />
-                </label>
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('thumbnail-upload-input')?.click()}
+                    className={`inline-flex h-[42px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
+                      uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
+                    }`}
+                  >
+                    {uploadingThumbnail ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <UploadCloud className="mr-2 h-4 w-4" />
+                    )}
+                    {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+                  </button>
+                  {/* <span className="text-sm text-slate-500">Ảnh sẽ được lưu nhưng không hiển thị URL</span> */}
+                </div>
+                <div />
               </div>
               {thumbnailUrl && (
                 <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">

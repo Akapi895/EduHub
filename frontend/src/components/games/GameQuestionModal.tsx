@@ -1,4 +1,5 @@
 import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 
 import { getAttemptMetric, getAttemptProgressPercent } from '@/features/games/helpers';
@@ -12,6 +13,7 @@ import type {
 
 interface GameQuestionModalProps {
   isOpen: boolean;
+  portalContainer?: HTMLElement | null;
   question: GameRuntimeQuestion | null;
   questionAttempt: PackageQuestionAttempt | null;
   totals?: PackageAttemptTotals | null;
@@ -94,6 +96,7 @@ function canSubmitQuestion(
 
 export default function GameQuestionModal({
   isOpen,
+  portalContainer,
   question,
   questionAttempt,
   totals,
@@ -109,12 +112,16 @@ export default function GameQuestionModal({
   onMatchingChange,
   onSubmit,
 }: GameQuestionModalProps) {
-  if (!isOpen || !question || !questionAttempt) return null;
-
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const isRenderable = Boolean(isOpen && question && questionAttempt);
   const answered = getAttemptMetric(totals, ['questions_answered', 'answered_count']) ?? 0;
   const total = getAttemptMetric(totals, ['questions_total', 'questions_presented', 'total_questions']) ?? 0;
   const progressPercent = getAttemptProgressPercent(totals);
   const { leftItems, rightItems } = buildMatchingShape(question);
+  const assignedLeftByKey = Object.entries(matchingAnswers || {}).reduce<Record<string, string>>((acc, [leftId, key]) => {
+    if (key) acc[key] = leftId;
+    return acc;
+  }, {});
   const submitDisabled = submitting || !canSubmitQuestion(
     question,
     selectedOptionIds,
@@ -123,8 +130,33 @@ export default function GameQuestionModal({
     matchingAnswers,
   );
 
+  const portalTarget = portalContainer ?? document.body;
+  const overlayClass = 'fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm';
+
+  useEffect(() => {
+    if (!isRenderable || !question || !questionAttempt) return;
+
+    console.info('[QFLOW] modal:mount', {
+      questionId: question.id,
+      questionAttemptId: questionAttempt.id,
+      hasPortalContainer: Boolean(portalContainer),
+      portalTag: portalTarget.tagName,
+      fullscreenTag: document.fullscreenElement?.tagName ?? null,
+      overlayMode: portalContainer ? 'fixed-in-viewport-portal' : 'fixed-in-body-portal',
+    });
+
+    return () => {
+      console.info('[QFLOW] modal:unmount', {
+        questionId: question.id,
+        questionAttemptId: questionAttempt.id,
+      });
+    };
+  }, [isRenderable, portalContainer, portalTarget, question, questionAttempt]);
+
+  if (!isRenderable || !question || !questionAttempt) return null;
+
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
+    <div className={overlayClass}>
       <div
         className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_35px_100px_rgba(15,23,42,0.35)]"
         role="dialog"
@@ -231,21 +263,35 @@ export default function GameQuestionModal({
           )}
 
           {question.type === 'image_upload' && (
-            <label className="block rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5">
+            <label className="block rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 cursor-pointer hover:border-primary hover:bg-blue-50 transition">
               <div className="flex items-start gap-3">
                 <UploadCloud className="mt-0.5 h-5 w-5 text-slate-500" />
                 <div className="w-full space-y-2">
-                  <p className="text-sm font-medium text-slate-800">Dán liên kết hình ảnh</p>
+                  <p className="text-sm font-medium text-slate-800">Tải lên hình ảnh</p>
                   <input
-                    type="url"
-                    value={uploadedImageUrl}
-                    onChange={(event) => onImageUrlChange(event.target.value)}
-                    placeholder="https://..."
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                          const dataUrl = e.target?.result as string;
+                          onImageUrlChange(dataUrl);
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                      // Reset input after handling
+                      event.target.value = '';
+                    }}
+                    className="hidden"
                   />
-                  <p className="text-xs text-slate-500">
-                    Hãy đảm bảo liên kết ảnh có thể mở được trước khi nộp.
-                  </p>
+                  {uploadedImageUrl && (
+                    <p className="text-xs text-slate-500">✓ Ảnh đã được tải lên</p>
+                  )}
+                  {!uploadedImageUrl && (
+                    <p className="text-xs text-slate-500">Chọn file ảnh (JPG, PNG, GIF, ...)</p>
+                  )}
                 </div>
               </div>
             </label>
@@ -253,6 +299,40 @@ export default function GameQuestionModal({
 
           {question.type === 'matching' && (
             <div className="space-y-4">
+              {/* Pool of right-side choices (draggable) */}
+              <div className="flex flex-wrap gap-2">
+                {rightItems.map((r) => {
+                  const key = r.right_key ?? r.content;
+                  const assigned = Boolean(assignedLeftByKey[key]);
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', key);
+                        setDraggingKey(key);
+                      }}
+                      onDragEnd={() => setDraggingKey(null)}
+                      onClick={() => {
+                        // assign to first unassigned left item as fallback
+                        const firstUnassigned = leftItems.find((li) => !matchingAnswers[li.id]);
+                        if (firstUnassigned) {
+                          // clear previous owner
+                          Object.entries(matchingAnswers).forEach(([lId, k]) => {
+                            if (k === key) onMatchingChange(lId, '');
+                          });
+                          onMatchingChange(firstUnassigned.id, key);
+                        }
+                      }}
+                      className={`rounded-2xl border px-3 py-2 text-sm font-medium bg-white ${assigned ? 'opacity-40' : 'hover:bg-slate-50'} transition`}
+                    >
+                      {r.content}
+                    </button>
+                  );
+                })}
+              </div>
+
               {leftItems.map((item) => (
                 <div
                   key={item.id}
@@ -261,18 +341,25 @@ export default function GameQuestionModal({
                   <div className="rounded-2xl bg-white px-4 py-3 text-sm font-medium text-slate-800">
                     {item.content}
                   </div>
-                  <select
-                    value={matchingAnswers[item.id] ?? ''}
-                    onChange={(event) => onMatchingChange(item.id, event.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const key = e.dataTransfer.getData('text/plain');
+                      if (!key) return;
+                      // remove key from previous left if assigned
+                      Object.entries(matchingAnswers).forEach(([lId, k]) => {
+                        if (k === key) onMatchingChange(lId, '');
+                      });
+                      onMatchingChange(item.id, key);
+                      setDraggingKey(null);
+                    }}
+                    className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition ${draggingKey ? 'ring-2 ring-primary/40' : ''}`}
                   >
-                    <option value="">Chọn đáp án phù hợp</option>
-                    {rightItems.map((rightItem) => (
-                      <option key={rightItem.id} value={rightItem.right_key ?? rightItem.content}>
-                        {rightItem.content}
-                      </option>
-                    ))}
-                  </select>
+                    {matchingAnswers[item.id]
+                      ? rightItems.find((r) => (r.right_key ?? r.content) === matchingAnswers[item.id])?.content ?? matchingAnswers[item.id]
+                      : 'Kéo đáp án vào đây'}
+                  </div>
                 </div>
               ))}
             </div>

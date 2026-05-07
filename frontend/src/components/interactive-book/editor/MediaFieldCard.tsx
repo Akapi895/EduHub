@@ -127,17 +127,6 @@ export default function MediaFieldCard({
             }}
           />
         </label>
-        {onToggleLinkEditor && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={disabled}
-            onClick={() => onToggleLinkEditor(!showLinkEditor)}
-          >
-            {showLinkEditor ? 'Ẩn nhập liên kết' : 'Dùng liên kết ngoài'}
-          </Button>
-        )}
         {hasValue && (
           <Button
             type="button"
@@ -150,18 +139,6 @@ export default function MediaFieldCard({
           </Button>
         )}
       </div>
-
-      {showLinkEditor && (
-        <div className="mt-4">
-          <Input
-            label="Liên kết ngoài"
-            value={url}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder="https://..."
-          />
-        </div>
-      )}
 
       <div className={`mt-3 rounded-2xl border border-dashed px-3 py-2 text-xs ${dragActive ? 'border-sky-300 text-sky-700' : 'border-slate-300 text-slate-500'}`}>
         {helperText}
