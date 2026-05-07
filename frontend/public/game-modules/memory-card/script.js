@@ -466,10 +466,21 @@
       this.locked = true;
 
       const timeSpent = this.cfg.timeSecs - this.timeLeft;
+      
+      // ── Score breakdown ────────────────────────────────────────────────────
+      // score_base = points from matching pairs
+      // score_bonus = bonus points from time efficiency
+      const scoreBase = this.matched * this.cfg.pointsPerMatch;
+      const scoreBonus = Math.max(0, this.score - scoreBase);
+      
       const summary = {
         outcome,
         reason,
         score: this.score,
+        score_breakdown: {
+          score_base: scoreBase,
+          score_bonus: scoreBonus,
+        },
         moves: this.moves,
         matched: this.matched,
         total_pairs: this.pairs.length,
@@ -487,7 +498,7 @@
       if (this.$overlayTitle) this.$overlayTitle.textContent = win ? '🎉 Hoàn thành!' : '⏰ Hết giờ!';
       if (this.$overlayMsg) {
         this.$overlayMsg.textContent = win
-          ? `Bạn đã khớp ${this.matched}/${this.pairs.length} cặp trong ${this.moves} lần lật. Điểm: ${this.score}`
+          ? `Bạn đã khớp ${this.matched}/${this.pairs.length} cặp trong ${this.moves} lần lật. Điểm: ${this.score} (cơ bản: ${scoreBase}, thưởng: ${scoreBonus})`
           : `Bạn đã khớp ${this.matched}/${this.pairs.length} cặp. Thử lại nào!`;
       }
       this.showOverlay();

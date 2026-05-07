@@ -158,61 +158,46 @@ export default function GameQuestionModal({
   return createPortal(
     <div className={overlayClass}>
       <div
-        className="w-full max-w-3xl overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_35px_100px_rgba(15,23,42,0.35)]"
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_25px_60px_rgba(15,23,42,0.25)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="game-question-title"
       >
-        <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#0f172a,#1e293b)] px-6 py-5 text-white sm:px-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
-                Câu hỏi bắt buộc
+        <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#0f172a,#1e293b)] px-5 py-4 text-white sm:px-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                Câu hỏi
               </p>
-              <div>
-                <h2 id="game-question-title" className="text-2xl font-semibold">
-                  Dừng lại một chút để trả lời
-                </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">
-                Hãy trả lời câu hỏi này để tiếp tục chơi nhé!
-                </p>
-              </div>
+              <h2 id="game-question-title" className="text-lg font-semibold">
+                Trả lời để tiếp tục
+              </h2>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm">
-              <div className="flex items-center justify-between gap-4 text-slate-200">
-                <span>Tiến độ trả lời</span>
-                <strong className="text-white">
-                  {answered}/{total || '-'}
-                </strong>
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-white/10">
-                <div
-                  className="h-2 rounded-full bg-emerald-400 transition-all duration-300"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
+            <div className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs">
+              <span className="text-slate-200">Tiến độ: </span>
+              <strong className="text-white">{answered}/{total || '-'}</strong>
             </div>
           </div>
         </div>
 
-        <div className="space-y-6 px-6 py-6 sm:px-8">
-          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 font-medium text-slate-700">
+        <div className="space-y-5 px-5 py-5 sm:px-6">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+              <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-medium text-slate-700">
                 {getQuestionTypeLabel(question.type)}
               </span>
               {typeof question.points === 'number' && (
-                <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 font-medium text-amber-800">
+                <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-800">
                   {question.points} điểm
                 </span>
               )}
             </div>
-            <p className="mt-4 text-lg font-semibold leading-8 text-slate-900">
+            <p className="text-base font-semibold leading-6 text-slate-900">
               {question.content}
             </p>
             {question.instruction && (
-              <p className="mt-3 text-sm leading-6 text-slate-600">{question.instruction}</p>
+              <p className="mt-2 text-xs leading-5 text-slate-600">{question.instruction}</p>
             )}
           </div>
 
@@ -365,15 +350,15 @@ export default function GameQuestionModal({
             </div>
           )}
 
-          <div className="flex flex-col gap-4 border-t border-slate-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm leading-6 text-slate-500">
-              Cửa sổ này sẽ tự đóng sau khi hệ thống ghi nhận câu trả lời của em.
+          <div className="flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-5 text-slate-400">
+              Hệ thống sẽ ghi nhận câu trả lời.
             </p>
             <button
               type="button"
               onClick={onSubmit}
               disabled={submitDisabled}
-              className={`inline-flex min-w-[180px] items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition-colors ${
+              className={`inline-flex min-w-[140px] items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors ${
                 submitDisabled
                   ? 'cursor-not-allowed bg-slate-200 text-slate-500'
                   : 'bg-primary text-white hover:bg-primary-hover'
@@ -382,7 +367,7 @@ export default function GameQuestionModal({
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Đang gửi bài...
+                  Đang gửi...
                 </>
               ) : (
                 'Nộp câu trả lời'

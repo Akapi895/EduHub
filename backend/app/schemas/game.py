@@ -107,6 +107,21 @@ class GameCompleteRequest(BaseModel):
     attempt_id: str
     summary_payload: dict[str, Any]
     runtime_state: dict[str, Any] | None = None
+    # Optional: score breakdown for detailed analytics (Memory Card, etc)
+    score_breakdown: dict[str, float] | None = None
+
+
+class GameScoreBreakdown(BaseModel):
+    """Detailed score breakdown for gameplay-based games like Memory Card.
+    
+    - score_base: points from core gameplay (matching pairs)
+    - score_bonus: bonus points from efficiency metrics (time, moves, etc)
+    """
+    score_base: float = 0.0
+    score_bonus: float = 0.0
+
+    def total(self) -> float:
+        return round(self.score_base + self.score_bonus, 2)
 
 
 class GamePackageAttemptOut(BaseModel):
@@ -121,6 +136,8 @@ class GamePackageAttemptOut(BaseModel):
     score_total: float | None = None
     score_question: float | None = None
     score_context: float | None = None
+    score_gameplay_base: float | None = None
+    score_gameplay_bonus: float | None = None
 
 
 # ── Card Pairs (Memory Card / pair-matching games) ──────────────────────────

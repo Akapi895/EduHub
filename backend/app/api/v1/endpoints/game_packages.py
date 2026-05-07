@@ -364,6 +364,25 @@ def get_game_attempt_detail(
     return ok(data=game_runtime_service.get_attempt_detail_for_user(db, attempt_id=attempt_id, current_user=current_user))
 
 
+@router.post("/game-attempts/{attempt_id}/abandon")
+def abandon_game_attempt(
+    attempt_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """Abandon (reset) a game attempt. User can start fresh from beginning.
+    
+    Supports both JSON body and sendBeacon (form data) for reliable page unload.
+    """
+    from fastapi import Request
+    import json
+    
+    # This endpoint can be called with sendBeacon which uses different content type
+    # We accept any request and just need the attempt_id from path
+    game_runtime_service.abandon_attempt(db, attempt_id=attempt_id, user=current_user)
+    return ok(message="Da huy phien choi. Ban co the bat dau lai tu dau.")
+
+
 # ── Card Pairs (Memory Card / pair-matching games) ─────────────────────────
 
 def _assert_teacher_card_pair(db: Session, *, pair_id: str, teacher: User) -> GameCardPair:

@@ -50,6 +50,7 @@ export const gameService = {
     api.post(`/game-packages/${packageId}/complete`, data),
 
   getGameAttempt: (attemptId: string) => api.get(`/game-attempts/${attemptId}`),
+  abandonGameAttempt: (attemptId: string) => api.post(`/game-attempts/${attemptId}/abandon`),
   getGameLeaderboard: (packageId: string, params?: { scope?: string; scope_id?: string; limit?: number }) =>
     api.get(`/game-packages/${packageId}/leaderboard`, { params }),
   getMyGameLeaderboardEntry: (packageId: string, params?: { scope?: string; scope_id?: string }) =>

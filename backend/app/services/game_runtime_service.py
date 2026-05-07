@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 from typing import Any
 
@@ -8,6 +9,8 @@ from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
+
+logger = logging.getLogger(__name__)
 
 from app.crud import class_crud
 from app.crud import game as game_crud
@@ -431,6 +434,11 @@ def _attempt_totals(attempt: PackageAttempt) -> dict:
         1 for item in question_attempts if item.status in ANSWERED_QUESTION_STATUSES or item.answered_at is not None
     )
     correct_answers = sum(1 for item in question_attempts if item.is_correct is True)
+
+    # Get wrong_attempts from runtime state for Gold Miner
+    runtime_state = _runtime_state_dict(attempt)
+    wrong_attempts = runtime_state.get("wrong_attempts", 0) if runtime_state else 0
+
     return {
         "questions_total": questions_total,
         "questions_presented": len(question_attempts),
@@ -455,6 +463,7 @@ def _attempt_totals(attempt: PackageAttempt) -> dict:
             for band, item in progress.get("by_difficulty", {}).items()
         },
         "progress": progress,
+        "wrong_attempts": wrong_attempts,
     }
 
 
@@ -767,6 +776,10 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
 
     existing = _find_in_progress_attempt(db, package_id=package_id, student_id=student.id)
     if existing:
+        # Reset Gold Miner runtime state for fresh start
+        if _is_gold_miner_package(existing.package):
+            existing.runtime_state = {"wrong_attempts": 0, "unanswered_question_queue": []}
+            db.add(existing)
         question_plan = _ensure_gold_miner_question_plan(existing)
         if question_plan is not None:
             db.commit()
@@ -803,6 +816,10 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
         raise HTTPException(status_code=409, detail="Game attempt was started concurrently. Please retry.")
 
     _ensure_gold_miner_question_plan(attempt)
+
+    # Reset Gold Miner runtime state
+    attempt.runtime_state = {"wrong_attempts": 0, "unanswered_question_queue": []}
+
     db.add(
         GameRuntimeEvent(
             package_attempt_id=attempt.id,
@@ -934,7 +951,7 @@ def _create_runtime_question_attempt(
     return question_attempt
 
 
-def _handle_difficulty_progression_trigger(
+def _handle_gold_miner_trigger(
     db: Session,
     *,
     attempt: PackageAttempt,
@@ -942,21 +959,22 @@ def _handle_difficulty_progression_trigger(
     data: GameRuntimeTriggerRequest,
     item_instance_id: str | None,
 ) -> dict:
-    question_plan = _ensure_difficulty_progression_question_plan(attempt)
-    if not question_plan:
-        return {
-            "action": "resume",
-            "reason": "missing_question_plan",
-            "attempt_totals": _attempt_totals(attempt),
-        }
-
+    """Gold Miner new logic: Mix all questions, fixed question items per level, wrong answer tracking."""
     event_payload = data.event_payload if isinstance(data.event_payload, dict) else {}
+    # Debug: uncomment to see trigger details
+    # print(f"[GOLD_MINER] _handle_gold_miner_trigger ENTRY: trigger_type={data.trigger_type}, trigger_key={data.trigger_key}, trigger_value={data.trigger_value}")
+    # print(f"[GOLD_MINER] event_payload: {event_payload}")
+    # print(f"[GOLD_MINER] item_instance_id={item_instance_id}")
+    
     try:
         level_number = int(event_payload.get("level", 0))
         capture_index = int(event_payload.get("capture_index_in_level", 0))
+        is_question_item = event_payload.get("is_question_item", True)
     except (TypeError, ValueError):
         level_number = 0
         capture_index = 0
+        is_question_item = True
+    # print(f"[GOLD_MINER] parsed: level={level_number}, capture_index={capture_index}, is_question_item={is_question_item}")
 
     if capture_index <= 0:
         _log_runtime_event(
@@ -966,126 +984,175 @@ def _handle_difficulty_progression_trigger(
             event_payload=data.model_dump(),
         )
         db.commit()
+        logger.info(f"[GOLD_MINER] Invalid capture_index={capture_index}, resuming")
+        # print(f"[GOLD_MINER] RETURN: invalid_payload, capture_index={capture_index}")
         return {
             "action": "resume",
             "reason": "invalid_trigger_payload",
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    progress = _progress_for_attempt(attempt)
-    if progress.get("all_questions_complete"):
+    # Get config
+    runtime_config = attempt.package.game_config.runtime_config if attempt.package and attempt.package.game_config else {}
+    question_dist = runtime_config.get("question_distribution", {}) if isinstance(runtime_config, dict) else {}
+    questions_per_level = int(question_dist.get("questions_per_level", 10))
+    non_question_items = int(question_dist.get("non_question_items", 5))
+    total_items_per_level = questions_per_level + non_question_items  # 15 items
+    # print(f"[GOLD_MINER] config: questions_per_level={questions_per_level}, non_question_items={non_question_items}, total={total_items_per_level}")
+
+    if capture_index > total_items_per_level:
+        # print(f"[GOLD_MINER] RETURN: beyond_level_items, capture_index={capture_index} > {total_items_per_level}")
         return {
             "action": "resume",
-            "reason": "all_questions_completed",
+            "reason": "beyond_level_items",
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    current_level = int(progress.get("current_level") or 1)
-    current_difficulty = progress.get("current_difficulty_band")
-    if not isinstance(current_difficulty, str):
+    # If not a question item, just resume
+    if not is_question_item:
+        # print(f"[GOLD_MINER] RETURN: non_question_item")
         return {
             "action": "resume",
-            "reason": "level_question_quota_completed",
+            "reason": "non_question_item",
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    if level_number > 0 and level_number != current_level:
+    # Check if item was already handled
+    # print(f"[GOLD_MINER] checking item_instance_id={item_instance_id}")
+    if item_instance_id:
+        existing = _find_question_attempt_by_item_instance(attempt, item_instance_id=item_instance_id)
+        if existing:
+            logger.info(f"[GOLD_MINER] Item {item_instance_id} already handled, resuming")
+            # print(f"[GOLD_MINER] RETURN: item_already_handled, item_instance_id={item_instance_id}")
+            return {
+                "action": "resume",
+                "reason": "item_already_handled",
+                "attempt_totals": _attempt_totals(attempt),
+            }
+    # print(f"[GOLD_MINER] item not already handled")
+
+    # Get all unanswered question IDs from runtime state
+    # print(f"[GOLD_MINER] getting runtime_state")
+    runtime_state = _runtime_state_dict(attempt)
+    unanswered_queue = runtime_state.get("unanswered_question_queue", [])
+    wrong_attempts = runtime_state.get("wrong_attempts", 0)
+    # print(f"[GOLD_MINER] runtime_state: unanswered_queue={unanswered_queue}, wrong_attempts={wrong_attempts}")
+
+    logger.info(f"[GOLD_MINER] Trigger: capture_index={capture_index}, is_question_item={is_question_item}, "
+                f"unanswered_queue={unanswered_queue}, wrong_attempts={wrong_attempts}, "
+                f"attempt_id={attempt.id}")
+
+    # Check if game over due to wrong attempts
+    if wrong_attempts >= 3:
         return {
-            "action": "resume",
-            "reason": "level_locked" if level_number > current_level else "stale_level",
+            "action": "game_over",
+            "reason": "max_wrong_attempts",
+            "wrong_attempts": wrong_attempts,
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    capture_slots_by_level = question_plan.get("capture_slots_by_level") if isinstance(question_plan.get("capture_slots_by_level"), list) else []
-    question_ids_by_difficulty = (
-        question_plan.get("question_ids_by_difficulty")
-        if isinstance(question_plan.get("question_ids_by_difficulty"), dict)
-        else {}
-    )
-    item_count_per_level = int(question_plan.get("item_count_per_level") or 0)
-    if item_count_per_level <= 0 or capture_index > item_count_per_level:
+    # Get all question IDs from question bank (mix all bands)
+    package = attempt.package
+    if not package or not package.question_bank:
         return {
             "action": "resume",
-            "reason": "invalid_trigger_payload",
+            "reason": "no_question_bank",
             "attempt_totals": _attempt_totals(attempt),
         }
 
-    level_index = current_level - 1
-    capture_slots = (
-        capture_slots_by_level[level_index]
-        if level_index < len(capture_slots_by_level) and isinstance(capture_slots_by_level[level_index], list)
-        else []
-    )
-    planned_question_ids = (
-        question_ids_by_difficulty.get(current_difficulty, [])
-        if isinstance(question_ids_by_difficulty, dict)
-        else []
-    )
-    presented_question_ids = _presented_question_ids(attempt)
-    remaining_question_ids = [
-        question_id
-        for question_id in planned_question_ids
-        if question_id not in presented_question_ids
+    # Get all active question IDs
+    all_question_items = [
+        item for item in package.question_bank.items
+        if item.is_active
     ]
-    remaining_in_level = progress["by_difficulty"][current_difficulty]["remaining"]
+    all_question_ids = [item.id for item in all_question_items]
 
-    should_ask, trigger_strategy = _should_ask_progression_question(
-        capture_index=capture_index,
-        item_count_per_level=item_count_per_level,
-        capture_slots=capture_slots,
-        remaining_questions=int(remaining_in_level),
+    # Get already presented question IDs
+    presented_ids = _presented_question_ids(attempt)
+
+    # Priority 1: Questions in unanswered queue (wrong answers that need retry)
+    retry_question_id = None
+    if unanswered_queue and isinstance(unanswered_queue, list):
+        for qid in unanswered_queue:
+            if qid not in presented_ids:
+                retry_question_id = qid
+                break
+
+    # Priority 2: New question from pool
+    next_question_id = None
+    if not retry_question_id:
+        remaining_ids = [qid for qid in all_question_ids if qid not in presented_ids]
+        if remaining_ids:
+            # Use ordered selection (by order_index)
+            remaining_items = [
+                item for item in all_question_items
+                if item.id in remaining_ids
+            ]
+            remaining_items.sort(key=lambda x: x.order_index if x.order_index is not None else 10**9)
+            if remaining_items:
+                next_question_id = remaining_items[0].id
+
+    # Final question selection
+    selected_question_id = retry_question_id or next_question_id
+
+    logger.info(f"[GOLD_MINER] Selection: retry_question_id={retry_question_id}, "
+                f"next_question_id={next_question_id}, selected={selected_question_id}")
+
+    if not selected_question_id:
+        logger.info(f"[GOLD_MINER] No question selected, resuming. "
+                    f"all_question_ids={len(all_question_ids)}, presented_ids={len(presented_ids)}")
+        return {
+            "action": "resume",
+            "reason": "no_more_questions",
+            "attempt_totals": _attempt_totals(attempt),
+        }
+
+    # Find question item
+    selected_question = next(
+        (item for item in all_question_items if item.id == selected_question_id),
+        None
     )
-    if not should_ask:
-        return {
-            "action": "resume",
-            "reason": trigger_strategy,
-            "attempt_totals": _attempt_totals(attempt),
-        }
-
-    if not remaining_question_ids:
-        return {
-            "action": "resume",
-            "reason": "level_question_quota_completed",
-            "attempt_totals": _attempt_totals(attempt),
-        }
-
-    selector_strategy = attempt.package.game_config.selector_strategy if attempt.package and attempt.package.game_config else "random_no_repeat"
-    question_id = random.choice(remaining_question_ids) if selector_strategy == "random_no_repeat" else remaining_question_ids[0]
-    question = _find_question_by_id(attempt.package, question_id=question_id)
-    if not question:
+    if not selected_question:
         _log_runtime_event(
             db,
             attempt_id=attempt.id,
-            event_type="trigger_missing_planned_question",
-            event_payload={
-                **data.model_dump(),
-                "question_item_id": question_id,
-                "level": current_level,
-                "difficulty_band": current_difficulty,
-                "capture_index_in_level": capture_index,
-            },
+            event_type="trigger_question_not_found",
+            event_payload={"question_id": selected_question_id},
         )
         db.commit()
         return {
             "action": "resume",
-            "reason": "question_missing",
+            "reason": "question_not_found",
             "attempt_totals": _attempt_totals(attempt),
         }
 
+    # Create question attempt
     question_attempt = _create_runtime_question_attempt(
         db,
         attempt=attempt,
-        question=question,
+        question=selected_question,
         data=data,
         item_instance_id=item_instance_id,
         source_payload={
-            "level": current_level,
-            "difficulty_band": current_difficulty,
+            "level": level_number,
             "capture_index_in_level": capture_index,
-            "distribution_mode": question_plan.get("distribution_mode"),
-            "trigger_strategy": trigger_strategy,
+            "is_retry": retry_question_id is not None,
+            "total_questions": len(all_question_ids),
+            "questions_presented": len(presented_ids) + 1,
         },
     )
+
+    # Update runtime state - add to unanswered queue if retry
+    if retry_question_id:
+        # Already in queue, keep it there
+        pass
+    else:
+        # Remove from unanswered queue if somehow present
+        if unanswered_queue and selected_question_id in unanswered_queue:
+            unanswered_queue.remove(selected_question_id)
+        runtime_state["unanswered_question_queue"] = unanswered_queue
+
+    attempt.runtime_state = runtime_state
     _log_runtime_event(
         db,
         attempt_id=attempt.id,
@@ -1093,14 +1160,17 @@ def _handle_difficulty_progression_trigger(
         event_payload={
             **data.model_dump(),
             "question_attempt_id": question_attempt.id,
-            "question_item_id": question.id,
-            "level": current_level,
-            "difficulty_band": current_difficulty,
+            "question_item_id": selected_question.id,
+            "level": level_number,
             "capture_index_in_level": capture_index,
-            "trigger_strategy": trigger_strategy,
+            "is_retry": retry_question_id is not None,
+            "wrong_attempts": wrong_attempts,
         },
     )
     db.commit()
+
+    logger.info(f"[GOLD_MINER] Question triggered: question_id={selected_question.id}, "
+                f"question_attempt_id={question_attempt.id}")
 
     refreshed_attempt = get_game_attempt(db, attempt.id)
     if not refreshed_attempt:
@@ -1109,9 +1179,29 @@ def _handle_difficulty_progression_trigger(
     return {
         "action": "ask_question",
         "question_attempt": _serialize_question_attempt(refreshed_question_attempt),
-        "question": game_crud.serialize_game_question(question, package_id=package_id, include_correct=False),
+        "question": game_crud.serialize_game_question(selected_question, package_id=package_id, include_correct=False),
         "attempt_totals": _attempt_totals(refreshed_attempt),
+        "is_retry": retry_question_id is not None,
+        "wrong_attempts": wrong_attempts,
     }
+
+
+def _handle_difficulty_progression_trigger(
+    db: Session,
+    *,
+    attempt: PackageAttempt,
+    package_id: str,
+    data: GameRuntimeTriggerRequest,
+    item_instance_id: str | None,
+) -> dict:
+    """Legacy difficulty progression trigger - delegate to new Gold Miner logic."""
+    return _handle_gold_miner_trigger(
+        db,
+        attempt=attempt,
+        package_id=package_id,
+        data=data,
+        item_instance_id=item_instance_id,
+    )
 
 
 def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRuntimeTriggerRequest) -> dict:
@@ -1136,13 +1226,20 @@ def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRun
     if isinstance(item_instance_id, str) and item_instance_id:
         existing_item_attempt = _find_question_attempt_by_item_instance(attempt, item_instance_id=item_instance_id)
         if existing_item_attempt:
+            logger.info(f"[GOLD_MINER] Trigger already handled for item {item_instance_id}, resuming")
             return {
                 "action": "resume",
                 "reason": "trigger_already_handled",
                 "attempt_totals": _attempt_totals(attempt),
             }
 
-    if _is_gold_miner_package(attempt.package):
+    is_gold_miner = _is_gold_miner_package(attempt.package)
+    module_slug = attempt.package.game_config.game_module.slug if attempt.package and attempt.package.game_config and attempt.package.game_config.game_module else None
+    # print(f"[GOLD_MINER DEBUG] is_gold_miner={is_gold_miner}, module_slug={module_slug}, GOLD_MINER_MODULE_ID={GOLD_MINER_MODULE_ID}")
+    # print(f"[GOLD_MINER DEBUG] package_id={attempt.package.id if attempt.package else None}")
+    # print(f"[GOLD_MINER DEBUG] attempt_id={attempt.id}")
+
+    if is_gold_miner:
         return _handle_difficulty_progression_trigger(
             db,
             attempt=attempt,
@@ -1360,18 +1457,68 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
     recalculate_attempt_scores(attempt, finalize_status=False)
     attempt.status = PackageAttemptStatus.in_progress
 
-    _log_runtime_event(
-        db,
-        attempt_id=attempt.id,
-        event_type="question_answered",
-        event_payload={
-            "question_attempt_id": question_attempt.id,
-            "question_item_id": question_attempt.question_item_id,
-            "status": question_attempt.status,
-            "is_correct": question_attempt.is_correct,
-            "score_awarded": question_attempt.score_awarded,
-        },
-    )
+    # Gold Miner: track wrong answers
+    is_gold_miner = _is_gold_miner_package(attempt.package)
+    game_over = False
+    wrong_attempts = 0
+
+    if is_gold_miner:
+        runtime_state = _runtime_state_dict(attempt)
+        unanswered_queue = runtime_state.get("unanswered_question_queue", [])
+        if not isinstance(unanswered_queue, list):
+            unanswered_queue = []
+
+        # Check if this is a retry question (already in queue)
+        is_retry = question_attempt.question_item_id in unanswered_queue
+
+        if question_attempt.is_correct:
+            # Correct answer - remove from queue if present
+            if is_retry and question_attempt.question_item_id in unanswered_queue:
+                unanswered_queue.remove(question_attempt.question_item_id)
+            # Update runtime state to persist the queue change
+            runtime_state["unanswered_question_queue"] = unanswered_queue
+            attempt.runtime_state = runtime_state
+        else:
+            # Wrong answer - add to queue and increment counter
+            if not is_retry:
+                unanswered_queue.append(question_attempt.question_item_id)
+            wrong_attempts = runtime_state.get("wrong_attempts", 0) + 1
+            runtime_state["wrong_attempts"] = wrong_attempts
+            runtime_state["unanswered_question_queue"] = unanswered_queue
+            attempt.runtime_state = runtime_state
+
+            if wrong_attempts >= 3:
+                game_over = True
+
+        _log_runtime_event(
+            db,
+            attempt_id=attempt.id,
+            event_type="question_answered",
+            event_payload={
+                "question_attempt_id": question_attempt.id,
+                "question_item_id": question_attempt.question_item_id,
+                "status": question_attempt.status,
+                "is_correct": question_attempt.is_correct,
+                "score_awarded": question_attempt.score_awarded,
+                "wrong_attempts": wrong_attempts,
+                "is_retry": is_retry,
+                "game_over": game_over,
+            },
+        )
+    else:
+        _log_runtime_event(
+            db,
+            attempt_id=attempt.id,
+            event_type="question_answered",
+            event_payload={
+                "question_attempt_id": question_attempt.id,
+                "question_item_id": question_attempt.question_item_id,
+                "status": question_attempt.status,
+                "is_correct": question_attempt.is_correct,
+                "score_awarded": question_attempt.score_awarded,
+            },
+        )
+
     db.commit()
 
     refreshed_attempt = get_game_attempt(db, attempt.id)
@@ -1379,7 +1526,8 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
         raise HTTPException(status_code=500, detail="Failed to save answer")
     refreshed_question_attempt = next(item for item in refreshed_attempt.question_attempts if item.id == question_attempt.id)
     totals = _attempt_totals(refreshed_attempt)
-    return {
+
+    result = {
         "question_attempt_id": refreshed_question_attempt.id,
         "status": refreshed_question_attempt.status,
         "is_correct": refreshed_question_attempt.is_correct,
@@ -1391,6 +1539,14 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
             "attempt_totals": totals,
         },
     }
+
+    if is_gold_miner:
+        result["wrong_attempts"] = wrong_attempts
+        if game_over:
+            result["game_over"] = True
+            result["game_over_reason"] = "max_wrong_attempts"
+
+    return result
 
 
 def log_runtime_event(db: Session, *, package_id: str, student: User, data: GameRuntimeEventRequest) -> dict:
@@ -1422,6 +1578,36 @@ def log_runtime_event(db: Session, *, package_id: str, student: User, data: Game
         "event_type": data.event_type,
         "attempt_totals": _attempt_totals(attempt),
     }
+
+
+def _extract_score_breakdown(summary_payload: dict[str, Any]) -> tuple[float | None, float | None]:
+    """Extract score breakdown from summary payload (for Memory Card and similar games).
+    
+    Returns: (score_gameplay_base, score_gameplay_bonus)
+    """
+    # Priority 1: Explicit breakdown
+    breakdown = summary_payload.get("score_breakdown")
+    if isinstance(breakdown, dict):
+        base = breakdown.get("score_base")
+        bonus = breakdown.get("score_bonus")
+        if isinstance(base, (int, float)) and isinstance(bonus, (int, float)):
+            return round(float(base), 2), round(float(bonus), 2)
+    
+    # Priority 2: Keys naming convention
+    base = summary_payload.get("score_gameplay_base") or summary_payload.get("score_base")
+    bonus = summary_payload.get("score_gameplay_bonus") or summary_payload.get("score_bonus") or summary_payload.get("score_time_bonus")
+    
+    if isinstance(base, (int, float)):
+        base = round(float(base), 2)
+    else:
+        base = None
+    
+    if isinstance(bonus, (int, float)):
+        bonus = round(float(bonus), 2)
+    else:
+        bonus = None
+    
+    return base, bonus
 
 
 def _extract_context_score(summary_payload: dict[str, Any], current_score: float | None) -> float | None:
@@ -1468,6 +1654,14 @@ def complete_attempt(db: Session, *, package_id: str, student: User, data: GameC
 
     completed_at = now_local_naive()
     attempt.summary_payload = data.summary_payload
+    
+    # Extract and store score breakdown (for Memory Card and similar games)
+    score_base, score_bonus = _extract_score_breakdown(data.summary_payload)
+    if score_base is not None:
+        attempt.score_gameplay_base = score_base
+    if score_bonus is not None:
+        attempt.score_gameplay_bonus = score_bonus
+    
     if data.runtime_state is not None:
         _set_attempt_runtime_state(
             attempt,
@@ -1480,6 +1674,13 @@ def complete_attempt(db: Session, *, package_id: str, student: User, data: GameC
     attempt.submitted_at = attempt.submitted_at or completed_at
     attempt.duration_ms = _extract_duration_ms(data.summary_payload, started_at=attempt.started_at, completed_at=completed_at)
     attempt.status = PackageAttemptStatus.completed
+
+    # Gold Miner: Don't allow leaderboard entry if game over (lost all lives)
+    if _is_gold_miner_package(attempt.package):
+        outcome = data.summary_payload.get("outcome") if isinstance(data.summary_payload, dict) else None
+        if outcome == "game_over":
+            attempt.leaderboard_eligible = False
+
     game_leaderboard_service.update_leaderboard_for_attempt(db, attempt=attempt)
 
     _log_runtime_event(
@@ -1489,6 +1690,10 @@ def complete_attempt(db: Session, *, package_id: str, student: User, data: GameC
         event_payload={
             "summary_payload": data.summary_payload,
             "runtime_state": data.runtime_state,
+            "score_breakdown": {
+                "score_gameplay_base": score_base,
+                "score_gameplay_bonus": score_bonus,
+            },
         },
     )
     db.commit()
@@ -1497,3 +1702,28 @@ def complete_attempt(db: Session, *, package_id: str, student: User, data: GameC
     if not refreshed_attempt:
         raise HTTPException(status_code=500, detail="Failed to complete attempt")
     return serialize_attempt_detail(refreshed_attempt)
+
+
+def abandon_attempt(db: Session, *, attempt_id: str, user: User) -> None:
+    """Abandon (reset) a game attempt. Deletes the attempt and all related data.
+    
+    After calling this, user can start a fresh attempt from the beginning.
+    """
+    from app.models.package_attempt import PackageAttempt, PackageAttemptStatus
+    
+    attempt = db.query(PackageAttempt).filter(
+        PackageAttempt.id == attempt_id,
+        PackageAttempt.student_id == user.id,
+    ).first()
+    
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    
+    # Delete all question attempts first (cascade should handle related data)
+    for question_attempt in list(attempt.question_attempts):
+        _clear_question_attempt_children(db, question_attempt)
+        db.delete(question_attempt)
+    
+    # Delete the attempt itself
+    db.delete(attempt)
+    db.commit()

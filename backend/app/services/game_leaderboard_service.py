@@ -162,14 +162,14 @@ def get_leaderboard(
         "ranking_policy": {
             "primary_metric": "score_total",
             "tie_breakers": [
-                "score_context", 
-                "score_question", 
+                "score_context",
+                "score_question",
                 "total_question_time_ms",  # Lower is better - faster answer time wins
-                "duration_ms", 
-                "completed_at", 
+                "duration_ms",
+                "completed_at",
                 "attempts_count"
             ],
             "aggregation": "best_attempt",
-            "note": "Ranking: highest score wins; ties broken by fastest question answer time",
+            "note": "Ranking: highest score wins; ties broken by fastest total question answer time",
         },
     }

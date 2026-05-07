@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, GripVertical, Plus, Trash2 } from 'lucide-react';
 
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
-import { getBandMeta } from '@/features/games/helpers';
+import { GAME_DIFFICULTY_BANDS, getBandMeta } from '@/features/games/helpers';
 import type { DifficultyBand, MatchingPair, Question, QuestionOption, QuestionTextConfig } from '@/types';
 import { generateId } from '@/utils/helpers';
 
@@ -14,6 +14,7 @@ interface GameQuestionEditorProps {
   onChange: (question: Question) => void;
   onDelete: () => void;
   warnOnManualText?: boolean;
+  highlightNew?: boolean;
 }
 
 const typeLabels = {
@@ -102,9 +103,22 @@ export default function GameQuestionEditor({
   onChange,
   onDelete,
   warnOnManualText = false,
+  highlightNew = false,
 }: GameQuestionEditorProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [isHighlighted, setIsHighlighted] = useState(highlightNew);
   const bandMeta = getBandMeta(band);
+
+  // Auto-remove highlight after 3 seconds
+  useEffect(() => {
+    if (highlightNew) {
+      setIsHighlighted(true);
+      const timer = setTimeout(() => {
+        setIsHighlighted(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightNew]);
 
   const updateField = <K extends keyof Question>(key: K, value: Question[K]) => {
     onChange({ ...question, [key]: value });
@@ -181,15 +195,31 @@ export default function GameQuestionEditor({
   };
 
   return (
-    <article className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+    <article className={`overflow-hidden rounded-[28px] border bg-white shadow-sm ${
+      isHighlighted ? 'border-primary ring-2 ring-blue-200' : 'border-slate-200'
+    }`}>
       <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-5 py-4">
         <GripVertical className="h-4 w-4 text-slate-300" />
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
           {index + 1}
         </div>
-        <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${bandMeta.accentClass}`}>
-          {bandMeta.label}
-        </span>
+
+        {/* Difficulty band selector */}
+        <select
+          value={question.difficulty_band ?? band}
+          onChange={(event) => updateField('difficulty_band', event.target.value as DifficultyBand)}
+          className={`rounded-full border px-3 py-1 text-xs font-semibold cursor-pointer outline-none transition ${getBandMeta(question.difficulty_band ?? band).accentClass}`}
+        >
+          {GAME_DIFFICULTY_BANDS.map((b) => {
+            const meta = getBandMeta(b);
+            return (
+              <option key={b} value={b}>
+                {meta.label}
+              </option>
+            );
+          })}
+        </select>
+
         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
           {typeLabels[question.type as keyof typeof typeLabels] ?? question.type}
         </span>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   BookOpen,
   Loader2,
@@ -37,7 +38,7 @@ import type {
 } from '@/features/games/types';
 import { isGameBridgeEnvelope } from '@/features/games/types';
 import { gameService } from '@/services/game.service';
-import { showErrorToast } from '@/store/toast.store';
+import { showErrorToast, showWarningToast } from '@/store/toast.store';
 import type {
   GamePackagePlayResponse,
   GameLeaderboardResponse,
@@ -303,6 +304,12 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({});
   const [lastQuestionResult, setLastQuestionResult] = useState<GameRuntimeAnswerResponse | null>(null);
   const [leaderboard, setLeaderboard] = useState<GameLeaderboardResponse | null>(null);
+  const [gameOverModalOpen, setGameOverModalOpen] = useState(false);
+  const [gameOverData, setGameOverData] = useState<{
+    score: number;
+    level: number;
+    reason: string;
+  } | null>(null);
 
   const moduleEntry = resolveGameModule(playBundle, startBundle);
   const manifestUrl = resolveManifestUrl(playBundle, startBundle, moduleEntry);
@@ -526,6 +533,30 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         return;
       }
 
+      // Handle resume action (item already had a question, just resume game)
+      if (data.action === 'resume') {
+        console.info('[QFLOW] trigger:resume', { reason: data.reason });
+        resumeRuntime('trigger-resume', {
+          trigger,
+          reason: data.reason ?? 'already-handled',
+          attemptTotals: data.attempt_totals ?? null,
+        }, { watchdog: true });
+        return;
+      }
+
+      if (data.action === 'game_over') {
+        console.info('[QFLOW] trigger:game_over', {
+          reason: data.reason,
+          wrongAttempts: data.wrong_attempts,
+        });
+        resumeRuntime('game-over', {
+          trigger,
+          reason: data.reason ?? 'max_wrong_attempts',
+          attemptTotals: data.attempt_totals ?? null,
+        }, { watchdog: true });
+        return;
+      }
+
       resumeRuntime('question-skip', {
         trigger,
         reason: data.reason ?? 'no-matching-question',
@@ -576,6 +607,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
       const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
       setAttemptTotals(data.attempt_totals ?? null);
       setLastQuestionResult(data);
+
+      // Show feedback toast for wrong answers
+      if (data.is_correct === false) {
+        const wrongAttempts = (data as Record<string, unknown>).wrong_attempts as number | undefined;
+        const remainingLives = wrongAttempts !== undefined ? Math.max(0, 3 - wrongAttempts) : 0;
+        showWarningToast(`Sai rồi! Còn ${remainingLives} lượt thử.`);
+      }
+
       questionFlowActiveRef.current = false;
       setQuestionFlow(null);
       endQuestionLookup();
@@ -590,6 +629,9 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
           feedbackMessage: data.feedback_message,
         },
         attemptTotals: data.attempt_totals ?? null,
+        // Gold Miner: pass wrong attempts and game over status
+        wrong_attempts: (data as Record<string, unknown>).wrong_attempts as number | undefined,
+        game_over: (data as Record<string, unknown>).game_over as boolean | undefined,
       }, { watchdog: true });
     } catch (error) {
       showErrorToast(extractApiErrorMessage(error, 'Không thể nộp câu trả lời.'));
@@ -819,6 +861,18 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         setRuntimeStatus('completed');
         setRuntimeSnapshot(nextRuntimeSnapshot);
 
+        // Check for game_over outcome
+        const payload = message.payload as Record<string, unknown>;
+        const outcome = payload?.outcome as string | undefined;
+        if (outcome === 'game_over') {
+          setGameOverData({
+            score: (payload?.score as number) ?? 0,
+            level: (payload?.level as number) ?? 1,
+            reason: (payload?.reason as string) ?? 'max_wrong_attempts',
+          });
+          setGameOverModalOpen(true);
+        }
+
         if (!attemptId || completionAttemptRef.current === attemptId) return;
 
         completionAttemptRef.current = attemptId;
@@ -872,6 +926,31 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [questionFlowActive]);
 
+  // Handle page unload / back navigation - ask user before leaving
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Only warn if game is in progress
+      if (runtimeStatus === 'completed' || runtimeStatus === 'error') {
+        return;
+      }
+
+      // Call abandon API before leaving
+      if (attemptId) {
+        // Use sendBeacon for reliable delivery even during page unload
+        const data = new URLSearchParams({ attempt_id: attemptId });
+        navigator.sendBeacon(`/api/v1/game-attempts/${attemptId}/abandon`, data);
+      }
+
+      // Show browser's default confirmation dialog
+      event.preventDefault();
+      event.returnValue = 'Ban co dang choi game. Ban co chac muon thoat?';
+      return event.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [attemptId, runtimeStatus]);
+
   const runtimeFacts = [
     {
       label: 'Trạng thái',
@@ -894,11 +973,43 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     ? getOutcomeLabel(runtimeSnapshot.outcome ?? 'completed')
     : getOutcomeLabel(runtimeSnapshot.outcome);
 
-  const handleRestart = () => {
+  const handleRestart = async () => {
+    // Abandon current attempt first to reset progress
+    if (attemptId) {
+      try {
+        await gameService.abandonGameAttempt(attemptId);
+      } catch {
+        // Continue anyway - restart is still valid
+      }
+    }
+
     sendHostCommand('host:restart', 'host-restart');
     void logRuntimeEvent('restart', { reason: 'host-restart' });
+    setAttemptId(null);
     setSessionId(createSessionId());
     setSessionKey((current) => current + 1);
+  };
+
+  const handleExitToList = async () => {
+    // Confirm with user if game is in progress
+    if (runtimeStatus !== 'completed' && runtimeStatus !== 'error' && runtimeStatus !== 'booting') {
+      const confirmed = window.confirm('Ban co dang choi game. Ban co chac muon thoat? Tien do se bi mat va phai choi lai tu dau.');
+      if (!confirmed) {
+        return;
+      }
+
+      // Abandon current attempt
+      if (attemptId) {
+        try {
+          await gameService.abandonGameAttempt(attemptId);
+        } catch {
+          // Continue anyway - user already confirmed
+        }
+      }
+    }
+
+    // Navigate to list
+    window.location.href = '/student/games';
   };
 
   const handleTogglePause = () => {
@@ -982,6 +1093,52 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         onSubmit={handleAnswerSubmit}
       />
 
+      {/* Game Over Modal */}
+      {gameOverModalOpen && gameOverData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-red-200 bg-white p-6 shadow-[0_25px_70px_rgba(15,23,42,0.25)]">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                <AlertTriangle className="h-8 w-8 text-red-500" />
+              </div>
+              <h2 className="mt-4 text-2xl font-bold text-slate-900">Hết mạng!</h2>
+              <p className="mt-2 text-slate-600">
+                Rất tiếc, bạn đã thua trò chơi. Điểm số của bạn sẽ không được ghi vào bảng xếp hạng.
+              </p>
+              <div className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-sm text-slate-500">Điểm đạt được</p>
+                <p className="text-3xl font-bold text-slate-900">{gameOverData.score}</p>
+              </div>
+              <div className="mt-6 flex w-full gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setGameOverModalOpen(false);
+                    window.location.href = '/student/games';
+                  }}
+                  className="flex-1 border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                >
+                  Thoát
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    setGameOverModalOpen(false);
+                    handleRestart();
+                  }}
+                  className="flex-1"
+                >
+                  <RefreshCcw className="mr-1.5 h-4 w-4" />
+                  Chơi lại
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {questionBusyVisible && !questionFlow && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-sm">
           <div className="rounded-3xl border border-slate-200 bg-white px-6 py-5 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
@@ -997,10 +1154,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         <header className="overflow-hidden rounded-[32px] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.95))] shadow-[0_30px_90px_rgba(15,23,42,0.12)]">
           <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
             <div className="max-w-3xl space-y-4">
-              <Link to="/student/games" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900">
+              <button
+                type="button"
+                onClick={handleExitToList}
+                className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900"
+              >
                 <ArrowLeft className="h-4 w-4" />
                 Quay lại danh sách trò chơi
-              </Link>
+              </button>
 
               <div className="space-y-3">
                 <div className="inline-flex items-center gap-2 rounded-full border border-amber-300/45 bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-amber-800">

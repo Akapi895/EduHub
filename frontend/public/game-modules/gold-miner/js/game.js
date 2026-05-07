@@ -157,16 +157,24 @@ class game {
     this.completedQuestionAttemptIds = new Set();
     this.timeLimitSeconds = DEFAULT_TIME_LIMIT_SECONDS;
     this.maxLevels = 1;
-    
+
     // Lives system
     this.lives = INITIAL_LIVES;
     this.maxLives = INITIAL_LIVES;
-    
+
+    // Waiting for manual restart after game over
+    this.waitingForRestart = false;
+
     // Target score for current level
     this.targetScore = 0;
-    
+
     // Runtime config from host (populated via host:init message)
     this.runtimeConfig = null;
+
+    // Pending item scores - items caught but score held until question answered
+    this.pendingItemScores = [];
+
+    // Runtime config from host (populated via host:init message)
     
     // Time tracking (count-up)
     this.elapsedTimeSeconds = 0;
@@ -351,22 +359,38 @@ class game {
       }
 
       if (type === 'host:resume') {
+        // Debug: uncomment to see full payload
+        // console.log('[GoldMiner] host:resume received:', JSON.stringify(payload, null, 2));
         this.applyAttemptTotals(payload && payload.attemptTotals ? payload.attemptTotals : null);
         if (payload && payload.questionResult) {
           const result = payload.questionResult;
-          
+
           // Track question answer time
           if (this.questionStartTime) {
             const questionTimeMs = Date.now() - this.questionStartTime;
             this.totalQuestionTimeMs += questionTimeMs;
             this.questionStartTime = null;
           }
-          
+
+          // Get wrong attempts from response
+          const wrongAttempts = payload.wrong_attempts || 0;
+          const isGameOver = payload.game_over === true;
+
           // Handle wrong answer
-          if (result.isCorrect === false || result.is_correct === false) {
-            this.handleWrongAnswer(result);
+          // Note: payload.questionResult contains { question_result: {...}, attempt_totals: {...} }
+          const questionResultData = result.question_result || result;
+          const isCorrect = questionResultData.isCorrect || questionResultData.is_correct;
+          if (isCorrect === false) {
+            // Use wrong attempts from backend for tracking
+            this.lives = Math.max(0, this.maxLives - wrongAttempts);
+            this.handleWrongAnswer(questionResultData, wrongAttempts);
           } else {
             this.recordQuestionCompletion(payload.questionResult);
+          }
+
+          // Handle game over from backend
+          if (isGameOver) {
+            this.handleGameOver('max_wrong_attempts');
           }
         }
         this.isPaused = false;
@@ -383,10 +407,10 @@ class game {
     });
   }
 
-  handleWrongAnswer(result) {
-    // Deduct one life
-    this.lives -= 1;
-    
+  handleWrongAnswer(result, wrongAttempts = 0) {
+    // Deduct one life (use backend's wrong attempts count)
+    this.lives = Math.max(0, this.maxLives - wrongAttempts);
+
     // Report wrong answer event
     if (bridge && typeof bridge.state === 'function') {
       bridge.state({
@@ -394,33 +418,36 @@ class game {
         reason: 'wrong-answer',
         lives: this.lives,
         maxLives: this.maxLives,
+        wrongAttempts: wrongAttempts,
         feedbackMessage: result.feedbackMessage || result.feedback_message || 'Tra loi sai! Con lai ' + this.lives + ' mang.',
       });
     }
-    
-    // Check if game over
+
+    // Check if game over (handled by backend, but keep local check for safety)
     if (this.lives <= 0) {
-      this.handleGameOver();
+      this.handleGameOver('lives-depleted');
     }
     // Note: We do NOT mark the question as completed
     // The question stays in the incomplete pool
   }
 
-  handleGameOver() {
+  handleGameOver(reason = 'lives-depleted') {
     this.isFinished = true;
+    this.waitingForRestart = true;
     this.resultOutcome = 'game_over';
     this.reportState('game-over', true, {
       status: 'completed',
       outcome: 'game_over',
+      reason: reason,
       lives: 0,
       maxLives: this.maxLives,
     });
-    
+
     if (bridge && typeof bridge.complete === 'function') {
       bridge.complete({
         status: 'completed',
         outcome: 'game_over',
-        reason: 'lives-depleted',
+        reason: reason,
         score: this.score,
         level: Math.max(level + 1, 1),
         lives: 0,
@@ -486,18 +513,21 @@ class game {
     this.capturedItemsInLevel = 0;
     this.syncAnsweredQuestionsFromProgress();
     this.completedQuestionAttemptIds = new Set();
-    
+
     // Reset lives
     this.lives = this.maxLives;
-    
+
     // Reset time tracking
     this.elapsedTimeSeconds = 0;
     this.questionStartTime = null;
     this.totalQuestionTimeMs = 0;
-    
+
     // Reset wrong answer tracking
     this.wrongAnswerQuestionIds = new Set();
-    
+
+    // Reset pending scores
+    this.pendingItemScores = [];
+
     level = this.getCurrentProgressLevel() - 2;
     this.newGold();
     this.sessionReady = true;
@@ -523,6 +553,12 @@ class game {
     // Restore wrong answer question IDs from attempt totals
     if (attemptTotals.wrong_answer_question_ids) {
       this.wrongAnswerQuestionIds = new Set(attemptTotals.wrong_answer_question_ids);
+    }
+
+    // Update lives based on wrong_attempts from backend
+    const wrongAttempts = attemptTotals.wrong_attempts;
+    if (typeof wrongAttempts === 'number' && wrongAttempts >= 0) {
+      this.lives = Math.max(0, this.maxLives - wrongAttempts);
     }
   }
 
@@ -576,39 +612,65 @@ class game {
     return DEFAULT_TARGET_SCORE_BASE * (index + 1) + DEFAULT_TARGET_SCORE_STEP * index;
   }
 
-  getQuestionQuotaForLevel(levelNumber) {
-    if (!Array.isArray(this.questionPlan.questions_per_level)) {
-      return 0;
+  getQuestionsPerLevel(levelNumber) {
+    if (!this.questionPlan || !this.questionPlan.questions_per_level) {
+      return 10; // default
     }
-    return Number(this.questionPlan.questions_per_level[levelNumber - 1] || 0);
+    if (Array.isArray(this.questionPlan.questions_per_level)) {
+      return Number(this.questionPlan.questions_per_level[levelNumber - 1] || 10);
+    }
+    return Number(this.questionPlan.questions_per_level || 10);
+  }
+
+  getNonQuestionItemsCount(levelNumber) {
+    if (!this.questionPlan || !this.questionPlan.non_question_items) {
+      return 5; // default
+    }
+    if (Array.isArray(this.questionPlan.non_question_items)) {
+      return Number(this.questionPlan.non_question_items[levelNumber - 1] || 5);
+    }
+    return Number(this.questionPlan.non_question_items || 5);
+  }
+
+  getTotalItemsPerLevel(levelNumber) {
+    return this.getQuestionsPerLevel(levelNumber) + this.getNonQuestionItemsCount(levelNumber);
+  }
+
+  getQuestionQuotaForLevel(levelNumber) {
+    return this.getQuestionsPerLevel(levelNumber);
   }
 
   getCaptureSlotsForLevel(levelNumber) {
-    if (!Array.isArray(this.questionPlan.capture_slots_by_level)) {
-      return [];
+    // For Gold Miner new logic: every capture index from 1 to questions_per_level triggers a question
+    const questionsPerLevel = this.getQuestionsPerLevel(levelNumber);
+    const slots = [];
+    for (let i = 1; i <= questionsPerLevel; i++) {
+      slots.push(i);
     }
+    return slots;
+  }
 
-    const levelSlots = this.questionPlan.capture_slots_by_level[levelNumber - 1];
-    if (!Array.isArray(levelSlots)) {
-      return [];
-    }
-
-    return levelSlots
-      .map((slot) => Number(slot))
-      .filter((slot) => Number.isFinite(slot) && slot > 0);
+  isQuestionItem(captureIndex, levelNumber) {
+    // First N items are question items, rest are bonus items
+    const questionsPerLevel = this.getQuestionsPerLevel(levelNumber);
+    return captureIndex <= questionsPerLevel;
   }
 
   shouldRequestQuestionForCapture(levelNumber, captureIndex) {
-    if (this.getRemainingQuestionsForLevel(levelNumber) <= 0) {
-      return false;
-    }
-
+    // Check if this capture triggers a question
     const captureSlots = this.getCaptureSlotsForLevel(levelNumber);
     if (captureSlots.length === 0) {
       return false;
     }
 
-    return captureSlots.includes(Number(captureIndex));
+    // Check if within total items per level
+    const totalItems = this.getTotalItemsPerLevel(levelNumber);
+    if (captureIndex > totalItems) {
+      return false;
+    }
+
+    // Check if this is a question item (within question slots)
+    return this.isQuestionItem(captureIndex, levelNumber) && captureSlots.includes(Number(captureIndex));
   }
 
   levelQuestionScheduleCompleted(levelNumber) {
@@ -666,27 +728,47 @@ class game {
       return;
     }
 
+    // Check if we need to process question completion
+    const hasQuestionResult = questionResultPayload.question_result || questionResultPayload.questionResult;
+    
+    // If we have attempt_totals but no question_result, just update totals and return
     const attemptTotals = questionResultPayload.attempt_totals || questionResultPayload.attemptTotals;
-    if (attemptTotals) {
+    if (attemptTotals && !hasQuestionResult) {
       this.applyAttemptTotals(attemptTotals);
       return;
     }
 
-    const payload = questionResultPayload.question_result && typeof questionResultPayload.question_result === 'object'
-      ? questionResultPayload.question_result
+    const payload = (questionResultPayload.question_result || questionResultPayload.questionResult) && typeof (questionResultPayload.question_result || questionResultPayload.questionResult) === 'object'
+      ? (questionResultPayload.question_result || questionResultPayload.questionResult)
       : questionResultPayload;
     const questionAttemptId = payload.id || questionResultPayload.question_attempt_id || questionResultPayload.questionAttemptId;
     const levelValue = payload.source_payload && typeof payload.source_payload === 'object'
       ? payload.source_payload.level
       : questionResultPayload.level;
     const levelNumber = Number(levelValue || 0);
+    const itemInstanceId = payload.source_payload && typeof payload.source_payload === 'object'
+      ? payload.source_payload.item_instance_id
+      : null;
 
+    if (!itemInstanceId) {
+      return;
+    }
+    
     if (!questionAttemptId || levelNumber <= 0 || this.completedQuestionAttemptIds.has(questionAttemptId)) {
       return;
     }
 
     this.completedQuestionAttemptIds.add(questionAttemptId);
     this.answeredQuestionsByLevel[levelNumber - 1] = this.getAnsweredQuestionsForLevel(levelNumber) + 1;
+
+    // Add pending item score if this was a question item
+    if (itemInstanceId) {
+      const pendingIndex = this.pendingItemScores.findIndex(p => p.instanceId === itemInstanceId);
+      if (pendingIndex !== -1) {
+        const pendingItem = this.pendingItemScores.splice(pendingIndex, 1)[0];
+        this.score += pendingItem.score;
+      }
+    }
   }
 
   isLastLevel() {
@@ -777,7 +859,7 @@ class game {
 
   listenKeyboard() {
     document.addEventListener('keydown', () => {
-      if (this.isFinished) {
+      if (this.isFinished && this.waitingForRestart) {
         this.restartGame();
         return;
       }
@@ -787,7 +869,7 @@ class game {
 
   listenMouse() {
     document.addEventListener('mousedown', () => {
-      if (this.isFinished) {
+      if (this.isFinished && this.waitingForRestart) {
         this.restartGame();
         return;
       }
@@ -801,6 +883,7 @@ class game {
     this.score = 0;
     this.gg = [];
     this.isFinished = false;
+    this.waitingForRestart = false;
     this.isLevelEnded = false;
     this.resultOutcome = null;
     this.levelEndReason = null;
@@ -811,6 +894,7 @@ class game {
     this.totalQuestionTimeMs = 0;
     this.wrongAnswerQuestionIds = new Set();
     this.completedQuestionAttemptIds = new Set();
+    this.pendingItemScores = [];
     this.syncAnsweredQuestionsFromProgress();
     level = this.getCurrentProgressLevel() - 2;
     this.newGold();
@@ -828,7 +912,7 @@ class game {
     }
     drag = true;
     d = true;
-    speedReturn = this.getWidth() / 2;
+    speedReturn = this.getWidth() / 6;
     index = -1;
     this.reportState('hook-launch', true);
   }
@@ -989,6 +1073,10 @@ class game {
       if (angle >= 165 || angle <= 15) {
         ChAngle = -ChAngle;
       }
+      // Keep rope short while swinging
+      if (r > MaxLeng) {
+        r = MaxLeng;
+      }
     } else {
       if (r < MaxLeng && d && !ok) {
         r += this.getWidth() / 5;
@@ -1006,15 +1094,30 @@ class game {
         for (let i = 0; i < N; i += 1) {
           if (this.gg[i].alive && this.range(Xh, Yh, this.gg[i].x, this.gg[i].y) <= 2 * this.getWidth()) {
             const collectedItem = this.gg[i];
-            const scoreBefore = this.score;
             this.gg[i].alive = false;
-            this.score += this.gg[i].score;
             this.capturedItemsInLevel += 1;
             timeH = this.elapsedTimeSeconds - 0.7;
-            vlH = this.gg[i].score;
+            vlH = collectedItem.score;
 
             const currentLevel = Math.max(level + 1, 1);
             const shouldTriggerQuestion = this.shouldRequestQuestionForCapture(currentLevel, this.capturedItemsInLevel);
+            const isQuestionItem = this.isQuestionItem(this.capturedItemsInLevel, currentLevel);
+
+            if (isQuestionItem) {
+              // Store item score as pending - will be added only when question is answered correctly
+              // Debug: uncomment to track pending items
+              // console.log('[GoldMiner] Question item captured, adding to pending:', collectedItem.instanceId, collectedItem.score);
+              this.pendingItemScores.push({
+                instanceId: collectedItem.instanceId,
+                score: collectedItem.score,
+                itemType: collectedItem.itemType,
+                captureIndex: this.capturedItemsInLevel,
+              });
+            } else {
+              // Non-question items: add score immediately
+              this.score += collectedItem.score;
+            }
+
             if (shouldTriggerQuestion && bridge && typeof bridge.questionTrigger === 'function') {
               bridge.questionTrigger({
                 triggerType: 'item_captured',
@@ -1025,9 +1128,10 @@ class game {
                   item_instance_id: collectedItem.instanceId,
                   capture_index_in_level: this.capturedItemsInLevel,
                   scoreValue: collectedItem.score,
-                  scoreBefore: scoreBefore,
-                  scoreAfter: this.score,
+                  scoreBefore: this.score,
+                  scoreAfter: this.score, // Will be updated after correct answer
                   level: currentLevel,
+                  is_question_item: isQuestionItem,
                   difficulty_band: this.getDifficultyForLevel(currentLevel),
                   remaining_questions_in_level: this.getRemainingQuestionsForLevel(currentLevel),
                   targetScore: this.targetScore,
@@ -1037,12 +1141,13 @@ class game {
             }
 
             this.reportState('item-collected', true, {
-              collectedScore: this.gg[i].score,
+              collectedScore: collectedItem.score,
               collectedItemType: collectedItem.itemType || 'rock',
               score: this.score,
               captureIndexInLevel: this.capturedItemsInLevel,
               difficultyBand: this.getDifficultyForLevel(currentLevel),
               questionScheduled: shouldTriggerQuestion,
+              isQuestionItem: isQuestionItem,
               lives: this.lives,
               maxLives: this.maxLives,
             });
@@ -1070,19 +1175,22 @@ class game {
   }
 
   render() {
+    let resized = false;
     if (game_W !== document.documentElement.clientWidth || game_H !== document.documentElement.clientHeight) {
       this.canvas.width = document.documentElement.clientWidth;
       this.canvas.height = document.documentElement.clientHeight;
       game_W = this.canvas.width;
       game_H = this.canvas.height;
       XXX = game_W / 2;
-      YYY = game_H * 0.31; // Lower pivot so rope starts from the seated character hand area
-      R = this.getWidth() * 3.5; // Increased from 2 to prevent hook overlapping character
-      if (!drag) {
-        r = R;
-      }
-      MaxLeng = this.range(XXX, YYY, game_W - 2 * this.getWidth(), game_H - 2 * this.getWidth());
+      YYY = game_H * 0.21; // Lower pivot so rope starts from the seated character hand area
+      resized = true;
     }
+    // Always recalculate to apply changes immediately
+    R = this.getWidth(); // Start closer to pivot
+    if (!drag) {
+      r = R;
+    }
+    MaxLeng = this.range(XXX, YYY, game_W - 2 * this.getWidth(), game_H - 2 * this.getWidth()) * 0.8;
   }
 
   draw() {
@@ -1144,36 +1252,44 @@ class game {
   }
 
   drawResultOverlay() {
-    this.context.fillStyle = 'rgba(2, 6, 23, 0.78)';
+    this.context.fillStyle = 'rgba(2, 6, 23, 0.85)';
     this.context.fillRect(0, 0, game_W, game_H);
 
     this.context.fillStyle = '#FFFFFF';
     this.context.textAlign = 'center';
     this.context.font = `bold ${Math.max(32, this.getWidth() * 1.3)}px Arial`;
     
-    let message = '';
     if (this.resultOutcome === 'success') {
-      message = 'Hoan thanh';
+      this.context.fillText('Hoan thanh', game_W / 2, game_H / 2 - this.getWidth() * 1.2);
     } else if (this.resultOutcome === 'game_over') {
-      message = 'Het mang! Tro choi ket thuc';
+      // Game over - show clear defeat message
+      this.context.fillStyle = '#EF4444';
+      this.context.fillText('HET MANG!', game_W / 2, game_H / 2 - this.getWidth() * 1.4);
+      
+      this.context.fillStyle = '#FFFFFF';
+      this.context.font = `${Math.max(18, this.getWidth() * 0.7)}px Arial`;
+      this.context.fillText('Rat tiec, ban da thua tro choi.', game_W / 2, game_H / 2 - this.getWidth() * 0.4);
+      
+      this.context.font = `${Math.max(16, this.getWidth() * 0.55)}px Arial`;
+      this.context.fillStyle = '#94A3B8';
+      this.context.fillText('Diem cua ban: ' + this.score, game_W / 2, game_H / 2 + this.getWidth() * 0.15);
     } else {
-      message = 'Man choi ket thuc';
-    }
-    
-    this.context.fillText(message, game_W / 2, game_H / 2 - this.getWidth());
-
-    this.context.font = `${Math.max(20, this.getWidth() * 0.6)}px Arial`;
-    this.context.fillText(`Score: ${this.score}`, game_W / 2, game_H / 2);
-    
-    if (this.resultOutcome === 'success') {
-      this.context.fillText('Em da hoan thanh toan bo cau hoi.', game_W / 2, game_H / 2 + this.getWidth());
-    } else if (this.resultOutcome === 'game_over') {
-      this.context.fillText('Nhan chuot hoac bam phim bat ky de choi lai.', game_W / 2, game_H / 2 + this.getWidth());
-    } else {
+      this.context.fillText('Man choi ket thuc', game_W / 2, game_H / 2 - this.getWidth());
+      this.context.font = `${Math.max(20, this.getWidth() * 0.6)}px Arial`;
+      this.context.fillText(`Score: ${this.score}`, game_W / 2, game_H / 2);
       this.context.fillText('Nhan chuot hoac bam phim bat ky de choi lai man nay.', game_W / 2, game_H / 2 + this.getWidth());
     }
     
-    if (this.resultOutcome !== 'success') {
+    // Only show restart prompt for game_over (after user acknowledges)
+    if (this.resultOutcome === 'game_over') {
+      this.context.font = `bold ${Math.max(16, this.getWidth() * 0.5)}px Arial`;
+      this.context.fillStyle = '#FBBF24';
+      this.context.fillText('Nhan nut CHOI LAI de bat dau lai', game_W / 2, game_H / 2 + this.getWidth() * 0.9);
+    } else if (this.resultOutcome === 'success') {
+      this.context.font = `${Math.max(20, this.getWidth() * 0.6)}px Arial`;
+      this.context.fillText(`Score: ${this.score}`, game_W / 2, game_H / 2);
+      this.context.fillText('Em da hoan thanh toan bo cau hoi.', game_W / 2, game_H / 2 + this.getWidth());
+    } else {
       this.context.fillText(
         `Con ${this.getRemainingQuestionsForLevel(Math.max(level + 1, 1))} cau trong muc nay`,
         game_W / 2,
@@ -1234,10 +1350,10 @@ class game {
     this.context.fillText(`SCORE: ${this.score}`, rightAlignX, rightBoxY + unit * 2.10);
 
     // Draw elapsed time row with clock icon kept inside the right panel.
-    const clockSize = unit * 1.05;
+    const clockSize = unit * 2.0;
     const timeRowY = rightBoxY + unit * 2.88;
-    const clockX = rightBoxX + unit * 0.26;
-    const clockY = timeRowY - unit * 0.78;
+    const clockX = rightBoxX;
+    const clockY = timeRowY - unit * 1.22;
     this.drawImageSafe(clockIM, clockX, clockY, clockSize, clockSize);
     this.context.fillStyle = '#FFB84D';
     this.context.font = `bold ${unit * 0.7}px Stencil`;

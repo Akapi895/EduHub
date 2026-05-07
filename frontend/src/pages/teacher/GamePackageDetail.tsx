@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   EyeOff,
   Globe2,
   Layers3,
   Loader2,
+  Plus,
   Save,
   Sparkles,
   Trophy,
@@ -13,8 +14,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import Button from '@/components/common/Button';
-import Input from '@/components/common/Input';
+import GameEditorLayout from '@/components/games/editor/GameEditorLayout';
 import GameQuestionEditor from '@/components/games/GameQuestionEditor';
 import MemoryCardPairEditor from '@/components/games/MemoryCardPairEditor';
 import {
@@ -27,32 +27,89 @@ import {
 import api from '@/services/api';
 import { gameService } from '@/services/game.service';
 import { showErrorToast, showSuccessToast } from '@/store/toast.store';
-import type { DifficultyBand, GameLeaderboardResponse, GamePackage, Question } from '@/types';
+import type {
+  DifficultyBand,
+  GameLeaderboardResponse,
+  GamePackage,
+  Question,
+  QuestionTypeValue,
+} from '@/types';
 import { generateId } from '@/utils/helpers';
 
 function unwrapApiData<T>(response: { data?: { data?: T } & T }): T {
   return (response.data?.data ?? response.data) as T;
 }
 
-function createEmptyQuestion(band: DifficultyBand, orderIndex: number): Question {
-  return {
+function createEmptyQuestion(
+  band: DifficultyBand,
+  type: QuestionTypeValue,
+  orderIndex: number,
+  points: number = 1,
+): Question {
+  const buildDefaultOptions = () => [
+    { id: generateId(), content: 'Đáp án A', is_correct: true },
+    { id: generateId(), content: 'Đáp án B', is_correct: false },
+  ];
+
+  const buildDefaultPairs = () => [
+    { id: generateId(), left_text: '', right_text: '' },
+    { id: generateId(), left_text: '', right_text: '' },
+  ];
+
+  const buildDefaultTextConfig = () => ({
+    input_variant: 'short_text' as const,
+    grading_mode: 'normalized_exact' as const,
+    min_length: null,
+    max_length: 160,
+    case_sensitive: false,
+    accent_sensitive: false,
+    trim_whitespace: true,
+    ignore_punctuation: true,
+    manual_grading_required: false,
+    accepted_answers: [''],
+    keywords: [] as string[],
+  });
+
+  const baseQuestion = {
     id: generateId(),
     package_id: '',
-    type: 'single_choice',
     content: 'Câu hỏi mới',
     instruction: '',
     explanation: '',
     difficulty_band: band,
-    points: 1,
+    points,
     required: true,
     order_index: orderIndex,
-    options: [
-      { id: generateId(), content: 'Đáp án A', is_correct: true },
-      { id: generateId(), content: 'Đáp án B', is_correct: false },
-    ],
-    matching_pairs: [],
-    text_config: null,
   };
+
+  switch (type) {
+    case 'single_choice':
+    case 'multi_choice':
+      return {
+        ...baseQuestion,
+        type,
+        options: buildDefaultOptions(),
+        matching_pairs: [],
+        text_config: null,
+      };
+    case 'matching':
+      return {
+        ...baseQuestion,
+        type: 'matching',
+        options: [],
+        matching_pairs: buildDefaultPairs(),
+        text_config: null,
+      };
+    case 'text':
+    default:
+      return {
+        ...baseQuestion,
+        type: 'text',
+        options: [],
+        matching_pairs: [],
+        text_config: buildDefaultTextConfig(),
+      };
+  }
 }
 
 function toQuestionPayload(question: Question, orderIndex: number) {
@@ -95,11 +152,21 @@ function toQuestionPayload(question: Question, orderIndex: number) {
   };
 }
 
+const EDITOR_STEPS = [
+  { key: 'overview', label: 'Tổng quan', description: 'Thông tin gói trò chơi & bộ câu hỏi' },
+  { key: 'questions', label: 'Câu hỏi', description: 'Danh sách & chỉnh sửa câu hỏi' },
+] as const;
+
+type EditorStepKey = typeof EDITOR_STEPS[number]['key'];
+
+const DEFAULT_QUESTION_TYPE: QuestionTypeValue = 'single_choice';
+
 export default function TeacherGamePackageDetail() {
   const { packageId } = useParams();
   const navigate = useNavigate();
   const [gamePackage, setGamePackage] = useState<GamePackage | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingQuestions, setSavingQuestions] = useState(false);
@@ -111,6 +178,14 @@ export default function TeacherGamePackageDetail() {
   const [description, setDescription] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+
+  // Tab state
+  const [activeStep, setActiveStep] = useState<EditorStepKey>('overview');
+
+  // Ref for scroll detection at bottom of questions list
+  const questionsListRef = useRef<HTMLDivElement>(null);
+  const [showStickyAddButton, setShowStickyAddButton] = useState(false);
+  const newQuestionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,7 +251,13 @@ export default function TeacherGamePackageDetail() {
     })
   ), [questions]);
 
-  const currentBandQuestions = questionsByBand[activeBand];
+  // Include pending questions in current band
+  const currentBandQuestions = useMemo(() => {
+    const saved = questionsByBand[activeBand];
+    const pending = pendingQuestions.filter((q) => q.difficulty_band === activeBand);
+    return [...saved, ...pending];
+  }, [questionsByBand, activeBand, pendingQuestions]);
+
   const questionPlanPreview = getQuestionPlanPreview(gamePackage);
   const levelDistributionLabel = getLevelDistributionLabel(gamePackage);
   const classLink = gamePackage?.class_id
@@ -188,6 +269,34 @@ export default function TeacherGamePackageDetail() {
   const goldMinerPackage = gamePackage?.game_module?.slug === 'gold-miner' ||
     gamePackage?.game_module_id === 'gold-miner';
   const isMemoryCard = gamePackage?.game_module?.slug === 'memory-card';
+
+  // Calculate step meta
+  const totalQuestions = questions.length + pendingQuestions.length;
+  const stepMeta = useMemo(() => ({
+    overview: {
+      badgeLabel: totalQuestions > 0 ? `${totalQuestions} câu` : 'Chưa có',
+      badgeVariant: totalQuestions > 0 ? 'mint' as const : 'yellow' as const,
+    },
+    questions: {
+      badgeLabel: `${currentBandQuestions.length} câu hiện tại`,
+      badgeVariant: currentBandQuestions.length > 0 ? 'mint' as const : 'yellow' as const,
+    },
+  }), [totalQuestions, currentBandQuestions.length]);
+
+  // Scroll detection for sticky button
+  useEffect(() => {
+    const handleScroll = () => {
+      if (!questionsListRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = questionsListRef.current;
+      setShowStickyAddButton(scrollHeight - scrollTop - clientHeight < 150);
+    };
+
+    const listElement = questionsListRef.current;
+    if (listElement) {
+      listElement.addEventListener('scroll', handleScroll);
+      return () => listElement.removeEventListener('scroll', handleScroll);
+    }
+  }, [questions, pendingQuestions]);
 
   const handleThumbnailUpload = async (file: File) => {
     setUploadingThumbnail(true);
@@ -253,20 +362,71 @@ export default function TeacherGamePackageDetail() {
     }
   };
 
-  const handleAddQuestion = async (band: DifficultyBand) => {
+  const handleAddQuestion = async () => {
     if (!packageId) return;
 
     try {
-      const orderIndex = orderedQuestions.length;
-      const response = await gameService.createGamePackageQuestion(
-        packageId,
-        toQuestionPayload(createEmptyQuestion(band, orderIndex), orderIndex),
-      );
-      const createdQuestion = unwrapApiData<Question>(response);
-      setQuestions((current) => [...current, createdQuestion]);
-      setActiveBand(band);
+      // Create pending question locally first
+      const orderIndex = orderedQuestions.length + pendingQuestions.length;
+      const newQuestion = createEmptyQuestion(activeBand, DEFAULT_QUESTION_TYPE, orderIndex, 1);
+
+      // Add to pending questions (will be saved when user clicks "Lưu bộ câu hỏi")
+      setPendingQuestions((current) => [...current, newQuestion]);
+
+      // Switch to questions tab
+      setActiveStep('questions');
+
+      // Scroll to bottom after render
+      setTimeout(() => {
+        if (questionsListRef.current) {
+          questionsListRef.current.scrollTop = questionsListRef.current.scrollHeight;
+        }
+      }, 100);
     } catch {
       showErrorToast('Không thể tạo câu hỏi mới.');
+    }
+  };
+
+  const handleUpdatePendingQuestion = (questionId: string, updatedQuestion: Question) => {
+    setPendingQuestions((current) =>
+      current.map((q) => q.id === questionId ? updatedQuestion : q)
+    );
+  };
+
+  const handleDeletePendingQuestion = (questionId: string) => {
+    setPendingQuestions((current) => current.filter((q) => q.id !== questionId));
+  };
+
+  const handleSaveQuestions = async () => {
+    if (!packageId) return;
+
+    setSavingQuestions(true);
+    try {
+      // Save pending questions first
+      for (const question of pendingQuestions) {
+        const orderIndex = orderedQuestions.length + pendingQuestions.indexOf(question);
+        await gameService.createGamePackageQuestion(
+          packageId,
+          toQuestionPayload(question, orderIndex),
+        );
+      }
+
+      // Update existing questions
+      for (const [index, question] of orderedQuestions.entries()) {
+        await gameService.updateGameQuestion(question.id, toQuestionPayload(question, index));
+      }
+
+      // Reload questions from server
+      const questionsResponse = await gameService.getGamePackageQuestions(packageId);
+      const questionItems = unwrapApiData<Question[]>(questionsResponse) ?? [];
+      setQuestions(questionItems);
+      setPendingQuestions([]);
+
+      showSuccessToast('Đã lưu bộ câu hỏi.');
+    } catch {
+      showErrorToast('Không thể lưu bộ câu hỏi.');
+    } finally {
+      setSavingQuestions(false);
     }
   };
 
@@ -277,20 +437,6 @@ export default function TeacherGamePackageDetail() {
       showSuccessToast('Đã xóa câu hỏi.');
     } catch {
       showErrorToast('Không thể xóa câu hỏi.');
-    }
-  };
-
-  const handleSaveQuestions = async () => {
-    setSavingQuestions(true);
-    try {
-      for (const [index, question] of orderedQuestions.entries()) {
-        await gameService.updateGameQuestion(question.id, toQuestionPayload(question, index));
-      }
-      showSuccessToast('Đã lưu bộ câu hỏi.');
-    } catch {
-      showErrorToast('Không thể lưu bộ câu hỏi.');
-    } finally {
-      setSavingQuestions(false);
     }
   };
 
@@ -330,6 +476,312 @@ export default function TeacherGamePackageDetail() {
     );
   }
 
+  const renderOverviewTab = () => (
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
+      <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Thông tin gói trò chơi</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Những nội dung này sẽ hiển thị ở danh sách trò chơi và màn hình trước khi học sinh bắt đầu.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Tiêu đề</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+              placeholder="VD: Memory Card - Từ vựng chủ đề động vật"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả</label>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={4}
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+              placeholder="Mô tả ngắn về mục tiêu học tập và trải nghiệm của học sinh."
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện</label>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+              <input
+                type="text"
+                value={thumbnailUrl}
+                onChange={(event) => setThumbnailUrl(event.target.value)}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+                placeholder="Dán liên kết ảnh hoặc tải file lên"
+              />
+              <label
+                className={`inline-flex h-[46px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
+                  uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
+                }`}
+              >
+                {uploadingThumbnail ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                )}
+                {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingThumbnail}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    await handleThumbnailUpload(file);
+                    event.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
+            {thumbnailUrl && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <img
+                  src={thumbnailUrl}
+                  alt="Ảnh đại diện trò chơi"
+                  className="h-40 w-full object-cover"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+          <Layers3 className="h-4 w-4 text-sky-500" />
+          Tổng quan bộ câu hỏi
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          {GAME_DIFFICULTY_BANDS.map((band) => {
+            const meta = getBandMeta(band);
+            const savedCount = questionsByBand[band].length;
+            const pendingCount = pendingQuestions.filter((q) => q.difficulty_band === band).length;
+            const count = savedCount + pendingCount;
+
+            return (
+              <button
+                key={band}
+                type="button"
+                onClick={() => {
+                  setActiveBand(band);
+                  setActiveStep('questions');
+                }}
+                className={`rounded-3xl border px-4 py-4 text-left transition ${
+                  activeBand === band && activeStep === 'questions'
+                    ? 'border-primary bg-blue-50 shadow-sm'
+                    : `border-slate-200 bg-white hover:border-slate-300 ${meta.accentClass}`
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold text-slate-900">{meta.label}</span>
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                    {count}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">{meta.description}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {hasQuestionDistribution && (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">{gameModuleName} sẽ phân phối câu hỏi theo mức độ</p>
+            <p className="mt-2 leading-6">
+              Giáo viên chỉ cần soạn bộ câu hỏi tổng thể. Hệ thống sẽ tự chia theo từng phần chơi,
+              cho phép có mục không kèm câu hỏi nhưng vẫn bảo đảm học sinh làm hết toàn bộ bộ câu hỏi
+              khi hoàn thành hết trò chơi.
+            </p>
+            {questionPlanPreview && (
+              <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 sm:grid-cols-3">
+                <div>
+                  <p className="uppercase tracking-[0.16em] text-slate-400">Kiểu phân phối</p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {getDistributionModeLabel(questionPlanPreview.distribution_mode)}
+                  </p>
+                </div>
+                <div>
+                  <p className="uppercase tracking-[0.16em] text-slate-400">Số màn dự kiến</p>
+                  <p className="mt-1 font-semibold text-slate-900">{questionPlanPreview.level_count ?? 1}</p>
+                </div>
+                <div>
+                  <p className="uppercase tracking-[0.16em] text-slate-400">Câu hỏi mỗi màn</p>
+                  <p className="mt-1 font-semibold text-slate-900">{levelDistributionLabel}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-center">
+          <p className="text-sm text-slate-600">
+            <span className="text-2xl font-bold text-primary">{totalQuestions}</span>
+            <span className="ml-2">câu hỏi trong bộ</span>
+          </p>
+          {pendingQuestions.length > 0 && (
+            <p className="mt-1 text-xs text-amber-600">
+              ({pendingQuestions.length} câu hỏi mới chưa lưu)
+            </p>
+          )}
+          <p className="mt-1 text-xs text-slate-500">
+            Nhấn vào mức độ bên trên để chỉnh sửa câu hỏi cụ thể
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderQuestionsTab = () => (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      {isMemoryCard ? (
+        <MemoryCardPairEditor packageId={packageId!} />
+      ) : (
+        <>
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={activeBand}
+                  onChange={(event) => setActiveBand(event.target.value as DifficultyBand)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+                >
+                  {GAME_DIFFICULTY_BANDS.map((band) => {
+                    const meta = getBandMeta(band);
+                    const savedCount = questionsByBand[band].length;
+                    const pendingCount = pendingQuestions.filter((q) => q.difficulty_band === band).length;
+                    const count = savedCount + pendingCount;
+                    return (
+                      <option key={band} value={band}>
+                        {meta.label} ({count} câu)
+                      </option>
+                    );
+                  })}
+                </select>
+                <span className="text-sm text-slate-500">
+                  {getBandMeta(activeBand).description}
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleAddQuestion}
+                className="inline-flex items-center justify-center rounded-button border border-primary px-5 py-2.5 text-sm font-medium text-primary transition hover:bg-primary-lighter"
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Thêm câu hỏi
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQuestions}
+                disabled={savingQuestions || pendingQuestions.length === 0}
+                className="inline-flex items-center justify-center rounded-button bg-primary px-5 py-2.5 text-sm font-medium text-white transition hover:bg-primary-dark disabled:opacity-50"
+              >
+                {savingQuestions ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="mr-2 h-4 w-4" />
+                )}
+                Lưu bộ câu hỏi
+              </button>
+            </div>
+          </div>
+
+          <div
+            ref={questionsListRef}
+            className="max-h-[75vh] space-y-4 overflow-y-auto pr-2 scroll-smooth"
+          >
+            {questionsByBand[activeBand].length === 0 && pendingQuestions.length === 0 ? (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center">
+                <p className="text-lg font-semibold text-slate-900">Mức độ này chưa có câu hỏi</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Nhấn "Thêm câu hỏi" để tạo câu hỏi mới cho mức độ này.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAddQuestion}
+                  className="mt-4 inline-flex items-center justify-center rounded-button bg-primary px-6 py-3 text-sm font-medium text-white transition hover:bg-primary-dark"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Thêm câu hỏi đầu tiên
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Saved questions - sorted by order_index */}
+                {questions
+                  .filter((q) => q.difficulty_band === activeBand)
+                  .sort((a, b) => a.order_index - b.order_index)
+                  .map((question) => (
+                    <GameQuestionEditor
+                      key={question.id}
+                      question={question}
+                      index={question.order_index}
+                      band={activeBand}
+                      onChange={(updatedQuestion) => {
+                        setQuestions((current) => current.map((item) => (
+                          item.id === updatedQuestion.id ? updatedQuestion : item
+                        )));
+                      }}
+                      onDelete={() => handleDeleteQuestion(question.id)}
+                      warnOnManualText={goldMinerPackage}
+                    />
+                  ))}
+
+                {/* Pending questions - index continues from last saved */}
+                {pendingQuestions.map((question, index) => (
+                  <div key={question.id} ref={index === pendingQuestions.length - 1 ? newQuestionRef : undefined}>
+                    <GameQuestionEditor
+                      question={question}
+                      index={orderedQuestions.length + index}
+                      band={question.difficulty_band ?? activeBand}
+                      onChange={(updated) => handleUpdatePendingQuestion(question.id, updated)}
+                      onDelete={() => handleDeletePendingQuestion(question.id)}
+                      warnOnManualText={goldMinerPackage}
+                      highlightNew
+                    />
+                  </div>
+                ))}
+
+                {/* Sticky button at bottom */}
+                <div
+                  className={`sticky bottom-4 flex justify-center transition-all duration-300 ${
+                    showStickyAddButton ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={handleAddQuestion}
+                    className="inline-flex items-center justify-center rounded-full bg-primary px-8 py-4 text-base font-medium text-white shadow-lg transition hover:bg-primary-dark"
+                  >
+                    <Plus className="mr-2 h-5 w-5" />
+                    Thêm câu hỏi
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {pendingQuestions.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Bạn có <strong>{pendingQuestions.length}</strong> câu hỏi mới chưa lưu. Nhấn "Lưu bộ câu hỏi" để lưu lại.
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -352,14 +804,32 @@ export default function TeacherGamePackageDetail() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={handleSaveMeta} isLoading={savingMeta} disabled={uploadingThumbnail}>
-            <Save className="mr-2 h-4 w-4" />
+          <button
+            type="button"
+            onClick={handleSaveMeta}
+            disabled={savingMeta || uploadingThumbnail}
+            className="inline-flex items-center justify-center rounded-button border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            {savingMeta ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
             Lưu thông tin
-          </Button>
-          <Button variant="danger" onClick={handleDeletePackage} isLoading={deleting}>
-            <Trash2 className="mr-2 h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleDeletePackage}
+            disabled={deleting}
+            className="inline-flex items-center justify-center rounded-button border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+          >
+            {deleting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="mr-2 h-4 w-4" />
+            )}
             Xóa gói
-          </Button>
+          </button>
         </div>
       </div>
 
@@ -378,25 +848,25 @@ export default function TeacherGamePackageDetail() {
                 Publish để học sinh có thể thấy trò chơi trong Game Hub mà không cần thuộc lớp nào.
               </p>
             </div>
-            <Button
+            <button
               type="button"
-              variant={gamePackage.published_to_hub ? 'secondary' : 'primary'}
               onClick={handleToggleHubPublication}
-              isLoading={publishing}
-              className="justify-center"
+              disabled={publishing}
+              className={`inline-flex items-center justify-center rounded-button px-5 py-2.5 text-sm font-medium transition disabled:opacity-50 ${
+                gamePackage.published_to_hub
+                  ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                  : 'bg-primary text-white hover:bg-primary-dark'
+              }`}
             >
-              {gamePackage.published_to_hub ? (
-                <>
-                  <EyeOff className="mr-1.5 h-4 w-4" />
-                  Gỡ khỏi Game Hub
-                </>
+              {publishing ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : gamePackage.published_to_hub ? (
+                <EyeOff className="mr-1.5 h-4 w-4" />
               ) : (
-                <>
-                  <Globe2 className="mr-1.5 h-4 w-4" />
-                  Publish Game Hub
-                </>
+                <Globe2 className="mr-1.5 h-4 w-4" />
               )}
-            </Button>
+              {gamePackage.published_to_hub ? 'Gỡ khỏi Game Hub' : 'Publish Game Hub'}
+            </button>
           </div>
         </div>
 
@@ -422,198 +892,16 @@ export default function TeacherGamePackageDetail() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
-        <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Thông tin gói trò chơi</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Những nội dung này sẽ hiển thị ở danh sách trò chơi và màn hình trước khi học sinh bắt đầu.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <Input label="Tiêu đề" value={title} onChange={(event) => setTitle(event.target.value)} />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả</label>
-              <textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện</label>
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                <Input
-                  value={thumbnailUrl}
-                  onChange={(event) => setThumbnailUrl(event.target.value)}
-                  placeholder="Dán liên kết ảnh hoặc tải file lên"
-                />
-                <label
-                  className={`inline-flex h-[42px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
-                    uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
-                  }`}
-                >
-                  {uploadingThumbnail ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <UploadCloud className="mr-2 h-4 w-4" />
-                  )}
-                  {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingThumbnail}
-                    onChange={async (event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      await handleThumbnailUpload(file);
-                      event.target.value = '';
-                    }}
-                  />
-                </label>
-              </div>
-              {thumbnailUrl && (
-                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                  <img
-                    src={thumbnailUrl}
-                    alt="Ảnh đại diện trò chơi"
-                    className="h-40 w-full object-cover"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-            <Layers3 className="h-4 w-4 text-sky-500" />
-            Tổng quan bộ câu hỏi
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
-            {GAME_DIFFICULTY_BANDS.map((band) => {
-              const meta = getBandMeta(band);
-              const count = questionsByBand[band].length;
-
-              return (
-                <button
-                  key={band}
-                  type="button"
-                  onClick={() => setActiveBand(band)}
-                  className={`rounded-3xl border px-4 py-4 text-left transition ${
-                    activeBand === band
-                      ? 'border-primary bg-blue-50 shadow-sm'
-                      : `border-slate-200 bg-white hover:border-slate-300 ${meta.accentClass}`
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-semibold text-slate-900">{meta.label}</span>
-                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
-                      {count}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">{meta.description}</p>
-                </button>
-              );
-            })}
-          </div>
-
-          {hasQuestionDistribution && (
-            <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">{gameModuleName} sẽ phân phối câu hỏi theo mức độ</p>
-              <p className="mt-2 leading-6">
-                Giáo viên chỉ cần soạn bộ câu hỏi tổng thể. Hệ thống sẽ tự chia theo từng phần chơi,
-                cho phép có mục không kèm câu hỏi nhưng vẫn bảo đảm học sinh làm hết toàn bộ bộ câu hỏi
-                khi hoàn thành hết trò chơi.
-              </p>
-              {questionPlanPreview && (
-                <div className="mt-3 grid gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 sm:grid-cols-3">
-                  <div>
-                    <p className="uppercase tracking-[0.16em] text-slate-400">Kiểu phân phối</p>
-                    <p className="mt-1 font-semibold text-slate-900">
-                      {getDistributionModeLabel(questionPlanPreview.distribution_mode)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="uppercase tracking-[0.16em] text-slate-400">Số màn dự kiến</p>
-                    <p className="mt-1 font-semibold text-slate-900">{questionPlanPreview.level_count ?? 1}</p>
-                  </div>
-                  <div>
-                    <p className="uppercase tracking-[0.16em] text-slate-400">Câu hỏi mỗi màn</p>
-                    <p className="mt-1 font-semibold text-slate-900">{levelDistributionLabel}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Question bank / Pair editor section */}
-      {isMemoryCard ? (
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <MemoryCardPairEditor packageId={packageId!} />
-        </section>
-      ) : (
-        <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Đang chỉnh sửa
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-900">{getBandMeta(activeBand).label}</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                {getBandMeta(activeBand).description}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={() => handleAddQuestion(activeBand)}>
-                Thêm câu hỏi mới
-              </Button>
-              <Button onClick={handleSaveQuestions} isLoading={savingQuestions}>
-                <Save className="mr-2 h-4 w-4" />
-                Lưu bộ câu hỏi
-              </Button>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            {currentBandQuestions.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-                <p className="text-lg font-semibold text-slate-900">Mức độ này chưa có câu hỏi</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Tạo ít nhất một câu hỏi để học sinh có nội dung làm bài khi chơi tới mức độ này.
-                </p>
-                <Button className="mt-4" onClick={() => handleAddQuestion(activeBand)}>
-                  Thêm câu hỏi đầu tiên
-                </Button>
-              </div>
-            ) : (
-              currentBandQuestions.map((question, index) => (
-                <GameQuestionEditor
-                  key={question.id}
-                  question={question}
-                  index={index}
-                  band={activeBand}
-                  warnOnManualText={goldMinerPackage}
-                  onChange={(updatedQuestion) => {
-                    setQuestions((current) => current.map((item) => (
-                      item.id === updatedQuestion.id ? updatedQuestion : item
-                    )));
-                  }}
-                  onDelete={() => handleDeleteQuestion(question.id)}
-                />
-              ))
-            )}
-          </div>
-        </section>
-      )}
+      <GameEditorLayout
+        title="Biên soạn trò chơi"
+        description="Chia thành 2 phần: tổng quan thông tin và bộ câu hỏi, phần câu hỏi để biên soạn chi tiết từng câu hỏi."
+        steps={EDITOR_STEPS}
+        activeStep={activeStep}
+        onStepChange={setActiveStep}
+        stepMeta={stepMeta}
+      >
+        {activeStep === 'overview' ? renderOverviewTab() : renderQuestionsTab()}
+      </GameEditorLayout>
     </div>
   );
 }
