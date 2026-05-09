@@ -509,9 +509,24 @@ export interface GameRuntimeTriggerResumeResponse {
   attempt_totals?: PackageAttemptTotals | null;
 }
 
+export interface GameRuntimeTriggerGameOverResponse {
+  action: 'game_over';
+  reason?: string | null;
+  wrong_attempts?: number | null;
+  attempt_totals?: PackageAttemptTotals | null;
+}
+
+export interface GameRuntimeTriggerQuestionSkipResponse {
+  action: 'question_skip';
+  reason?: string | null;
+  attempt_totals?: PackageAttemptTotals | null;
+}
+
 export type GameRuntimeTriggerResponse =
   | GameRuntimeTriggerAskResponse
-  | GameRuntimeTriggerResumeResponse;
+  | GameRuntimeTriggerResumeResponse
+  | GameRuntimeTriggerGameOverResponse
+  | GameRuntimeTriggerQuestionSkipResponse;
 
 export interface GameRuntimeAnswerRequest {
   attempt_id: string;
@@ -530,6 +545,8 @@ export interface GameRuntimeAnswerResponse {
   feedback_message?: string | null;
   attempt_totals?: PackageAttemptTotals | null;
   resume_payload?: Record<string, unknown> | null;
+  wrong_attempts?: number | null;
+  game_over?: boolean | null;
 }
 
 export interface GameRuntimeEventRequest {

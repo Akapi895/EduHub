@@ -612,8 +612,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
 
       // Show feedback toast for wrong answers
       if (data.is_correct === false) {
-        const wrongAttempts = (data as Record<string, unknown>).wrong_attempts as number | undefined;
-        const remainingLives = wrongAttempts !== undefined ? Math.max(0, 3 - wrongAttempts) : 0;
+        const remainingLives = data.wrong_attempts != null ? Math.max(0, 3 - data.wrong_attempts) : 0;
         showWarningToast(`Sai rồi! Còn ${remainingLives} lượt thử.`);
       }
 
@@ -631,9 +630,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
           feedbackMessage: data.feedback_message,
         },
         attemptTotals: data.attempt_totals ?? null,
-        // Gold Miner: pass wrong attempts and game over status
-        wrong_attempts: (data as Record<string, unknown>).wrong_attempts as number | undefined,
-        game_over: (data as Record<string, unknown>).game_over as boolean | undefined,
+        wrong_attempts: data.wrong_attempts,
+        game_over: data.game_over,
       }, { watchdog: true });
     } catch (error) {
       showErrorToast(extractApiErrorMessage(error, 'Không thể nộp câu trả lời.'));

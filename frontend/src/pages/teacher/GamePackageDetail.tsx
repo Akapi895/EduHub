@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import GameEditorLayout from '@/components/games/editor/GameEditorLayout';
+import GameEditorLayout, { GameEditorStepDefinition } from '@/components/games/editor/GameEditorLayout';
 import GameQuestionEditor from '@/components/games/GameQuestionEditor';
 import MemoryCardPairEditor from '@/components/games/MemoryCardPairEditor';
 import Button from '@/components/common/Button';
@@ -155,11 +155,11 @@ function toQuestionPayload(question: Question, orderIndex: number) {
   };
 }
 
-const EDITOR_STEPS = [
+const EDITOR_STEPS: GameEditorStepDefinition[] = [
   { key: 'overview', label: 'Tổng quan', description: 'Thông tin gói trò chơi & bộ câu hỏi' },
   { key: 'questions', label: 'Câu hỏi', description: 'Danh sách & chỉnh sửa câu hỏi' },
   { key: 'results', label: 'Kết quả', description: 'Thống kê & điểm số học sinh' },
-] as const;
+];
 
 type EditorStepKey = typeof EDITOR_STEPS[number]['key'];
 

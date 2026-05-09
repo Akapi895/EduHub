@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import Badge from '@/components/common/Badge';
 
 export interface GameEditorStepDefinition {
-  key: string;
+  key: GameEditorStepKey;
   label: string;
   description: string;
 }

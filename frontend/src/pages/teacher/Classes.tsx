@@ -86,7 +86,6 @@ export default function TeacherClasses() {
       const res = await classService.createClass({
         name: form.name,
         description: form.description,
-        subject: form.subject,
         thumbnail_url,
       });
       const newClassId = res.data.data?.id;
