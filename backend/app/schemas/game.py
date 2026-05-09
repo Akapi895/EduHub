@@ -20,8 +20,11 @@ class GamePackageCreate(BaseModel):
     subject: str | None = None
     grade: str | None = None
     status: ContentPackageStatus = ContentPackageStatus.published
-    # Memory Card specific
+    # Memory Card specific: background image URL (game board background)
     background_image_url: str | None = None
+    # Memory Card specific: card back image URL
+    card_back_image_url: str | None = None
+    # Memory Card specific: max moves (null = unlimited)
     max_moves: int | None = None
 
 
@@ -36,8 +39,10 @@ class GamePackageUpdate(BaseModel):
     subject: str | None = None
     grade: str | None = None
     status: ContentPackageStatus | None = None
-    # Memory Card specific: background image URL
+    # Memory Card specific: background image URL (game board background)
     background_image_url: str | None = None
+    # Memory Card specific: card back image URL
+    card_back_image_url: str | None = None
     # Memory Card specific: max moves (null = unlimited)
     max_moves: int | None = None
 

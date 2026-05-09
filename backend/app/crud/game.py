@@ -598,10 +598,12 @@ def create_game_package(
                 is_active=True,
             )
         )
-    # Memory Card specific: build runtime_config with background_image_url and max_moves
+    # Memory Card specific: build runtime_config with background_image_url, card_back_image_url, and max_moves
     rc = dict(data.runtime_config) if data.runtime_config else {}
     if data.background_image_url:
         rc["background_image_url"] = data.background_image_url
+    if data.card_back_image_url:
+        rc["card_back_image_url"] = data.card_back_image_url
     if data.max_moves is not None:
         rc["max_moves"] = data.max_moves
 
@@ -694,7 +696,7 @@ def update_game_package(db: Session, *, package: ContentPackage, data: GamePacka
     update_data = data.model_dump(exclude_unset=True)
     package_fields = {"title", "description", "subject", "grade", "thumbnail_url", "status"}
     config_fields = {"game_module_id", "selector_strategy", "runtime_config", "scoring_config"}
-    memory_card_fields = {"background_image_url", "max_moves"}
+    memory_card_fields = {"background_image_url", "card_back_image_url", "max_moves"}
 
     previous_status = package.status
 

@@ -63,10 +63,11 @@
 
   // ── Card rendering ─────────────────────────────────────────────────────────
 
-  function cardFaceHtml(card) {
+  function cardFaceHtml(card, isPreloading) {
     let html = '';
     if (card.imageUrl) {
-      html += `<img src="${escHtml(card.imageUrl)}" alt="${escHtml(card.label || '')}" class="card-img" loading="lazy" onerror="this.style.display='none'">`;
+      // Preload: load eagerly, not lazy. Hide until loaded to prevent flash.
+      html += `<img src="${escHtml(card.imageUrl)}" alt="${escHtml(card.label || '')}" class="card-img" loading="eager" decoding="async"${isPreloading ? ' style="visibility:hidden"' : ''} onload="this.style.visibility='visible'" onerror="this.style.display='none'">`;
     }
     if (card.label) {
       html += `<span class="card-label">${escHtml(card.label)}</span>`;
@@ -77,7 +78,10 @@
     return `<div class="card-face">${html}</div>`;
   }
 
-  function cardBackHtml() {
+  function cardBackHtml(cardBackImageUrl) {
+    if (cardBackImageUrl) {
+      return `<div class="card-back card-back-image" style="background-image: url('${escHtml(cardBackImageUrl)}')"><span class="card-back-mark">?</span></div>`;
+    }
     return '<div class="card-back"><span class="card-back-mark">?</span></div>';
   }
 
@@ -86,7 +90,7 @@
   class MemoryCardGame {
     constructor() {
       // ---- Config (overridden by host:init) ----
-      this.cfg = { timeSecs: 180, revealMs: 750, pointsPerMatch: 100 };
+      this.cfg = { timeSecs: 180, revealMs: 1200, pointsPerMatch: 100 };
       // ---- Runtime state ----
       this.pairs = [];      // teacher-defined pairs from runtime_config
       this.cards = [];      // shuffled board cards
@@ -101,9 +105,11 @@
       this.timerHandle = null;
       this.isDemo = false;
       this.matchedPairIds = new Set();
+      this.imagesReady = false; // track if images are preloaded
       // ---- Game-wide runtime config ----
       this.backgroundImageUrl = null;  // from runtime_config.background_image_url
-      this.moveLimit = null;            // from runtime_config.move_limit (null = unlimited)
+      this.cardBackImageUrl = null;   // from runtime_config.card_back_image_url
+      this.moveLimit = null;          // from runtime_config.move_limit (null = unlimited)
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -209,12 +215,13 @@
 
       // ── Extract game-wide runtime config ───────────────────────────────────
       this.backgroundImageUrl = rc.background_image_url || null;
+      this.cardBackImageUrl = rc.card_back_image_url || null;
       const moveLimitRaw = rc.move_limit;
       this.moveLimit = (moveLimitRaw && moveLimitRaw !== 'unlimited') 
         ? parseIntSafe(moveLimitRaw, null, 0) 
         : null;
 
-      log('applyInit() — backgroundImageUrl:', Boolean(this.backgroundImageUrl), 'moveLimit:', this.moveLimit);
+      log('applyInit() — backgroundImageUrl:', Boolean(this.backgroundImageUrl), 'cardBackImageUrl:', Boolean(this.cardBackImageUrl), 'moveLimit:', this.moveLimit);
       log('applyInit() — config:', this.cfg);
     }
 
@@ -222,6 +229,51 @@
       this.pairs = DEMO_PAIRS;
       this.isDemo = true;
       log('useDemoPairs() — loaded', this.pairs.length, 'demo pairs');
+    }
+
+    // ── Image Preloading ─────────────────────────────────────────────────────
+
+    preloadImages(callback) {
+      const imageUrls = [];
+      this.cards.forEach(card => {
+        if (card.imageUrl && !imageUrls.includes(card.imageUrl)) {
+          imageUrls.push(card.imageUrl);
+        }
+      });
+
+      if (imageUrls.length === 0) {
+        log('preloadImages() — no images to preload');
+        this.imagesReady = true;
+        if (callback) callback();
+        return;
+      }
+
+      log('preloadImages() — loading', imageUrls.length, 'images');
+      let loaded = 0;
+      let failed = 0;
+
+      imageUrls.forEach(url => {
+        const img = new Image();
+        img.onload = () => {
+          loaded++;
+          log('preloadImages() — loaded:', loaded, '/', imageUrls.length);
+          if (loaded + failed >= imageUrls.length) {
+            log('preloadImages() — all done. loaded:', loaded, 'failed:', failed);
+            this.imagesReady = true;
+            if (callback) callback();
+          }
+        };
+        img.onerror = () => {
+          failed++;
+          warn('preloadImages() — failed to load:', url);
+          if (loaded + failed >= imageUrls.length) {
+            log('preloadImages() — all done. loaded:', loaded, 'failed:', failed);
+            this.imagesReady = true;
+            if (callback) callback();
+          }
+        };
+        img.src = url;
+      });
     }
 
     // ── Round ────────────────────────────────────────────────────────────────
@@ -238,6 +290,7 @@
       this.paused = false;
       this.done = false;
       this.matchedPairIds = new Set();
+      this.imagesReady = false;
       this.cards = this.buildDeck();
 
       log('start() — deck built:', this.cards.length, 'cards');
@@ -248,9 +301,13 @@
       if (this.isDemo && this.$demoBanner) this.$demoBanner.hidden = false;
       else if (this.$demoBanner) this.$demoBanner.hidden = true;
 
-      this.startTimer();
-      this.emitState('started');
-      this.emitProgress('started');
+      // Preload all images before starting timer
+      this.preloadImages(() => {
+        log('start() — images preloaded, starting timer');
+        this.startTimer();
+        this.emitState('started');
+        this.emitProgress('started');
+      });
     }
 
     restart() { this.start(); }
@@ -355,13 +412,16 @@
       this.$board.style.gap = `${gap}px`;
       this.$board.style.justifyContent = 'center';
 
-      // Apply background image if provided
+      // Apply background image to the stage (full screen) if provided
       if (this.backgroundImageUrl) {
-        this.$board.style.backgroundImage = `url('${escHtml(this.backgroundImageUrl)}')`;
-        this.$board.style.backgroundSize = 'cover';
-        this.$board.style.backgroundPosition = 'center';
-        this.$board.style.backgroundAttachment = 'fixed';
-        this.$board.style.backgroundRepeat = 'no-repeat';
+        this.$stage.style.backgroundImage = `url('${escHtml(this.backgroundImageUrl)}')`;
+        this.$stage.style.backgroundSize = 'cover';
+        this.$stage.style.backgroundPosition = 'center';
+        this.$stage.style.backgroundAttachment = 'fixed';
+        this.$stage.style.backgroundRepeat = 'no-repeat';
+      } else {
+        // Reset to default background
+        this.$stage.style.backgroundImage = 'none';
       }
 
       this.$board.innerHTML = '';
@@ -370,7 +430,8 @@
         btn.type = 'button';
         btn.className = 'mc-card';
         btn.dataset.idx = String(idx);
-        btn.innerHTML = cardBackHtml();
+        // Include both faces for 3D flip animation
+        btn.innerHTML = `<div class="card-inner">${cardBackHtml(this.cardBackImageUrl)}${cardFaceHtml(card, false)}</div>`;
         btn.addEventListener('click', () => this.pick(idx));
         this.$board.appendChild(btn);
       });
@@ -381,12 +442,15 @@
     cardEl(idx) { return this.$board.querySelector(`.mc-card[data-idx="${idx}"]`); }
 
     flip(idx, faceUp) {
-      const card = this.cards[idx];
-      if (!card) return;
       const el = this.cardEl(idx);
       if (!el) return;
-      el.classList.toggle('is-flipped', faceUp);
-      el.innerHTML = faceUp ? cardFaceHtml(card) : cardBackHtml();
+      
+      // Toggle CSS class for 3D flip animation
+      if (faceUp) {
+        el.classList.add('is-flipped');
+      } else {
+        el.classList.remove('is-flipped');
+      }
     }
 
     lockCard(idx) {

@@ -183,6 +183,12 @@ export default function TeacherGamePackageDetail() {
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
 
+  // Memory card custom images
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
+  const [cardBackImageUrl, setCardBackImageUrl] = useState('');
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [uploadingCardBack, setUploadingCardBack] = useState(false);
+
   // Memory card pair count
   const [memoryCardPairCount, setMemoryCardPairCount] = useState(0);
 
@@ -225,6 +231,13 @@ export default function TeacherGamePackageDetail() {
         setTitle(packageData.title);
         setDescription(packageData.description || '');
         setThumbnailUrl(packageData.thumbnail_url || '');
+        // Load Memory Card specific settings from runtime_config
+        const packageIsMemoryCard = packageData.game_module?.slug === 'memory-card';
+        if (packageIsMemoryCard) {
+          const rc = packageData.runtime_config as Record<string, unknown> | null;
+          setBackgroundImageUrl((rc?.background_image_url as string) || '');
+          setCardBackImageUrl((rc?.card_back_image_url as string) || '');
+        }
         if (leaderboardResponse) {
           setLeaderboard(unwrapApiData<GameLeaderboardResponse>(leaderboardResponse));
         }
@@ -355,16 +368,65 @@ export default function TeacherGamePackageDetail() {
     }
   };
 
+  const handleBackgroundUpload = async (file: File) => {
+    setUploadingBackground(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/upload?sub_dir=backgrounds', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const uploadedUrl = response.data?.data?.url;
+      if (!uploadedUrl) {
+        throw new Error('Upload response is missing url');
+      }
+      setBackgroundImageUrl(uploadedUrl);
+      showSuccessToast('Đã tải ảnh nền.');
+    } catch {
+      showErrorToast('Không thể tải ảnh nền.');
+    } finally {
+      setUploadingBackground(false);
+    }
+  };
+
+  const handleCardBackUpload = async (file: File) => {
+    setUploadingCardBack(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/upload?sub_dir=card-backs', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const uploadedUrl = response.data?.data?.url;
+      if (!uploadedUrl) {
+        throw new Error('Upload response is missing url');
+      }
+      setCardBackImageUrl(uploadedUrl);
+      showSuccessToast('Đã tải ảnh mặt lưng thẻ.');
+    } catch {
+      showErrorToast('Không thể tải ảnh mặt lưng thẻ.');
+    } finally {
+      setUploadingCardBack(false);
+    }
+  };
+
   const handleSaveMeta = async () => {
     if (!packageId || !gamePackage || uploadingThumbnail) return;
 
     setSavingMeta(true);
     try {
-      const response = await gameService.updateGamePackage(packageId, {
+      const saveIsMemoryCard = gamePackage?.game_module?.slug === 'memory-card';
+      const updatePayload: Record<string, unknown> = {
         title: title.trim(),
         description: description.trim() || undefined,
         thumbnail_url: thumbnailUrl.trim() || undefined,
-      });
+      };
+      // Add Memory Card specific settings
+      if (saveIsMemoryCard) {
+        updatePayload.background_image_url = backgroundImageUrl.trim() || undefined;
+        updatePayload.card_back_image_url = cardBackImageUrl.trim() || undefined;
+      }
+      const response = await gameService.updateGamePackage(packageId, updatePayload);
       const updatedPackage = unwrapApiData<GamePackage>(response);
       setGamePackage(updatedPackage);
       showSuccessToast('Đã lưu thông tin gói trò chơi.');
@@ -550,72 +612,168 @@ export default function TeacherGamePackageDetail() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Tiêu đề</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
-              placeholder="VD: Memory Card - Từ vựng chủ đề động vật"
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả</label>
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={4}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
-              placeholder="Mô tả ngắn về mục tiêu học tập và trải nghiệm của học sinh."
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện</label>
-            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+        <div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-700">Tiêu đề</label>
               <input
                 type="text"
-                value={thumbnailUrl}
-                onChange={(event) => setThumbnailUrl(event.target.value)}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
                 className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
-                placeholder="Dán liên kết ảnh hoặc tải file lên"
+                placeholder="VD: Memory Card - Từ vựng chủ đề động vật"
               />
-              <label
-                className={`inline-flex h-[46px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
-                  uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
-                }`}
-              >
-                {uploadingThumbnail ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <UploadCloud className="mr-2 h-4 w-4" />
-                )}
-                {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  disabled={uploadingThumbnail}
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    await handleThumbnailUpload(file);
-                    event.target.value = '';
-                  }}
-                />
-              </label>
             </div>
-            {thumbnailUrl && (
-              <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                <img
-                  src={thumbnailUrl}
-                  alt="Ảnh đại diện trò chơi"
-                  className="h-40 w-full object-cover"
-                />
-              </div>
-            )}
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả</label>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                rows={4}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+                placeholder="Mô tả ngắn về mục tiêu học tập và trải nghiệm của học sinh."
+              />
+            </div>
           </div>
+
+          <div className="mt-6 flex items-center gap-4">
+            <label className="whitespace-nowrap text-sm font-medium text-slate-700">Ảnh đại diện</label>
+            <label
+              className={`inline-flex h-10 items-center justify-center rounded-2xl border border-primary px-5 text-sm font-medium text-primary transition ${
+                uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary hover:text-white'
+              }`}
+            >
+              {uploadingThumbnail ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <UploadCloud className="mr-2 h-4 w-4" />
+              )}
+              {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploadingThumbnail}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  await handleThumbnailUpload(file);
+                  event.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+          {thumbnailUrl && (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
+              <img
+                src={thumbnailUrl}
+                alt="Ảnh đại diện"
+                className="h-48 w-full object-cover"
+              />
+            </div>
+          )}
+
+          {/* Memory Card specific settings */}
+          {isMemoryCard && (
+            <div className="mt-6 space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-6">
+              <h3 className="text-sm font-semibold text-slate-900">Cài đặt Memory Card</h3>
+              
+              {/* Background & Card Back Image Upload - Same Row */}
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* Background Image Upload */}
+                <div className="flex flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 transition hover:border-primary">
+                  <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl bg-slate-100">
+                    {backgroundImageUrl ? (
+                      <img
+                        src={backgroundImageUrl}
+                        alt="Ảnh nền"
+                        className="h-full w-full rounded-xl object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <UploadCloud className="h-10 w-10 text-slate-400" />
+                    )}
+                  </div>
+                  <span className="mb-4 text-sm font-medium text-slate-700">Ảnh nền trò chơi</span>
+                  <label
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-primary px-6 py-2.5 text-sm font-medium text-primary transition ${
+                      uploadingBackground ? 'pointer-events-none opacity-50' : 'hover:bg-primary hover:text-white'
+                    }`}
+                  >
+                    {uploadingBackground ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Đang tải...
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="h-4 w-4" />
+                        {backgroundImageUrl ? 'Đổi ảnh' : 'Tải ảnh'}
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingBackground}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        await handleBackgroundUpload(file);
+                        event.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* Card Back Image Upload */}
+                <div className="flex flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-6 transition hover:border-primary">
+                  <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-xl bg-slate-100">
+                    {cardBackImageUrl ? (
+                      <img
+                        src={cardBackImageUrl}
+                        alt="Ảnh mặt lưng"
+                        className="h-full w-full rounded-xl object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <span className="text-4xl font-bold text-slate-400">?</span>
+                    )}
+                  </div>
+                  <span className="mb-4 text-sm font-medium text-slate-700">Ảnh mặt lưng thẻ</span>
+                  <label
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-primary px-6 py-2.5 text-sm font-medium text-primary transition ${
+                      uploadingCardBack ? 'pointer-events-none opacity-50' : 'hover:bg-primary hover:text-white'
+                    }`}
+                  >
+                    {uploadingCardBack ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Đang tải...
+                      </>
+                    ) : (
+                      <>
+                        <UploadCloud className="h-4 w-4" />
+                        {cardBackImageUrl ? 'Đổi ảnh' : 'Tải ảnh'}
+                      </>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploadingCardBack}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        await handleCardBackUpload(file);
+                        event.target.value = '';
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

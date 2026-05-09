@@ -275,6 +275,10 @@ def _runtime_config_for_package(
         )
         if background_url:
             runtime_config["background_image_url"] = background_url
+        # Pass card back image URL (custom card back design)
+        card_back_url = runtime_config.get("card_back_image_url")
+        if card_back_url:
+            runtime_config["card_back_image_url"] = card_back_url
         # Pass max moves (null = unlimited)
         move_limit = runtime_config.get("move_limit")
         if move_limit is None:
