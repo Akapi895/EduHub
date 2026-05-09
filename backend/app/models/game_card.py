@@ -40,6 +40,7 @@ class GameCardPair(Base):
     right_image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    difficulty_band: Mapped[str] = mapped_column(String, default="recognition", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Match mode per pair: "image_image" | "image_text" (auto-convert text to image)

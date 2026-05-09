@@ -8,7 +8,7 @@ export interface GameEditorStepDefinition {
   description: string;
 }
 
-export type GameEditorStepKey = 'overview' | 'questions';
+export type GameEditorStepKey = 'overview' | 'questions' | 'results';
 
 type StepBadgeVariant = 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' | 'gray' | 'red';
 
@@ -49,7 +49,7 @@ export default function GameEditorLayout({
       </div>
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="flex flex-wrap items-stretch gap-3">
           {steps.map((step, index) => {
             const active = step.key === activeStep;
             const meta = stepMeta?.[step.key as GameEditorStepKey];
@@ -58,7 +58,7 @@ export default function GameEditorLayout({
                 key={step.key}
                 type="button"
                 onClick={() => onStepChange(step.key as GameEditorStepKey)}
-                className={`rounded-3xl border px-4 py-4 text-left transition ${
+                className={`flex-1 min-w-[200px] rounded-3xl border px-4 py-4 text-left transition ${
                   active
                     ? 'border-sky-300 bg-sky-50 shadow-sm'
                     : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'

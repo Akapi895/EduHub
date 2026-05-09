@@ -11,12 +11,15 @@ import {
   Trophy,
   Trash2,
   UploadCloud,
+  BarChart3,
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import GameEditorLayout from '@/components/games/editor/GameEditorLayout';
 import GameQuestionEditor from '@/components/games/GameQuestionEditor';
 import MemoryCardPairEditor from '@/components/games/MemoryCardPairEditor';
+import Button from '@/components/common/Button';
+import Modal from '@/components/common/Modal';
 import {
   GAME_DIFFICULTY_BANDS,
   getBandMeta,
@@ -155,6 +158,7 @@ function toQuestionPayload(question: Question, orderIndex: number) {
 const EDITOR_STEPS = [
   { key: 'overview', label: 'Tổng quan', description: 'Thông tin gói trò chơi & bộ câu hỏi' },
   { key: 'questions', label: 'Câu hỏi', description: 'Danh sách & chỉnh sửa câu hỏi' },
+  { key: 'results', label: 'Kết quả', description: 'Thống kê & điểm số học sinh' },
 ] as const;
 
 type EditorStepKey = typeof EDITOR_STEPS[number]['key'];
@@ -178,6 +182,18 @@ export default function TeacherGamePackageDetail() {
   const [description, setDescription] = useState('');
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+
+  // Memory card pair count
+  const [memoryCardPairCount, setMemoryCardPairCount] = useState(0);
+
+  // Unpublish confirmation modal
+  const [showUnpublishConfirm, setShowUnpublishConfirm] = useState(false);
+
+  // Leaderboard data for results tab
+  const [leaderboardFull, setLeaderboardFull] = useState<GameLeaderboardResponse | null>(null);
+  const [selectedStudent, setSelectedStudent] = useState<GameLeaderboardResponse['entries'][0] | null>(null);
+  const [studentStats, setStudentStats] = useState<any>(null);
+  const [loadingStudentStats, setLoadingStudentStats] = useState(false);
 
   // Tab state
   const [activeStep, setActiveStep] = useState<EditorStepKey>('overview');
@@ -239,9 +255,12 @@ export default function TeacherGamePackageDetail() {
 
   const questionsByBand = useMemo(() => (
     GAME_DIFFICULTY_BANDS.reduce<Record<DifficultyBand, Question[]>>((accumulator, band) => {
-      accumulator[band] = questions
+      const saved = questions
         .filter((question) => question.difficulty_band === band)
         .sort((left, right) => left.order_index - right.order_index);
+      const pending = pendingQuestions
+        .filter((question) => question.difficulty_band === band);
+      accumulator[band] = [...saved, ...pending];
       return accumulator;
     }, {
       recognition: [],
@@ -249,14 +268,10 @@ export default function TeacherGamePackageDetail() {
       application_basic: [],
       application_advanced: [],
     })
-  ), [questions]);
+  ), [questions, pendingQuestions]);
 
-  // Include pending questions in current band
-  const currentBandQuestions = useMemo(() => {
-    const saved = questionsByBand[activeBand];
-    const pending = pendingQuestions.filter((q) => q.difficulty_band === activeBand);
-    return [...saved, ...pending];
-  }, [questionsByBand, activeBand, pendingQuestions]);
+  // Current band's questions (questionsByBand already includes pending)
+  const currentBandQuestions = questionsByBand[activeBand];
 
   const questionPlanPreview = getQuestionPlanPreview(gamePackage);
   const levelDistributionLabel = getLevelDistributionLabel(gamePackage);
@@ -271,17 +286,38 @@ export default function TeacherGamePackageDetail() {
   const isMemoryCard = gamePackage?.game_module?.slug === 'memory-card';
 
   // Calculate step meta
-  const totalQuestions = questions.length + pendingQuestions.length;
+  const totalQuestions = isMemoryCard
+    ? memoryCardPairCount
+    : questions.length + pendingQuestions.length;
   const stepMeta = useMemo(() => ({
     overview: {
-      badgeLabel: totalQuestions > 0 ? `${totalQuestions} câu` : 'Chưa có',
+      badgeLabel: totalQuestions > 0 ? `${totalQuestions} cặp` : 'Chưa có',
       badgeVariant: totalQuestions > 0 ? 'mint' as const : 'yellow' as const,
     },
     questions: {
-      badgeLabel: `${currentBandQuestions.length} câu hiện tại`,
-      badgeVariant: currentBandQuestions.length > 0 ? 'mint' as const : 'yellow' as const,
+      badgeLabel: isMemoryCard
+        ? `${memoryCardPairCount} cặp`
+        : `${currentBandQuestions.length} câu hiện tại`,
+      badgeVariant: (isMemoryCard ? memoryCardPairCount : currentBandQuestions.length) > 0 ? 'mint' as const : 'yellow' as const,
     },
-  }), [totalQuestions, currentBandQuestions.length]);
+    results: {
+      badgeLabel: leaderboard?.total_entries ? `${leaderboard.total_entries} học sinh` : 'Chưa có',
+      badgeVariant: (leaderboard?.total_entries ?? 0) > 0 ? 'mint' as const : 'yellow' as const,
+    },
+  }), [totalQuestions, memoryCardPairCount, isMemoryCard, currentBandQuestions.length, leaderboard]);
+
+  // Fetch full leaderboard when switching to results tab
+  useEffect(() => {
+    if (activeStep === 'results' && packageId && !leaderboardFull) {
+      gameService.getGameLeaderboard(packageId, { limit: 100 })
+        .then((res) => {
+          setLeaderboardFull(unwrapApiData<GameLeaderboardResponse>(res));
+        })
+        .catch(() => {
+          showErrorToast('Không thể tải kết quả học sinh.');
+        });
+    }
+  }, [activeStep, packageId, leaderboardFull]);
 
   // Scroll detection for sticky button
   useEffect(() => {
@@ -342,11 +378,17 @@ export default function TeacherGamePackageDetail() {
   const handleToggleHubPublication = async () => {
     if (!packageId || !gamePackage) return;
 
+    // If unpublishing, show confirmation first
+    if (gamePackage.published_to_hub) {
+      setShowUnpublishConfirm(true);
+      return;
+    }
+
+    // Publish directly
     setPublishing(true);
     try {
-      const nextPublished = !gamePackage.published_to_hub;
       const response = await gameService.updateGamePackagePublication(packageId, {
-        published: nextPublished,
+        published: true,
         visibility: gamePackage.hub_publication?.visibility === 'unlisted' ? 'unlisted' : 'public',
         featured: gamePackage.hub_publication?.featured ?? false,
         sort_order: gamePackage.hub_publication?.sort_order ?? 0,
@@ -354,7 +396,29 @@ export default function TeacherGamePackageDetail() {
       });
       const updatedPackage = unwrapApiData<GamePackage>(response);
       setGamePackage(updatedPackage);
-      showSuccessToast(nextPublished ? 'Đã publish trò chơi lên Game Hub.' : 'Đã gỡ trò chơi khỏi Game Hub.');
+      showSuccessToast('Đã publish trò chơi lên Game Hub.');
+    } catch {
+      showErrorToast('Không thể cập nhật trạng thái publish.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleConfirmUnpublish = async () => {
+    if (!packageId || !gamePackage) return;
+    setShowUnpublishConfirm(false);
+    setPublishing(true);
+    try {
+      const response = await gameService.updateGamePackagePublication(packageId, {
+        published: false,
+        visibility: gamePackage.hub_publication?.visibility === 'unlisted' ? 'unlisted' : 'public',
+        featured: gamePackage.hub_publication?.featured ?? false,
+        sort_order: gamePackage.hub_publication?.sort_order ?? 0,
+        metadata_json: gamePackage.hub_publication?.metadata_json ?? null,
+      });
+      const updatedPackage = unwrapApiData<GamePackage>(response);
+      setGamePackage(updatedPackage);
+      showSuccessToast('Đã gỡ trò chơi khỏi Game Hub.');
     } catch {
       showErrorToast('Không thể cập nhật trạng thái publish.');
     } finally {
@@ -561,38 +625,48 @@ export default function TeacherGamePackageDetail() {
           Tổng quan bộ câu hỏi
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          {GAME_DIFFICULTY_BANDS.map((band) => {
-            const meta = getBandMeta(band);
-            const savedCount = questionsByBand[band].length;
-            const pendingCount = pendingQuestions.filter((q) => q.difficulty_band === band).length;
-            const count = savedCount + pendingCount;
+        {isMemoryCard ? (
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-center">
+            <p className="text-sm text-slate-600">
+              <span className="text-2xl font-bold text-primary">{memoryCardPairCount}</span>
+              <span className="ml-2">cặp thẻ</span>
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Nhấn vào tab "Câu hỏi" để chỉnh sửa các cặp thẻ
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {GAME_DIFFICULTY_BANDS.map((band) => {
+              const meta = getBandMeta(band);
+              const count = questionsByBand[band].length;
 
-            return (
-              <button
-                key={band}
-                type="button"
-                onClick={() => {
-                  setActiveBand(band);
-                  setActiveStep('questions');
-                }}
-                className={`rounded-3xl border px-4 py-4 text-left transition ${
-                  activeBand === band && activeStep === 'questions'
-                    ? 'border-primary bg-blue-50 shadow-sm'
-                    : `border-slate-200 bg-white hover:border-slate-300 ${meta.accentClass}`
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-semibold text-slate-900">{meta.label}</span>
-                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
-                    {count}
-                  </span>
-                </div>
-                <p className="mt-2 text-xs leading-5 text-slate-500">{meta.description}</p>
-              </button>
-            );
-          })}
-        </div>
+              return (
+                <button
+                  key={band}
+                  type="button"
+                  onClick={() => {
+                    setActiveBand(band);
+                    setActiveStep('questions');
+                  }}
+                  className={`rounded-3xl border px-4 py-4 text-left transition ${
+                    activeBand === band && activeStep === 'questions'
+                      ? 'border-primary bg-blue-50 shadow-sm'
+                      : `border-slate-200 bg-white hover:border-slate-300 ${meta.accentClass}`
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold text-slate-900">{meta.label}</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
+                      {count}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">{meta.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {hasQuestionDistribution && (
           <div className="rounded-3xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">
@@ -626,15 +700,17 @@ export default function TeacherGamePackageDetail() {
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-center">
           <p className="text-sm text-slate-600">
             <span className="text-2xl font-bold text-primary">{totalQuestions}</span>
-            <span className="ml-2">câu hỏi trong bộ</span>
+            <span className="ml-2">{isMemoryCard ? 'cặp thẻ' : 'câu hỏi'} trong bộ</span>
           </p>
-          {pendingQuestions.length > 0 && (
+          {!isMemoryCard && pendingQuestions.length > 0 && (
             <p className="mt-1 text-xs text-amber-600">
               ({pendingQuestions.length} câu hỏi mới chưa lưu)
             </p>
           )}
           <p className="mt-1 text-xs text-slate-500">
-            Nhấn vào mức độ bên trên để chỉnh sửa câu hỏi cụ thể
+            {isMemoryCard
+              ? 'Nhấn vào tab "Câu hỏi" để chỉnh sửa các cặp thẻ'
+              : 'Nhấn vào mức độ bên trên để chỉnh sửa câu hỏi cụ thể'}
           </p>
         </div>
       </div>
@@ -644,7 +720,7 @@ export default function TeacherGamePackageDetail() {
   const renderQuestionsTab = () => (
     <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
       {isMemoryCard ? (
-        <MemoryCardPairEditor packageId={packageId!} />
+        <MemoryCardPairEditor packageId={packageId!} onPairCountChange={setMemoryCardPairCount} />
       ) : (
         <>
           <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -657,9 +733,7 @@ export default function TeacherGamePackageDetail() {
                 >
                   {GAME_DIFFICULTY_BANDS.map((band) => {
                     const meta = getBandMeta(band);
-                    const savedCount = questionsByBand[band].length;
-                    const pendingCount = pendingQuestions.filter((q) => q.difficulty_band === band).length;
-                    const count = savedCount + pendingCount;
+                    const count = questionsByBand[band].length;
                     return (
                       <option key={band} value={band}>
                         {meta.label} ({count} câu)
@@ -782,6 +856,118 @@ export default function TeacherGamePackageDetail() {
     </div>
   );
 
+  const renderResultsTab = () => (
+    <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="mb-6 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+        <Trophy className="h-4 w-4 text-amber-500" />
+        Kết quả học sinh
+      </div>
+
+      {!leaderboardFull && !loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <BarChart3 className="h-16 w-16 text-slate-300 mb-4" />
+          <p className="text-lg font-semibold text-slate-900">Chưa có dữ liệu kết quả</p>
+          <p className="mt-2 text-sm text-slate-500 text-center max-w-md">
+            Kết quả chơi của học sinh sẽ xuất hiện sau khi có học sinh hoàn thành trò chơi.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Student list */}
+          <div>
+            <h3 className="mb-4 text-sm font-semibold text-slate-700">Danh sách học sinh đã chơi</h3>
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+              {leaderboardFull?.entries.map((entry) => (
+                <button
+                  key={entry.user_id}
+                  onClick={() => setSelectedStudent(entry)}
+                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                    selectedStudent?.user_id === entry.user_id
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold ${
+                        entry.rank === 1 ? 'bg-amber-100 text-amber-600' :
+                        entry.rank === 2 ? 'bg-slate-200 text-slate-600' :
+                        entry.rank === 3 ? 'bg-orange-100 text-orange-600' :
+                        'bg-slate-100 text-slate-500'
+                      }`}>
+                        #{entry.rank}
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-900">{entry.student_name || 'Học sinh'}</p>
+                        <p className="text-xs text-slate-500">
+                          {entry.attempts_count} lượt chơi • {entry.best_duration_ms ? `${Math.round(entry.best_duration_ms / 1000)}s` : '-'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-primary">{entry.best_score_total ?? 0}</p>
+                      <p className="text-xs text-slate-500">điểm cao nhất</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Student detail */}
+          <div>
+            {selectedStudent ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <span className="text-2xl font-bold text-primary">{selectedStudent.student_name?.charAt(0) || '?'}</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-900">{selectedStudent.student_name || 'Học sinh'}</h3>
+                    <p className="text-sm text-slate-500">
+                      {selectedStudent.attempts_count} lượt chơi • Xếp hạng #{selectedStudent.rank}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stats grid */}
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div className="rounded-xl bg-white p-4 border border-slate-200">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Điểm cao nhất</p>
+                    <p className="text-2xl font-bold text-primary">{selectedStudent.best_score_total ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 border border-slate-200">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Thời gian tốt nhất</p>
+                    <p className="text-2xl font-bold text-emerald-600">
+                      {selectedStudent.best_duration_ms ? `${Math.round(selectedStudent.best_duration_ms / 1000)}s` : '-'}
+                    </p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 border border-slate-200">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Điểm kiến thức</p>
+                    <p className="text-2xl font-bold text-blue-600">{selectedStudent.best_score_question ?? 0}</p>
+                  </div>
+                  <div className="rounded-xl bg-white p-4 border border-slate-200">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Điểm ngữ cảnh</p>
+                    <p className="text-2xl font-bold text-purple-600">{selectedStudent.best_score_context ?? 0}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <p>Chơi lần cuối: {selectedStudent.last_played_at ? new Date(selectedStudent.last_played_at).toLocaleString('vi-VN') : '-'}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-12">
+                <Trophy className="h-12 w-12 text-slate-300 mb-3" />
+                <p className="text-sm text-slate-500">Chọn một học sinh để xem chi tiết</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-start gap-4">
@@ -871,9 +1057,19 @@ export default function TeacherGamePackageDetail() {
         </div>
 
         <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-            <Trophy className="h-4 w-4 text-amber-500" />
-            Leaderboard
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              Leaderboard
+            </div>
+            {leaderboard?.entries?.length ? (
+              <button
+                onClick={() => setActiveStep('results')}
+                className="text-xs text-primary hover:underline font-medium"
+              >
+                Xem tất cả →
+              </button>
+            ) : null}
           </div>
           {leaderboard?.entries?.length ? (
             <div className="mt-4 space-y-2">
@@ -894,14 +1090,43 @@ export default function TeacherGamePackageDetail() {
 
       <GameEditorLayout
         title="Biên soạn trò chơi"
-        description="Chia thành 2 phần: tổng quan thông tin và bộ câu hỏi, phần câu hỏi để biên soạn chi tiết từng câu hỏi."
+        description="Chia thành 3 phần: tổng quan thông tin, bộ câu hỏi và kết quả học sinh."
         steps={EDITOR_STEPS}
         activeStep={activeStep}
         onStepChange={setActiveStep}
         stepMeta={stepMeta}
       >
-        {activeStep === 'overview' ? renderOverviewTab() : renderQuestionsTab()}
+        {activeStep === 'overview' ? renderOverviewTab() : activeStep === 'questions' ? renderQuestionsTab() : renderResultsTab()}
       </GameEditorLayout>
+
+      {/* Unpublish confirmation modal */}
+      <Modal isOpen={showUnpublishConfirm} onClose={() => setShowUnpublishConfirm(false)} title="Gỡ khỏi Game Hub?" size="sm">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-xl">
+            <Globe2 className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium text-gray-900">Xác nhận gỡ trò chơi khỏi Game Hub?</p>
+              <p className="mt-2 text-sm text-gray-600">
+                Khi gỡ khỏi Game Hub, tất cả nội dung liên quan đến <strong>leaderboard sẽ bị biến mất hoàn toàn</strong>.
+                Học sinh sẽ không thể xem bảng xếp hạng và điểm số của mình.
+              </p>
+              <p className="mt-2 text-sm text-gray-500">
+                Trò chơi vẫn được giữ lại và có thể publish lại sau.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setShowUnpublishConfirm(false)}>Hủy</Button>
+            <Button
+              onClick={handleConfirmUnpublish}
+              disabled={publishing}
+              className="bg-red-500 hover:bg-red-600 text-white"
+            >
+              {publishing ? 'Đang xử lý...' : 'Gỡ khỏi Game Hub'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

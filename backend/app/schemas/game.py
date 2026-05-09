@@ -150,6 +150,7 @@ class GameCardPairCreate(BaseModel):
     right_image_url: str | None = None
     order_index: int = 0
     match_mode: str = "image_image"
+    difficulty_band: DifficultyBand = "recognition"
 
 
 class GameCardPairUpdate(BaseModel):
@@ -160,3 +161,4 @@ class GameCardPairUpdate(BaseModel):
     right_image_url: str | None = None
     order_index: int | None = None
     match_mode: str | None = None
+    difficulty_band: DifficultyBand | None = None

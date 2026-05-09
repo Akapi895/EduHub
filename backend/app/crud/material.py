@@ -24,8 +24,28 @@ def create_folder(db: Session, *, data: FolderCreate, created_by: str) -> Folder
 
 
 def delete_folder(db: Session, *, folder: Folder) -> None:
-    # Unlink materials from folder (don't delete them)
-    db.query(Material).filter(Material.folder_id == folder.id).update({Material.folder_id: None})
+    # Delete folder copies (materials with source_id) inside this folder — they were created
+    # specifically for this folder and should be removed when the folder is deleted.
+    # Keep original materials (source_id=None) but unlink them from the folder.
+    folder_copy_ids = [
+        r[0] for r in db.query(Material.id)
+        .filter(Material.folder_id == folder.id, Material.source_id != None)  # noqa: E711
+        .all()
+    ]
+    if folder_copy_ids:
+        db.query(MaterialView).filter(MaterialView.material_id.in_(folder_copy_ids)).delete(
+            synchronize_session=False,
+        )
+        db.query(ClassMaterial).filter(ClassMaterial.material_id.in_(folder_copy_ids)).delete(
+            synchronize_session=False,
+        )
+        db.query(Material).filter(Material.id.in_(folder_copy_ids)).delete(synchronize_session=False)
+
+    db.query(Material).filter(
+        Material.folder_id == folder.id,
+        Material.source_id == None,  # noqa: E711 — keep originals, just unlink
+    ).update({Material.folder_id: None}, synchronize_session=False)
+
     db.delete(folder)
     db.commit()
 
@@ -194,8 +214,12 @@ def copy_material(db: Session, *, source: Material, created_by: str,
     return m
 
 
-def detach_direct_copies(db: Session, *, material_id: str) -> None:
-    db.query(Material).filter(Material.source_id == material_id).update(
+def detach_folder_copies(db: Session, *, material_id: str) -> None:
+    """Remove source_id from copies that are in the root (no folder), keeping folder copies alive."""
+    db.query(Material).filter(
+        Material.source_id == material_id,
+        Material.folder_id == None,  # noqa: E711 — only root-level copies
+    ).update(
         {Material.source_id: None},
         synchronize_session=False,
     )
@@ -204,7 +228,7 @@ def detach_direct_copies(db: Session, *, material_id: str) -> None:
 def delete_exact(db: Session, *, material: Material, preserve_descendants: bool = True) -> None:
     """Delete only the requested material and optionally keep derived copies alive."""
     if preserve_descendants:
-        detach_direct_copies(db, material_id=material.id)
+        detach_folder_copies(db, material_id=material.id)
     db.query(MaterialView).filter(MaterialView.material_id == material.id).delete(synchronize_session=False)
     db.query(ClassMaterial).filter(ClassMaterial.material_id == material.id).delete(synchronize_session=False)
     db.delete(material)

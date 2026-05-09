@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Loader2, UploadCloud, X } from 'lucide-react';
+import { Loader2, UploadCloud, X, Image } from 'lucide-react';
 
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
@@ -15,15 +15,18 @@ interface Props {
 
 export interface MemoryCardRuntimeConfig {
   background_image_url?: string;
+  card_back_image_url?: string;
   move_limit?: number | 'unlimited';
   max_moves?: number | 'unlimited';
 }
 
 export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConfigUpdate }: Props) {
   const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
+  const [cardBackImageUrl, setCardBackImageUrl] = useState('');
   const [moveLimitMode, setMoveLimitMode] = useState<'unlimited' | 'limited'>('unlimited');
   const [moveLimit, setMoveLimit] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [uploadingCardBack, setUploadingCardBack] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -40,6 +43,9 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
           const cfg = pkg.runtime_config as MemoryCardRuntimeConfig;
           if (cfg.background_image_url) {
             setBackgroundImageUrl(cfg.background_image_url);
+          }
+          if (cfg.card_back_image_url) {
+            setCardBackImageUrl(cfg.card_back_image_url);
           }
           const rawMoveLimit = cfg.move_limit ?? cfg.max_moves;
           if (rawMoveLimit && rawMoveLimit !== 'unlimited') {
@@ -59,7 +65,7 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
 
   // Upload background image
   const handleUploadBackground = useCallback(async (file: File) => {
-    setUploading(true);
+    setUploadingBackground(true);
     try {
       const form = new FormData();
       form.append('file', file);
@@ -73,7 +79,27 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
     } catch {
       showErrorToast('Không thể tải ảnh nền.');
     } finally {
-      setUploading(false);
+      setUploadingBackground(false);
+    }
+  }, []);
+
+  // Upload card back image
+  const handleUploadCardBack = useCallback(async (file: File) => {
+    setUploadingCardBack(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await api.post('/upload?sub_dir=card-backs', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const url = res.data?.data?.url as string | undefined;
+      if (!url) throw new Error('No URL returned');
+      setCardBackImageUrl(url);
+      showSuccessToast('Đã tải ảnh mặt thẻ.');
+    } catch {
+      showErrorToast('Không thể tải ảnh mặt thẻ.');
+    } finally {
+      setUploadingCardBack(false);
     }
   }, []);
 
@@ -102,6 +128,10 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
         runtimeConfig.background_image_url = backgroundImageUrl.trim();
       }
 
+      if (cardBackImageUrl.trim()) {
+        runtimeConfig.card_back_image_url = cardBackImageUrl.trim();
+      }
+
       if (moveLimitMode === 'limited') {
         runtimeConfig.move_limit = parseInt(moveLimit, 10);
       } else {
@@ -117,7 +147,7 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
     } finally {
       setSaving(false);
     }
-  }, [packageId, backgroundImageUrl, moveLimitMode, moveLimit, totalCardPairs, onConfigUpdate]);
+  }, [packageId, backgroundImageUrl, cardBackImageUrl, moveLimitMode, moveLimit, totalCardPairs, onConfigUpdate]);
 
   if (loading) {
     return (
@@ -132,8 +162,67 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
       <div>
         <h2 className="text-lg font-semibold text-slate-900">Cấu hình Memory Card</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Tùy chỉnh ảnh nền và giới hạn lượt chơi cho trò chơi.
+          Tùy chỉnh ảnh nền, mặt thẻ và giới hạn lượt chơi cho trò chơi.
         </p>
+      </div>
+
+      {/* Card back image section */}
+      <div className="space-y-3">
+        <label className="block text-sm font-semibold text-slate-700">
+          <span className="flex items-center gap-2">
+            <Image className="h-4 w-4" />
+            Ảnh mặt sấp thẻ (tùy chọn)
+          </span>
+        </label>
+        <p className="text-xs text-slate-500">
+          Ảnh hiển thị khi thẻ chưa được lật. Nếu không chọn, sẽ dùng ảnh mặc định.
+        </p>
+
+        <div className="flex items-center gap-4">
+          <label
+            className={`inline-flex items-center justify-center rounded-button border border-primary px-4 py-2.5 text-sm font-medium text-primary transition ${
+              uploadingCardBack ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
+            }`}
+          >
+            {uploadingCardBack ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <UploadCloud className="mr-2 h-4 w-4" />
+            )}
+            {uploadingCardBack ? 'Đang tải...' : 'Chọn ảnh mặt thẻ'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploadingCardBack}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) await handleUploadCardBack(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
+
+          {cardBackImageUrl && (
+            <div className="relative flex items-center gap-2">
+              <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                <img
+                  src={cardBackImageUrl}
+                  alt="Card back preview"
+                  className="h-12 w-12 object-cover"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setCardBackImageUrl('')}
+                className="rounded-lg bg-white p-1.5 shadow hover:bg-slate-50"
+                title="Xóa ảnh"
+              >
+                <X className="h-4 w-4 text-slate-600" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Background image section */}
@@ -145,47 +234,51 @@ export default function MemoryCardGameConfig({ packageId, totalCardPairs, onConf
           Ảnh nền sẽ được hiển thị phía sau lưới thẻ. Khuyến cáo: ảnh có độ phân giải cao, nền mờ hoặc pattern.
         </p>
 
-        <label
-          className={`inline-flex items-center justify-center rounded-button border border-primary px-4 py-2.5 text-sm font-medium text-primary transition ${
-            uploading ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
-          }`}
-        >
-          {uploading ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <UploadCloud className="mr-2 h-4 w-4" />
-          )}
-          {uploading ? 'Đang tải...' : 'Tải ảnh'}
-          <input
-            type="file"
-            accept="image/*"
-            className="hidden"
-            disabled={uploading}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (file) await handleUploadBackground(file);
-              e.target.value = '';
-            }}
-          />
-        </label>
-
-        {backgroundImageUrl && (
-          <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-            <img
-              src={backgroundImageUrl}
-              alt="Game background preview"
-              className="h-32 w-full object-cover"
+        <div className="flex items-center gap-4">
+          <label
+            className={`inline-flex items-center justify-center rounded-button border border-primary px-4 py-2.5 text-sm font-medium text-primary transition ${
+              uploadingBackground ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
+            }`}
+          >
+            {uploadingBackground ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <UploadCloud className="mr-2 h-4 w-4" />
+            )}
+            {uploadingBackground ? 'Đang tải...' : 'Chọn ảnh nền'}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={uploadingBackground}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) await handleUploadBackground(file);
+                e.target.value = '';
+              }}
             />
-            <button
-              type="button"
-              onClick={() => setBackgroundImageUrl('')}
-              className="absolute right-2 top-2 rounded-lg bg-white/80 p-1.5 hover:bg-white"
-              title="Xóa ảnh"
-            >
-              <X className="h-4 w-4 text-slate-600" />
-            </button>
-          </div>
-        )}
+          </label>
+
+          {backgroundImageUrl && (
+            <div className="relative flex items-center gap-2">
+              <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                <img
+                  src={backgroundImageUrl}
+                  alt="Game background preview"
+                  className="h-12 w-20 object-cover"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setBackgroundImageUrl('')}
+                className="rounded-lg bg-white p-1.5 shadow hover:bg-slate-50"
+                title="Xóa ảnh"
+              >
+                <X className="h-4 w-4 text-slate-600" />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Move limit section */}

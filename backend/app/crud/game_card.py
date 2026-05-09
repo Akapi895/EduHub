@@ -19,6 +19,7 @@ def serialize_card_pair(pair: GameCardPair) -> dict:
         "right_label": pair.right_label,
         "right_image_url": pair.right_image_url,
         "order_index": pair.order_index,
+        "difficulty_band": pair.difficulty_band,
         "match_mode": pair.match_mode,
         "is_active": pair.is_active,
         "created_at": pair.created_at,
@@ -61,6 +62,7 @@ def create_card_pair(db: Session, *, package_id: str, data: GameCardPairCreate) 
         right_image_url=data.right_image_url,
         order_index=data.order_index,
         match_mode=data.match_mode,
+        difficulty_band=data.difficulty_band,
     )
     db.add(pair)
     db.commit()

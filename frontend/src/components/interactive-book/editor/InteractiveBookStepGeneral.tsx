@@ -96,7 +96,7 @@ export default function InteractiveBookStepGeneral({
               url={form.thumbnail_url}
               accept="image/*"
               kind="image"
-              description="Ưu tiên tải ảnh lên trực tiếp. Chỉ dùng liên kết ngoài khi thực sự cần."
+              // description="Ưu tiên tải ảnh lên trực tiếp. Chỉ dùng liên kết ngoài khi thực sự cần."
               disabled={readOnly}
               uploading={coverUploading}
               onUploadFile={onUploadCover}

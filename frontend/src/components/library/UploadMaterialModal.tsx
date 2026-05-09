@@ -5,6 +5,7 @@ import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import Modal from '@/components/common/Modal';
 import api from '@/services/api';
+import { showErrorToast } from '@/store/toast.store';
 import { GRADES, SUBJECTS } from '@/utils/constants';
 
 interface UploadedFilePayload {
@@ -108,8 +109,9 @@ export default function UploadMaterialModal({
       });
 
       resetForm();
-    } catch {
-      // Parent handles request errors.
+    } catch (err: any) {
+      const message = err.response?.data?.message || err.response?.data?.detail || 'Upload tài liệu thất bại';
+      showErrorToast(message);
     } finally {
       setUploading(false);
     }
@@ -181,12 +183,12 @@ export default function UploadMaterialModal({
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Ảnh thumbnail</label>
-          {!thumbnailPreview && (
+          <label className="mb-1 block text-sm font-medium text-gray-700">Ảnh thumbnail (Optional)</label>
+          {/* {!thumbnailPreview && (
             <p className="mb-2 text-xs text-gray-500">
               Có thể bỏ trống. Hệ thống sẽ tự tạo thumbnail khi file hỗ trợ, ví dụ lấy trang đầu của PDF.
             </p>
-          )}
+          )} */}
 
           {thumbnailPreview ? (
             <div className="relative h-40 w-full overflow-hidden rounded-xl border border-border">
