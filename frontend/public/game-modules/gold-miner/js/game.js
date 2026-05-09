@@ -21,6 +21,7 @@ let index = -1;
 let level = -1;
 let timeH = 0;
 let vlH = 0;
+let isQuestionItemJustCollected = false;
 
 const bridge = window.EduHubGameBridge || null;
 
@@ -217,9 +218,9 @@ class game {
       this.resetSession();
     }
     // Set targetScore first, before any bridge calls
-    // Use runtimeConfig if provided via host:init, otherwise use default
-    const targetScoreFromConfig = this.runtimeConfig && typeof this.runtimeConfig.targetScore === 'number' 
-      ? this.runtimeConfig.targetScore 
+    // Use questionPlan if available, otherwise fallback to getTargetForLevel
+    const targetScoreFromConfig = Array.isArray(this.questionPlan.target_scores_by_level) && this.questionPlan.target_scores_by_level[0]
+      ? this.questionPlan.target_scores_by_level[0]
       : this.getTargetForLevel(1);
     this.targetScore = targetScoreFromConfig;
 
@@ -348,10 +349,8 @@ class game {
         this.resetSession();
         this.didHostInit = true;
         this.isPaused = false;
-        // Update targetScore based on runtimeConfig now that it's available
-        this.targetScore = (this.runtimeConfig && typeof this.runtimeConfig.targetScore === 'number')
-          ? this.runtimeConfig.targetScore
-          : this.getTargetForLevel(Math.max(level + 1, 1));
+        // Update targetScore based on question plan (from runtimeConfig)
+        this.targetScore = this.questionPlan.target_scores_by_level[0] || this.getTargetForLevel(Math.max(level + 1, 1));
         this.reportState('host-init', true, {
           questionResult: payload && payload.questionResult ? payload.questionResult : null,
         });
@@ -481,6 +480,9 @@ class game {
         ? questionPlan.target_scores_by_level
         : [DEFAULT_TARGET_SCORE_BASE],
     };
+
+    // Set initial target score from question plan
+    this.targetScore = this.questionPlan.target_scores_by_level[0] || DEFAULT_TARGET_SCORE_BASE;
 
     this.maxLevels = Number(session && session.max_levels) > 0
       ? Number(session.max_levels)
@@ -841,6 +843,7 @@ class game {
     drag = false;
     timeH = -1;
     vlH = 0;
+    isQuestionItemJustCollected = false;
     level += 1;
     this.targetScore = this.getTargetForLevel(Math.max(level + 1, 1));
     this.capturedItemsInLevel = 0;
@@ -936,6 +939,9 @@ class game {
     }
 
     if (this.isPaused) {
+      // Continue counting time even when paused for questions
+      // This allows fair time comparison between players
+      this.elapsedTimeSeconds += 0.01;
       this.draw();
       this.reportState('paused');
       this.scheduleNextLoop(100);
@@ -1103,6 +1109,9 @@ class game {
             const shouldTriggerQuestion = this.shouldRequestQuestionForCapture(currentLevel, this.capturedItemsInLevel);
             const isQuestionItem = this.isQuestionItem(this.capturedItemsInLevel, currentLevel);
 
+            // Track if this is a question item for popup display logic
+            isQuestionItemJustCollected = isQuestionItem;
+
             if (isQuestionItem) {
               // Store item score as pending - will be added only when question is answered correctly
               // Debug: uncomment to track pending items
@@ -1190,7 +1199,8 @@ class game {
     if (!drag) {
       r = R;
     }
-    MaxLeng = this.range(XXX, YYY, game_W - 2 * this.getWidth(), game_H - 2 * this.getWidth()) * 0.8;
+    // Max rope length based on diagonal distance to cover all corners equally
+    MaxLeng = this.range(XXX, YYY, game_W, game_H) * 0.98;
   }
 
   draw() {
@@ -1304,13 +1314,13 @@ class game {
 
     const leftBoxX = unit * 0.18;
     const leftBoxY = unit * 0.24;
-    const leftBoxW = unit * 3.25;
+    const leftBoxW = unit * 3.8;  // Increased width
     const leftBoxH = unit * 2.55;
     const leftPadX = unit * 0.22;
 
-    const rightBoxX = game_W - unit * 4.3;
+    const rightBoxX = game_W - unit * 4.8;  // Adjusted for wider right panel
     const rightBoxY = unit * 0.24;
-    const rightBoxW = unit * 4.05;
+    const rightBoxW = unit * 4.6;  // Increased width
     const rightBoxH = unit * 3.45;
     const rightPadX = unit * 0.34;
 
@@ -1365,8 +1375,8 @@ class game {
     // Draw lives below target
     this.drawLives();
     
-    // Draw score popup indicator
-    if (Math.abs(timeH - this.elapsedTimeSeconds) <= 0.7) {
+    // Draw score popup indicator - only for non-question items
+    if (Math.abs(timeH - this.elapsedTimeSeconds) <= 0.7 && !isQuestionItemJustCollected) {
       this.context.fillStyle = 'red';
       this.context.font = `bold ${this.getWidth() * 0.7}px Arial`;
       this.context.fillText(`+${vlH}`, XXX, YYY * 0.8);

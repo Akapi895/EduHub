@@ -776,14 +776,10 @@ def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> d
 
     existing = _find_in_progress_attempt(db, package_id=package_id, student_id=student.id)
     if existing:
-        # Reset Gold Miner runtime state for fresh start
-        if _is_gold_miner_package(existing.package):
-            existing.runtime_state = {"wrong_attempts": 0, "unanswered_question_queue": []}
-            db.add(existing)
-        question_plan = _ensure_gold_miner_question_plan(existing)
-        if question_plan is not None:
-            db.commit()
-        return _start_response(db, existing, resume=True)
+        # Reset progress on reload/exit: Delete existing attempt and start fresh.
+        # This ensures all question attempts and game state are cleared.
+        db.delete(existing)
+        db.commit()
 
     max_attempt_index = (
         db.query(PackageAttempt)

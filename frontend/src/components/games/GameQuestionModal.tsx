@@ -2,8 +2,9 @@ import { createPortal } from 'react-dom';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, UploadCloud } from 'lucide-react';
 
-import { getAttemptMetric, getAttemptProgressPercent } from '@/features/games/helpers';
+import { getAttemptMetric, getAttemptProgressPercent, getBandMeta } from '@/features/games/helpers';
 import type {
+  DifficultyBand,
   GameRuntimeQuestion,
   MatchingLeftItem,
   MatchingRightItem,
@@ -191,6 +192,16 @@ export default function GameQuestionModal({
                 <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-amber-800">
                   {question.points} điểm
                 </span>
+              )}
+              {questionAttempt?.difficulty_band_snapshot && (
+                (() => {
+                  const bandMeta = getBandMeta(questionAttempt.difficulty_band_snapshot as DifficultyBand);
+                  return (
+                    <span className={`rounded-full border px-2 py-0.5 font-medium ${bandMeta.accentClass}`}>
+                      {bandMeta.label}
+                    </span>
+                  );
+                })()
               )}
             </div>
             <p className="text-base font-semibold leading-6 text-slate-900">

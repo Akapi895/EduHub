@@ -274,6 +274,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   const resumeRetryIssuedAtRef = useRef(0);
   const telemetryOfflineUntilRef = useRef(0);
   const questionBusyTimerRef = useRef<number | null>(null);
+  const exitConfirmedRef = useRef(false);
+  const isFirstRenderRef = useRef(true);
 
   const [manifest, setManifest] = useState<GameManifest | null>(initialManifest);
   const [manifestError, setManifestError] = useState<string | null>(null);
@@ -808,6 +810,13 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   }, [bridgeReady, sessionKey]);
 
   useEffect(() => {
+    // Skip restoration on first render (page load) to allow game to start fresh
+    // Only restore active question on tab visibility changes (user comes back to tab)
+    if (isFirstRenderRef.current) {
+      isFirstRenderRef.current = false;
+      return;
+    }
+
     if (playBundle.active_question && playBundle.active_question_attempt) {
       restoreActiveQuestion(playBundle.active_question, playBundle.active_question_attempt);
     }
@@ -876,19 +885,25 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         if (!attemptId || completionAttemptRef.current === attemptId) return;
 
         completionAttemptRef.current = attemptId;
+
+        // Always complete the attempt (both success and game_over) to update leaderboard
         void gameService.completeGamePackage(gamePackage.id, {
           attempt_id: attemptId,
           summary_payload: (message.payload as Record<string, unknown>) ?? {},
           runtime_state: nextRuntimeSnapshot,
+        }).then(() => {
+          // On success, reload leaderboard
+          void loadLeaderboard();
         }).catch((error: unknown) => {
           completionAttemptRef.current = null;
-          setRuntimeStatus('running');
-          showErrorToast(extractApiErrorMessage(error, 'Em cần hoàn thành toàn bộ câu hỏi trước khi kết thúc trò chơi.'));
-          sendHostCommand('host:resume', 'completion-rejected', {
-            attemptTotals,
-          });
-        }).finally(() => {
-          void loadLeaderboard();
+          // Only show error toast if not game_over (game_over doesn't require completion)
+          if (outcome !== 'game_over') {
+            setRuntimeStatus('running');
+            showErrorToast(extractApiErrorMessage(error, 'Em cần hoàn thành toàn bộ câu hỏi trước khi kết thúc trò chơi.'));
+            sendHostCommand('host:resume', 'completion-rejected', {
+              attemptTotals,
+            });
+          }
         });
         void logRuntimeEvent('complete', (message.payload as Record<string, unknown>) ?? {});
         return;
@@ -929,6 +944,11 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   // Handle page unload / back navigation - ask user before leaving
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      // Skip if already confirmed via handleExitToList (to avoid double confirmation)
+      if (exitConfirmedRef.current) {
+        return;
+      }
+
       // Only warn if game is in progress
       if (runtimeStatus === 'completed' || runtimeStatus === 'error') {
         return;
@@ -991,10 +1011,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
   };
 
   const handleExitToList = async () => {
+    // Mark as exiting to prevent beforeunload from showing another confirmation
+    exitConfirmedRef.current = true;
+
     // Confirm with user if game is in progress
     if (runtimeStatus !== 'completed' && runtimeStatus !== 'error' && runtimeStatus !== 'booting') {
       const confirmed = window.confirm('Ban co dang choi game. Ban co chac muon thoat? Tien do se bi mat va phai choi lai tu dau.');
       if (!confirmed) {
+        exitConfirmedRef.current = false;
         return;
       }
 
@@ -1103,36 +1127,46 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
               </div>
               <h2 className="mt-4 text-2xl font-bold text-slate-900">Hết mạng!</h2>
               <p className="mt-2 text-slate-600">
-                Rất tiếc, bạn đã thua trò chơi. Điểm số của bạn sẽ không được ghi vào bảng xếp hạng.
+                Kết quả của bạn đã được ghi vào bảng xếp hạng.
               </p>
               <div className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <p className="text-sm text-slate-500">Điểm đạt được</p>
                 <p className="text-3xl font-bold text-slate-900">{gameOverData.score}</p>
               </div>
-              <div className="mt-6 flex w-full gap-3">
+              <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row">
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => {
-                    setGameOverModalOpen(false);
-                    window.location.href = '/student/games';
-                  }}
+                  onClick={() => setGameOverModalOpen(false)}
                   className="flex-1 border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 >
-                  Thoát
+                  Xem bảng xếp hạng
                 </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={() => {
-                    setGameOverModalOpen(false);
-                    handleRestart();
-                  }}
-                  className="flex-1"
-                >
-                  <RefreshCcw className="mr-1.5 h-4 w-4" />
-                  Chơi lại
-                </Button>
+                <div className="flex gap-3 sm:flex-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setGameOverModalOpen(false);
+                      window.location.href = '/student/games';
+                    }}
+                    className="flex-1 border-slate-200 text-slate-700 hover:bg-slate-50"
+                  >
+                    Thoát
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    onClick={() => {
+                      setGameOverModalOpen(false);
+                      handleRestart();
+                    }}
+                    className="flex-1"
+                  >
+                    <RefreshCcw className="mr-1.5 h-4 w-4" />
+                    Chơi lại
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
