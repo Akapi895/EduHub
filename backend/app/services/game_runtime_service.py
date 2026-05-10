@@ -783,6 +783,224 @@ def get_play_data(db: Session, *, package_id: str, student: User) -> dict:
     }
 
 
+def get_teacher_preview_data(db: Session, *, package_id: str, teacher: User) -> dict:
+    """Get preview data for a teacher to test-play their game without student access restrictions."""
+    print(f"[PREVIEW SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    ensure_default_game_modules(db)
+    
+    package = game_crud.get_game_package(db, package_id)
+    if not package:
+        print(f"[PREVIEW SERVICE] Package not found: {package_id}")
+        raise HTTPException(status_code=404, detail="Game package not found")
+    
+    # Verify teacher owns this package or has access
+    is_owner = package.created_by == teacher.id
+    is_assigned = any(
+        assignment.class_ and assignment.class_.teacher_id == teacher.id
+        for assignment in package.assignments
+    )
+    print(f"[PREVIEW SERVICE] is_owner: {is_owner}, is_assigned: {is_assigned}")
+    
+    if not is_owner and not is_assigned:
+        print(f"[PREVIEW SERVICE] Access denied for teacher {teacher.id}")
+        raise HTTPException(status_code=403, detail="You don't have access to this game package")
+    
+    module = package.game_config.game_module if package.game_config else None
+    
+    return {
+        "package": game_crud.serialize_game_package(package, class_id=None),
+        "module": game_crud.serialize_game_module(module),
+        "manifest_url": module.manifest_url if module else None,
+        "entry": ((module.capability_config or {}).get("entry") if module else None),
+        "runtime_config": _runtime_config_for_package(package, db=db),
+        "access": {
+            "allowed": True,
+            "class_id": None,
+            "play_context": "preview",
+            "access_rule_id": None,
+        },
+        "attempt": None,
+        "active_question_attempt": None,
+        "active_question": None,
+    }
+
+
+def start_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User) -> dict:
+    """Start a preview attempt for teacher to test-play the game."""
+    print(f"[PREVIEW START SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    ensure_default_game_modules(db)
+    
+    package = game_crud.get_game_package(db, package_id)
+    if not package:
+        raise HTTPException(status_code=404, detail="Game package not found")
+    
+    # Delete any existing preview attempts for this teacher/package
+    existing = (
+        db.query(PackageAttempt)
+        .filter(
+            PackageAttempt.package_id == package_id,
+            PackageAttempt.user_id == teacher.id,
+            PackageAttempt.play_context == "preview",
+        )
+        .first()
+    )
+    if existing:
+        db.delete(existing)
+        db.commit()
+    
+    attempt = PackageAttempt(
+        package_id=package_id,
+        user_id=teacher.id,
+        class_id=None,
+        play_context="preview",
+        access_rule_id=None,
+        attempt_index=1,
+        status=PackageAttemptStatus.in_progress,
+        started_at=now_local_naive(),
+    )
+    db.add(attempt)
+    db.flush()
+    
+    _ensure_gold_miner_question_plan(attempt)
+    attempt.runtime_state = {"wrong_attempts": 0, "unanswered_question_queue": []}
+    
+    db.add(
+        GameRuntimeEvent(
+            package_attempt_id=attempt.id,
+            event_type="attempt_started",
+            event_payload={"package_id": package_id, "play_context": "preview"},
+        )
+    )
+    db.commit()
+    
+    created = get_game_attempt(db, attempt.id)
+    if not created:
+        raise HTTPException(status_code=500, detail="Failed to start preview attempt")
+    return _start_response(db, created, resume=False)
+
+
+def complete_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User) -> dict:
+    """Complete a preview attempt for teacher."""
+    print(f"[PREVIEW COMPLETE SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    attempt = (
+        db.query(PackageAttempt)
+        .filter(
+            PackageAttempt.package_id == package_id,
+            PackageAttempt.user_id == teacher.id,
+            PackageAttempt.play_context == "preview",
+            PackageAttempt.status == PackageAttemptStatus.in_progress,
+        )
+        .first()
+    )
+    if not attempt:
+        raise HTTPException(status_code=404, detail="No active preview attempt found")
+    
+    completed_at = now_local_naive()
+    attempt.completed_at = completed_at
+    attempt.submitted_at = completed_at
+    attempt.status = PackageAttemptStatus.completed
+    db.commit()
+    
+    refreshed_attempt = get_game_attempt(db, attempt.id)
+    if not refreshed_attempt:
+        raise HTTPException(status_code=500, detail="Failed to complete preview attempt")
+    return serialize_attempt_detail(refreshed_attempt)
+
+
+def abandon_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User) -> None:
+    """Abandon a preview attempt for teacher."""
+    print(f"[PREVIEW ABANDON SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    attempt = (
+        db.query(PackageAttempt)
+        .filter(
+            PackageAttempt.package_id == package_id,
+            PackageAttempt.user_id == teacher.id,
+            PackageAttempt.play_context == "preview",
+        )
+        .first()
+    )
+    if attempt:
+        db.delete(attempt)
+        db.commit()
+
+
+def _get_preview_attempt(db: Session, package_id: str, teacher_id: str) -> PackageAttempt | None:
+    """Get the active preview attempt for a teacher."""
+    return (
+        db.query(PackageAttempt)
+        .filter(
+            PackageAttempt.package_id == package_id,
+            PackageAttempt.user_id == teacher_id,
+            PackageAttempt.play_context == "preview",
+            PackageAttempt.status == PackageAttemptStatus.in_progress,
+        )
+        .first()
+    )
+
+
+def handle_trigger_preview(db: Session, *, package_id: str, teacher: User, data: GameRuntimeTriggerRequest) -> dict:
+    """Handle trigger for preview mode."""
+    print(f"[PREVIEW TRIGGER SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    attempt = _get_preview_attempt(db, package_id, teacher.id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="No active preview attempt")
+    return handle_trigger(db, package_id=package_id, student=teacher, data=data, attempt=attempt)
+
+
+def submit_runtime_answer_preview(db: Session, *, package_id: str, teacher: User, data: GameRuntimeAnswerRequest) -> dict:
+    """Submit answer for preview mode."""
+    print(f"[PREVIEW ANSWER SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    attempt = _get_preview_attempt(db, package_id, teacher.id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="No active preview attempt")
+    return submit_runtime_answer(db, package_id=package_id, student=teacher, data=data, attempt=attempt)
+
+
+def log_runtime_event_preview(db: Session, *, package_id: str, teacher: User, data) -> dict:
+    """Log runtime event for preview mode."""
+    attempt = _get_preview_attempt(db, package_id, teacher.id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="No active preview attempt")
+    return log_runtime_event(db, package_id=package_id, student=teacher, data=data, attempt=attempt)
+
+
+def complete_attempt_preview(db: Session, *, package_id: str, teacher: User) -> dict:
+    """Complete attempt for preview mode - simplified version without game payload."""
+    print(f"[PREVIEW COMPLETE ATTEMPT SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    attempt = _get_preview_attempt(db, package_id, teacher.id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="No active preview attempt")
+    
+    completed_at = now_local_naive()
+    attempt.completed_at = completed_at
+    attempt.submitted_at = completed_at
+    attempt.status = PackageAttemptStatus.completed
+    
+    db.commit()
+    
+    refreshed_attempt = get_game_attempt(db, attempt.id)
+    if not refreshed_attempt:
+        raise HTTPException(status_code=500, detail="Failed to complete preview attempt")
+    return serialize_attempt_detail(refreshed_attempt)
+
+
+def abandon_attempt_preview(db: Session, *, package_id: str, user: User) -> None:
+    """Abandon attempt for preview mode."""
+    print(f"[PREVIEW ABANDON ATTEMPT SERVICE] user_id: {user.id}, package_id: {package_id}")
+    attempt = db.query(PackageAttempt).filter(
+        PackageAttempt.package_id == package_id,
+        PackageAttempt.user_id == user.id,
+        PackageAttempt.play_context == "preview",
+    ).first()
+    if attempt:
+        # Delete question attempts
+        for question_attempt in list(attempt.question_attempts):
+            _clear_question_attempt_children(db, question_attempt)
+            db.delete(question_attempt)
+        db.delete(attempt)
+        db.commit()
+
+
 def start_or_resume_attempt(db: Session, *, package_id: str, student: User) -> dict:
     ensure_default_game_modules(db)
     package, access = _student_package_access(db, package_id=package_id, student=student)
@@ -1213,9 +1431,10 @@ def _handle_difficulty_progression_trigger(
     )
 
 
-def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRuntimeTriggerRequest) -> dict:
+def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRuntimeTriggerRequest, attempt: PackageAttempt | None = None) -> dict:
     ensure_default_game_modules(db)
-    attempt = _assert_attempt_for_runtime(db, package_id=package_id, attempt_id=data.attempt_id, student_id=student.id)
+    if attempt is None:
+        attempt = _assert_attempt_for_runtime(db, package_id=package_id, attempt_id=data.attempt_id, student_id=student.id)
 
     active_question_attempt = _active_question_attempt(attempt)
     if active_question_attempt:
@@ -1430,9 +1649,10 @@ def _replace_answer_payload(db: Session, *, question_attempt: PackageQuestionAtt
     raise HTTPException(status_code=400, detail="Unsupported question type")
 
 
-def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: GameRuntimeAnswerRequest) -> dict:
+def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: GameRuntimeAnswerRequest, attempt: PackageAttempt | None = None) -> dict:
     ensure_default_game_modules(db)
-    attempt = _assert_attempt_for_runtime(db, package_id=package_id, attempt_id=data.attempt_id, student_id=student.id)
+    if attempt is None:
+        attempt = _assert_attempt_for_runtime(db, package_id=package_id, attempt_id=data.attempt_id, student_id=student.id)
     question_attempt = next((item for item in attempt.question_attempts if item.id == data.question_attempt_id), None)
     if not question_attempt:
         raise HTTPException(status_code=404, detail="Question attempt not found")
@@ -1558,9 +1778,10 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
     return result
 
 
-def log_runtime_event(db: Session, *, package_id: str, student: User, data: GameRuntimeEventRequest) -> dict:
+def log_runtime_event(db: Session, *, package_id: str, student: User, data: GameRuntimeEventRequest, attempt: PackageAttempt | None = None) -> dict:
     ensure_default_game_modules(db)
-    attempt = _assert_attempt_for_runtime(db, package_id=package_id, attempt_id=data.attempt_id, student_id=student.id)
+    if attempt is None:
+        attempt = _assert_attempt_for_runtime(db, package_id=package_id, attempt_id=data.attempt_id, student_id=student.id)
 
     event_payload = data.event_payload or {}
     question_attempt_id = event_payload.get("question_attempt_id") if isinstance(event_payload, dict) else None

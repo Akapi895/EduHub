@@ -38,6 +38,21 @@ export const gameService = {
   getMyGamePackages: () => api.get('/game-packages/my-all'),
   getGameHubPackages: () => api.get('/game-hub/games'),
   getGamePackagePlay: (packageId: string) => api.get(`/game-packages/${packageId}/play`),
+  getTeacherGamePreview: (packageId: string) => api.get(`/game-packages/${packageId}/preview`),
+  startTeacherGamePreview: (packageId: string) => api.post(`/game-packages/${packageId}/preview/start`),
+  completeTeacherGamePreview: (packageId: string, data: GameCompleteRequest) =>
+    api.post(`/game-packages/${packageId}/preview/complete`, data),
+  abandonTeacherGamePreview: (packageId: string) => api.post(`/game-packages/${packageId}/preview/abandon`),
+  triggerPreviewRuntimeQuestion: (packageId: string, data: GameRuntimeTriggerRequest) =>
+    api.post(`/game-packages/${packageId}/preview/trigger`, data),
+  submitPreviewRuntimeAnswer: (packageId: string, data: GameRuntimeAnswerRequest) =>
+    api.post(`/game-packages/${packageId}/preview/answers`, data),
+  logPreviewRuntimeEvent: (packageId: string, data: GameRuntimeEventRequest) =>
+    api.post(`/game-packages/${packageId}/preview/events`, data),
+  completePreviewGamePackage: (packageId: string, data: GameCompleteRequest) =>
+    api.post(`/game-packages/${packageId}/preview/complete-attempt`, data),
+  abandonPreviewGameAttempt: (packageId: string) =>
+    api.post(`/game-packages/${packageId}/preview/abandon-attempt`, {}),
   startGamePackage: (packageId: string) => api.post(`/game-packages/${packageId}/start`),
 
   triggerRuntimeQuestion: (packageId: string, data: GameRuntimeTriggerRequest) =>

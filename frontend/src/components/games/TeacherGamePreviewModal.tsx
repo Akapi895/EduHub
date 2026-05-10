@@ -31,13 +31,17 @@ export default function TeacherGamePreviewModal({ packageId, open, onClose }: Te
     setError(null);
     setPlayBundle(null);
 
+    console.log('[TeacherPreview] Calling API with packageId:', packageId);
+
     gameService
-      .getGamePackagePlay(packageId)
+      .getTeacherGamePreview(packageId)
       .then((response) => {
+        console.log('[TeacherPreview] Success:', response);
         if (cancelled) return;
         setPlayBundle(unwrapApiData<GamePackagePlayResponse>(response));
       })
       .catch((err: unknown) => {
+        console.error('[TeacherPreview] Error:', err);
         if (cancelled) return;
         const data = (err as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
         setError(data?.detail || data?.message || (err as { message?: string })?.message || 'Không thể tải trò chơi.');
@@ -53,11 +57,10 @@ export default function TeacherGamePreviewModal({ packageId, open, onClose }: Te
 
   return (
     <Modal
-      open={open}
+      isOpen={open}
       onClose={onClose}
       title="Xem trước trò chơi"
       size="full"
-      showCloseButton={true}
     >
       <div className="flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
         {/* Header bar */}
@@ -91,7 +94,7 @@ export default function TeacherGamePreviewModal({ packageId, open, onClose }: Te
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-auto" style={{ maxHeight: 'calc(100vh - 200px)' }}>
           {loading && (
             <div className="flex h-full items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -112,7 +115,7 @@ export default function TeacherGamePreviewModal({ packageId, open, onClose }: Te
 
           {!loading && !error && playBundle && (
             <div className="h-full">
-              <GamePlayerShell playBundle={playBundle} />
+              <GamePlayerShell playBundle={playBundle} previewMode={true} />
             </div>
           )}
         </div>

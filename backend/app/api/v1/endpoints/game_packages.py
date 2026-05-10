@@ -140,6 +140,97 @@ def get_game_play_data(
     return ok(data=game_runtime_service.get_play_data(db, package_id=package_id, student=student))
 
 
+@router.get("/game-packages/{package_id}/preview")
+def get_game_preview_data(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    print(f"[PREVIEW] Teacher: {teacher.id}, package_id: {package_id}")
+    package = game_crud.get_game_package(db, package_id)
+    if not package:
+        print(f"[PREVIEW] Package not found: {package_id}")
+        raise HTTPException(status_code=404, detail="Game package not found")
+    print(f"[PREVIEW] Package found: {package.id}, created_by: {package.created_by}")
+    return ok(data=game_runtime_service.get_teacher_preview_data(db, package_id=package_id, teacher=teacher))
+
+
+@router.post("/game-packages/{package_id}/preview/start")
+def start_game_preview_attempt(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    print(f"[PREVIEW START] Teacher: {teacher.id}, package_id: {package_id}")
+    return ok(data=game_runtime_service.start_teacher_preview_attempt(db, package_id=package_id, teacher=teacher))
+
+
+@router.post("/game-packages/{package_id}/preview/complete")
+def complete_game_preview(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.complete_teacher_preview_attempt(db, package_id=package_id, teacher=teacher))
+
+
+@router.post("/game-packages/{package_id}/preview/abandon")
+def abandon_game_preview(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.abandon_teacher_preview_attempt(db, package_id=package_id, teacher=teacher))
+
+
+@router.post("/game-packages/{package_id}/preview/trigger")
+def trigger_preview_runtime_question(
+    package_id: str,
+    data: GameRuntimeTriggerRequest,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.handle_trigger_preview(db, package_id=package_id, teacher=teacher, data=data))
+
+
+@router.post("/game-packages/{package_id}/preview/answers")
+def submit_preview_runtime_answer(
+    package_id: str,
+    data: GameRuntimeAnswerRequest,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.submit_runtime_answer_preview(db, package_id=package_id, teacher=teacher, data=data))
+
+
+@router.post("/game-packages/{package_id}/preview/events")
+def log_preview_runtime_event(
+    package_id: str,
+    data: GameRuntimeEventRequest,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.log_runtime_event_preview(db, package_id=package_id, teacher=teacher, data=data))
+
+
+@router.post("/game-packages/{package_id}/preview/complete-attempt")
+def complete_preview_attempt(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.complete_attempt_preview(db, package_id=package_id, teacher=teacher))
+
+
+@router.post("/game-packages/{package_id}/preview/abandon-attempt")
+def abandon_preview_attempt(
+    package_id: str,
+    db: Session = Depends(get_db),
+    teacher: User = Depends(require_teacher),
+):
+    return ok(data=game_runtime_service.abandon_attempt_preview(db, package_id=package_id, user=teacher))
+
+
 @router.post("/game-packages/{package_id}/start")
 def start_game_attempt(
     package_id: str,

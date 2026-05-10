@@ -1153,6 +1153,14 @@ export default function TeacherGamePackageDetail() {
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="inline-flex items-center justify-center rounded-button border border-primary bg-primary px-4 py-2.5 text-sm font-medium text-white transition hover:bg-primary-dark"
+          >
+            <PlayCircle className="mr-2 h-4 w-4" />
+            Xem trước
+          </button>
+          <button
+            type="button"
             onClick={handleSaveMeta}
             disabled={savingMeta || uploadingThumbnail}
             className="inline-flex items-center justify-center rounded-button border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
@@ -1269,7 +1277,6 @@ export default function TeacherGamePackageDetail() {
               <p className="font-medium text-gray-900">Xác nhận gỡ trò chơi khỏi Game Hub?</p>
               <p className="mt-2 text-sm text-gray-600">
                 Khi gỡ khỏi Game Hub, tất cả nội dung liên quan đến <strong>Bảng xếp hạng sẽ bị biến mất hoàn toàn</strong>.
-                Học sinh sẽ không thể xem bảng xếp hạng và điểm số của mình.
               </p>
               <p className="mt-2 text-sm text-gray-500">
                 Trò chơi vẫn được giữ lại và có thể publish lại sau.
@@ -1288,6 +1295,12 @@ export default function TeacherGamePackageDetail() {
           </div>
         </div>
       </Modal>
+
+      <TeacherGamePreviewModal
+        packageId={packageId ?? ''}
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+      />
     </div>
   );
 }

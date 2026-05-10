@@ -57,6 +57,7 @@ import type {
 interface GamePlayerShellProps {
   playBundle: GamePackagePlayResponse;
   initialManifest?: GameManifest | null;
+  previewMode?: boolean;
 }
 
 function unwrapApiData<T>(response: { data?: { data?: T } & T }): T {
@@ -70,16 +71,34 @@ const RESUME_WATCHDOG_MS = 1_500;
 const RESUME_RECOVERY_MS = 4_000;
 const QUESTION_BUSY_VISIBILITY_DELAY_MS = 180;
 
-function getStartAttemptRequest(packageId: string, sessionKey: number) {
-  const requestKey = `${packageId}:${sessionKey}`;
+// Preview mode service helpers
+function getTriggerService(previewMode?: boolean) {
+  return previewMode ? gameService.triggerPreviewRuntimeQuestion : gameService.triggerRuntimeQuestion;
+}
+function getAnswerService(previewMode?: boolean) {
+  return previewMode ? gameService.submitPreviewRuntimeAnswer : gameService.submitRuntimeAnswer;
+}
+function getEventService(previewMode?: boolean) {
+  return previewMode ? gameService.logPreviewRuntimeEvent : gameService.logRuntimeEvent;
+}
+function getCompleteService(previewMode?: boolean) {
+  return previewMode ? gameService.completePreviewGamePackage : gameService.completeGamePackage;
+}
+function getAbandonService(previewMode?: boolean) {
+  return previewMode ? gameService.abandonTeacherGamePreview : gameService.abandonGameAttempt;
+}
+
+function getStartAttemptRequest(packageId: string, sessionKey: number, previewMode?: boolean) {
+  const requestKey = `${packageId}:${sessionKey}:${previewMode ? 'preview' : 'normal'}`;
   const cachedRequest = startAttemptRequests.get(requestKey);
   if (cachedRequest) {
     return cachedRequest;
   }
 
-  const request = gameService
-    .startGamePackage(packageId)
-    .then((response) => unwrapApiData<GameStartAttemptResponse>(response));
+  const request = (previewMode
+    ? gameService.startTeacherGamePreview(packageId)
+    : gameService.startGamePackage(packageId)
+  ).then((response) => unwrapApiData<GameStartAttemptResponse>(response));
 
   startAttemptRequests.set(requestKey, request);
   request.then(
@@ -257,7 +276,7 @@ function createDraftState(question: GameRuntimeQuestion | null) {
   };
 }
 
-export default function GamePlayerShell({ playBundle, initialManifest = null }: GamePlayerShellProps) {
+export default function GamePlayerShell({ playBundle, initialManifest = null, previewMode = false }: GamePlayerShellProps) {
   const gamePackage = playBundle.package;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -366,7 +385,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     if (Date.now() < telemetryOfflineUntilRef.current) return;
 
     try {
-      await gameService.logRuntimeEvent(gamePackage.id, {
+      await getEventService(previewMode)(gamePackage.id, {
         attempt_id: attemptId,
         event_type: eventType,
         event_payload: eventPayload,
@@ -515,7 +534,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     setLastQuestionResult(null);
 
     try {
-      const response = await gameService.triggerRuntimeQuestion(gamePackage.id, {
+      const response = await getTriggerService(previewMode)(gamePackage.id, {
         attempt_id: attemptId,
         trigger_type: trigger.triggerType,
         trigger_key: trigger.triggerKey,
@@ -613,7 +632,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
 
     setSubmittingAnswer(true);
     try {
-      const response = await gameService.submitRuntimeAnswer(gamePackage.id, payload);
+      const response = await getAnswerService(previewMode)(gamePackage.id, payload);
       const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
       setAttemptTotals(data.attempt_totals ?? null);
       setLastQuestionResult(data);
@@ -721,7 +740,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     setLoadingAttempt(true);
     setPlayerError(null);
 
-    getStartAttemptRequest(gamePackage.id, sessionKey)
+    getStartAttemptRequest(gamePackage.id, sessionKey, previewMode)
       .then((data) => {
         if (cancelled) return;
         setStartBundle(data);
@@ -740,7 +759,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     return () => {
       cancelled = true;
     };
-  }, [gamePackage.id, sessionKey]);
+  }, [gamePackage.id, sessionKey, previewMode]);
 
   useEffect(() => {
     if (!attemptId || !manifest || !frameLoaded) return;
@@ -899,7 +918,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
         completionAttemptRef.current = attemptId;
 
         // Always complete the attempt (both success and game_over) to update leaderboard
-        void gameService.completeGamePackage(gamePackage.id, {
+        void getCompleteService(previewMode)(gamePackage.id, {
           attempt_id: attemptId,
           summary_payload: (message.payload as Record<string, unknown>) ?? {},
           runtime_state: nextRuntimeSnapshot,
@@ -1009,7 +1028,11 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     // Abandon current attempt first to reset progress
     if (attemptId) {
       try {
-        await gameService.abandonGameAttempt(attemptId);
+        if (previewMode) {
+          await gameService.abandonTeacherGamePreview(gamePackage.id);
+        } else {
+          await gameService.abandonGameAttempt(attemptId);
+        }
       } catch {
         // Continue anyway - restart is still valid
       }
@@ -1037,7 +1060,11 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
       // Abandon current attempt
       if (attemptId) {
         try {
-          await gameService.abandonGameAttempt(attemptId);
+          if (previewMode) {
+            await gameService.abandonTeacherGamePreview(gamePackage.id);
+          } else {
+            await gameService.abandonGameAttempt(attemptId);
+          }
         } catch {
           // Continue anyway - user already confirmed
         }
