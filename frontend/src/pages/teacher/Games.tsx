@@ -84,35 +84,35 @@ export default function TeacherGames() {
 
       {/* Stats */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Tổng gói game</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">{gamePackages.length}</p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
               <Gamepad2 className="w-6 h-6 text-blue-600" />
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Đã publish</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">{publishedCount}</p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
               <Sparkles className="w-6 h-6 text-emerald-600" />
             </div>
           </div>
         </div>
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Đang phát triển</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">{draftCount}</p>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center">
               <Trophy className="w-6 h-6 text-amber-600" />
             </div>
           </div>

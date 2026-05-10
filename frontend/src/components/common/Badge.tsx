@@ -3,12 +3,12 @@ import { cn } from '@/utils/helpers';
 
 interface BadgeProps {
   children: ReactNode;
-  variant?: 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' | 'gray' | 'red' | 'green';
+  variant?: 'blue' | 'pink' | 'purple' | 'mint' | 'yellow' | 'gray' | 'red' | 'green' | 'orange';
   size?: 'sm' | 'md';
   className?: string;
 }
 
-const variants = {
+  const variants = {
   blue: 'bg-blue-50 text-blue-700 ring-1 ring-blue-200/60',
   pink: 'bg-pink-50 text-pink-700 ring-1 ring-pink-200/60',
   purple: 'bg-purple-50 text-purple-700 ring-1 ring-purple-200/60',
@@ -17,6 +17,7 @@ const variants = {
   gray: 'bg-gray-100 text-gray-600 ring-1 ring-gray-200',
   red: 'bg-red-50 text-red-700 ring-1 ring-red-200/60',
   green: 'bg-green-50 text-green-700 ring-1 ring-green-200/60',
+  orange: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200/60',
 };
 
 export default function Badge({

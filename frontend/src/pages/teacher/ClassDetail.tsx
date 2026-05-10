@@ -168,33 +168,33 @@ export default function TeacherClassDetail() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-2">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center mx-auto mb-2">
             <Users className="w-5 h-5 text-blue-600" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-          <p className="text-sm text-gray-500">Học sinh</p>
+          <p className="text-sm text-gray-500 mt-0.5">Học sinh</p>
         </div>
-        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
-          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center mx-auto mb-2">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+          <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center mx-auto mb-2">
             <Layers className="w-5 h-5 text-purple-600" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{chapters.length}</p>
-          <p className="text-sm text-gray-500">Chương</p>
+          <p className="text-sm text-gray-500 mt-0.5">Chương</p>
         </div>
-        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
-          <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center mx-auto mb-2">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+          <div className="w-10 h-10 rounded-xl bg-pink-100 flex items-center justify-center mx-auto mb-2">
             <FileText className="w-5 h-5 text-pink-600" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{exams.length}</p>
-          <p className="text-sm text-gray-500">Bài kiểm tra</p>
+          <p className="text-sm text-gray-500 mt-0.5">Bài kiểm tra</p>
         </div>
-        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mx-auto mb-2">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 text-center">
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto mb-2">
             <Gamepad2 className="w-5 h-5 text-emerald-600" />
           </div>
           <p className="text-2xl font-bold text-gray-900">{gamePackages.length}</p>
-          <p className="text-sm text-gray-500">Trò chơi</p>
+          <p className="text-sm text-gray-500 mt-0.5">Trò chơi</p>
         </div>
       </div>
 

@@ -13,6 +13,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { SUBJECTS } from '@/utils/constants';
 import type { Material, Folder as FolderType } from '@/types';
 import { getMaterialRoute } from '@/utils/materialRoutes';
+import { cn } from '@/utils/helpers';
 
 const TYPES = [
   { value: '', label: 'Tất cả', icon: FileText },
@@ -257,7 +258,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
           {/* Search */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-w-0">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
@@ -268,32 +269,11 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
             />
           </div>
           
-          {/* Filter buttons */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
-            {TYPES.map((t) => {
-              const Icon = t.icon;
-              return (
-                <button
-                  key={t.value}
-                  onClick={() => setTypeFilter(t.value)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
-                    typeFilter === t.value
-                      ? 'bg-primary/10 text-primary border border-primary/20'
-                      : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Subject filter */}
           <select
             value={subjectFilter}
             onChange={(e) => setSubjectFilter(e.target.value)}
-            className="px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+            className="px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all min-w-[140px]"
           >
             <option value="">Tất cả môn</option>
             {SUBJECTS.map((s) => (
@@ -302,6 +282,28 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
               </option>
             ))}
           </select>
+        </div>
+        
+        {/* Filter buttons */}
+        <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+          {TYPES.map((t) => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.value}
+                onClick={() => setTypeFilter(t.value)}
+                className={cn(
+                  'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap shrink-0',
+                  typeFilter === t.value
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                )}
+              >
+                <Icon className="w-4 h-4" />
+                {t.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { ArrowLeft, Gamepad2, Loader2, Sparkles, UploadCloud, Cloud, X } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { cn } from '@/utils/helpers';
 
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
@@ -247,71 +248,68 @@ export default function TeacherGamePackageCreate() {
         </div>
       </div>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-        <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="grid gap-6 lg:grid-cols-[1fr_360px]">
+        <div className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Thông tin gói trò chơi</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-semibold text-gray-900">Thông tin gói trò chơi</h2>
+            <p className="mt-1 text-sm text-gray-500">
               Phần này sẽ hiển thị ở danh sách trò chơi của học sinh trước khi các em bắt đầu.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <Input
-                label="Tiêu đề"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="VD: Memory Card - Từ vựng chủ đề động vật"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Mô tả</label>
+          <div className="grid gap-4">
+            <Input
+              label="Tiêu đề"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="VD: Memory Card - Từ vựng chủ đề động vật"
+            />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Mô tả</label>
               <textarea
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                rows={4}
-                className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-blue-200"
+                rows={3}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-primary/20 focus:border-primary bg-gray-50/50 focus:bg-white resize-none"
                 placeholder="Mô tả ngắn về mục tiêu học tập và trải nghiệm của học sinh."
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Ảnh đại diện (tùy chọn)</label>
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="flex items-center gap-3">
-                  <input
-                    id="thumbnail-upload-input"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={uploadingThumbnail}
-                    onChange={async (event) => {
-                      const file = event.target.files?.[0];
-                      if (!file) return;
-                      await handleThumbnailUpload(file);
-                      event.currentTarget.value = '';
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => document.getElementById('thumbnail-upload-input')?.click()}
-                    className={`inline-flex h-[42px] items-center justify-center rounded-button border border-primary px-4 text-sm font-medium text-primary transition ${
-                      uploadingThumbnail ? 'pointer-events-none opacity-50' : 'cursor-pointer hover:bg-primary-lighter'
-                    }`}
-                  >
-                    {uploadingThumbnail ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <UploadCloud className="mr-2 h-4 w-4" />
-                    )}
-                    {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
-                  </button>
-                  {/* <span className="text-sm text-slate-500">Ảnh sẽ được lưu nhưng không hiển thị URL</span> */}
-                </div>
-                <div />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Ảnh đại diện (tùy chọn)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  id="thumbnail-upload-input"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={uploadingThumbnail}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    await handleThumbnailUpload(file);
+                    event.currentTarget.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('thumbnail-upload-input')?.click()}
+                  className={cn(
+                    'inline-flex h-10 items-center justify-center rounded-xl border px-4 text-sm font-medium transition',
+                    uploadingThumbnail
+                      ? 'pointer-events-none opacity-50 border-gray-200 bg-gray-50 text-gray-400'
+                      : 'cursor-pointer border-primary text-primary hover:bg-primary/5'
+                  )}
+                >
+                  {uploadingThumbnail ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                  )}
+                  {uploadingThumbnail ? 'Đang tải...' : 'Tải ảnh'}
+                </button>
               </div>
               {thumbnailUrl && (
-                <div className="mt-3 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 bg-gray-50">
                   <img
                     src={thumbnailUrl}
                     alt="Ảnh đại diện trò chơi"
@@ -323,16 +321,16 @@ export default function TeacherGamePackageCreate() {
           </div>
         </div>
 
-        <div className="space-y-6 rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Chọn trò chơi</h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <h2 className="text-lg font-semibold text-gray-900">Chọn trò chơi</h2>
+            <p className="mt-1 text-sm text-gray-500">
               Giáo viên chỉ cần chọn trò chơi phù hợp. Hệ thống sẽ tự ghép câu hỏi theo từng mức độ khi học sinh chơi.
             </p>
           </div>
 
           {modules.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center text-sm text-slate-500">
+            <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 px-5 py-8 text-center text-sm text-gray-500">
               Chưa có trò chơi nào sẵn sàng để sử dụng.
             </div>
           ) : (
@@ -342,24 +340,22 @@ export default function TeacherGamePackageCreate() {
                   key={moduleItem.id}
                   type="button"
                   onClick={() => setSelectedModuleId(moduleItem.id)}
-                  className={`w-full rounded-3xl border px-5 py-4 text-left transition ${
+                  className={cn(
+                    'w-full rounded-xl border px-4 py-3.5 text-left transition',
                     selectedModuleId === moduleItem.id
-                      ? 'border-primary bg-blue-50 shadow-sm'
-                      : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white'
-                  }`}
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-white'
+                  )}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white flex-shrink-0">
                       <Gamepad2 className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="font-semibold text-slate-900">{moduleItem.title}</h3>
-                        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
-                          {moduleItem.slug}
-                        </span>
+                        <h3 className="font-semibold text-gray-900">{moduleItem.title}</h3>
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                      <p className="mt-1 text-sm text-gray-500">
                         {moduleItem.description || 'Chưa có mô tả cho trò chơi này.'}
                       </p>
                     </div>
@@ -369,7 +365,7 @@ export default function TeacherGamePackageCreate() {
             </div>
           )}
 
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
             <Button variant="secondary" onClick={() => navigate(classId ? `/teacher/classes/${classId}?tab=games` : '/teacher/games')}>
               Hủy
             </Button>

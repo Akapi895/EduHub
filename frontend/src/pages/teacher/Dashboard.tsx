@@ -87,10 +87,10 @@ export default function TeacherDashboard() {
   }
 
   const stats = [
-    { label: 'Lớp học', value: data?.total_classes ?? 0, icon: GraduationCap, gradient: 'from-blue-500 to-blue-600', bg: 'bg-blue-50' },
-    { label: 'Học sinh', value: data?.total_students ?? 0, icon: Users, gradient: 'from-purple-500 to-purple-600', bg: 'bg-purple-50' },
-    { label: 'Đề thi', value: data?.total_exams ?? 0, icon: ClipboardList, gradient: 'from-emerald-500 to-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Chờ chấm', value: data?.ungraded_count ?? 0, icon: AlertCircle, gradient: (data?.ungraded_count ?? 0) > 0 ? 'from-red-500 to-red-600' : 'from-gray-400 to-gray-500', bg: (data?.ungraded_count ?? 0) > 0 ? 'bg-red-50' : 'bg-gray-50' },
+    { label: 'Lớp học', value: data?.total_classes ?? 0, icon: GraduationCap, color: 'text-blue-600', bg: 'bg-blue-100' },
+    { label: 'Học sinh', value: data?.total_students ?? 0, icon: Users, color: 'text-purple-600', bg: 'bg-purple-100' },
+    { label: 'Đề thi', value: data?.total_exams ?? 0, icon: ClipboardList, color: 'text-emerald-600', bg: 'bg-emerald-100' },
+    { label: 'Chờ chấm', value: data?.ungraded_count ?? 0, icon: AlertCircle, color: (data?.ungraded_count ?? 0) > 0 ? 'text-red-600' : 'text-gray-500', bg: (data?.ungraded_count ?? 0) > 0 ? 'bg-red-100' : 'bg-gray-100' },
   ];
 
   return (
@@ -109,10 +109,10 @@ export default function TeacherDashboard() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+          <div key={stat.label} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200">
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-xl ${stat.bg} flex items-center justify-center`}>
-                <stat.icon className={`w-6 h-6 bg-gradient-to-br ${stat.gradient} bg-clip-text text-transparent`} />
+                <stat.icon className={`w-6 h-6 ${stat.color}`} />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
