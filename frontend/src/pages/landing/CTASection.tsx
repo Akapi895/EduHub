@@ -31,7 +31,7 @@ const CTASection = () => {
         </h2>
         
         <p className="text-xl mb-8 text-blue-100 max-w-2xl mx-auto">
-          Tham gia cùng hàng nghìn học sinh và giáo viên đang sử dụng EduHub để học tập hiệu quả hơn
+          Tham gia cùng hàng nghìn học sinh và giáo viên đang sử dụng Thế giới cổ tích để học tập hiệu quả hơn
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">

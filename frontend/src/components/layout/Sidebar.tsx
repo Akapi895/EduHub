@@ -158,7 +158,7 @@ export default function Sidebar({ collapsed = false }: SidebarProps) {
         {!collapsed && (
           <div className="flex flex-col">
             <span className="text-lg font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
-              EduHub
+              Thế giới cổ tích
             </span>
             <span className="text-[10px] text-gray-400 font-medium -mt-0.5">Nền tảng học tập</span>
           </div>

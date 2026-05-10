@@ -13,7 +13,7 @@ const LandingFooter = () => {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center">
                 <BookOpen className="w-6 h-6 text-white" />
               </div>
-              <span className="text-xl font-bold text-white">EduHub</span>
+              <span className="text-xl font-bold text-white">Thế giới cổ tích</span>
             </div>
             <p className="text-gray-400 mb-6 leading-relaxed">
               Nền tảng học tập thông minh, kết nối học sinh và giáo viên trong hành trình tri thức.
@@ -72,7 +72,7 @@ const LandingFooter = () => {
         <div className="border-t border-gray-800 pt-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-gray-400 text-sm">
-              © {currentYear} EduHub. Bảo lưu mọi quyền.
+              © {currentYear} Thế giới cổ tích. Bảo lưu mọi quyền.
             </p>
             <p className="text-gray-400 text-sm flex items-center gap-1">
               Được tạo với <span className="text-red-500">♥</span> dành cho cộng đồng học tập

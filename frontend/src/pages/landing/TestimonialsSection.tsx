@@ -8,7 +8,7 @@ const TestimonialsSection = () => {
       avatar: 'N',
       avatarGradient: 'from-blue-500 to-blue-600',
       rating: 5,
-      text: 'EduHub đã thay đổi hoàn toàn cách tôi giảng dạy. Tài liệu phong phú, bài kiểm tra dễ tạo và học sinh yêu thích việc học hơn bao giờ hết.',
+      text: 'Thế giới cổ tích đã thay đổi hoàn toàn cách tôi giảng dạy. Tài liệu phong phú, bài kiểm tra dễ tạo và học sinh yêu thích việc học hơn bao giờ hết.',
     },
     {
       name: 'Trần Minh Đức',
@@ -16,7 +16,7 @@ const TestimonialsSection = () => {
       avatar: 'T',
       avatarGradient: 'from-purple-500 to-purple-600',
       rating: 5,
-      text: 'Nhờ EduHub, tôi học Toán và Tiếng Anh hiệu quả hơn nhiều. Các trò chơi giáo dục giúp việc học trở nên vui vẻ và không còn nhàm chán.',
+      text: 'Nhờ Thế giới cổ tích, tôi học Toán và Tiếng Anh hiệu quả hơn nhiều. Các trò chơi giáo dục giúp việc học trở nên vui vẻ và không còn nhàm chán.',
     },
     {
       name: 'Phạm Thị Hương',
@@ -24,7 +24,7 @@ const TestimonialsSection = () => {
       avatar: 'P',
       avatarGradient: 'from-green-500 to-green-600',
       rating: 5,
-      text: 'Con tôi đã tiến bộ rất nhiều kể từ khi sử dụng EduHub. Tôi có thể theo dõi tiến độ học tập của con qua các báo cáo chi tiết.',
+      text: 'Con tôi đã tiến bộ rất nhiều kể từ khi sử dụng Thế giới cổ tích. Tôi có thể theo dõi tiến độ học tập của con qua các báo cáo chi tiết.',
     },
   ];
 
@@ -41,10 +41,10 @@ const TestimonialsSection = () => {
             Được tin tưởng bởi nhiều người
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
-            Họ viên đang nói gì về EduHub
+            Họ viên đang nói gì về Thế giới cổ tích
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            Hàng nghìn học sinh và giáo viên đã tin tưởng sử dụng EduHub
+            Hàng nghìn học sinh và giáo viên đã tin tưởng sử dụng Thế giới cổ tích
           </p>
         </div>
 

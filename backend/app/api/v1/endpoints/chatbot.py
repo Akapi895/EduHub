@@ -95,37 +95,29 @@ def _call_gemini(question: str) -> str:
         with httpx.Client(timeout=30.0) as client:
             response = client.post(url, json=payload, headers=headers)
             
-            # Log response for debugging
             if response.status_code != 200:
-                print(f"[GEMINI ERROR] Status {response.status_code}: {response.text[:500]}")
                 return PLACEHOLDER_RESPONSE
             
             data = response.json()
             
-            # Extract text from Gemini response
             candidates = data.get("candidates", [])
             if not candidates:
-                print(f"[GEMINI ERROR] No candidates in response: {data}")
                 return PLACEHOLDER_RESPONSE
             
             content = candidates[0].get("content", {})
             parts = content.get("parts", [])
             if not parts:
-                print(f"[GEMINI ERROR] No parts in response: {content}")
                 return PLACEHOLDER_RESPONSE
             
             text = parts[0].get("text", "").strip()
             if not text:
-                print(f"[GEMINI ERROR] Empty text in response")
                 return PLACEHOLDER_RESPONSE
             
             return text
             
     except httpx.TimeoutException:
-        print("[GEMINI ERROR] Request timeout")
         return PLACEHOLDER_RESPONSE
-    except Exception as e:
-        print(f"[GEMINI ERROR] Exception: {type(e).__name__}: {e}")
+    except Exception:
         return PLACEHOLDER_RESPONSE
 
 

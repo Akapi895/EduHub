@@ -46,7 +46,7 @@ export default function StudentGames() {
           <div>
             <h1 className="text-3xl font-semibold sm:text-4xl">Chọn trò chơi và bắt đầu khám phá</h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">
-              Đây là Game Hub chung của EduHub. Em có thể chọn bất kỳ trò chơi đã được publish và bắt đầu chơi ngay.
+              Đây là Game Hub của Thế giới cổ tích. Hãy lựa chọn trò chơi yêu tích và bắt đầu ngay nhé!
             </p>
           </div>
         </div>
@@ -56,7 +56,7 @@ export default function StudentGames() {
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Các trò chơi có thể chơi</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Chọn một trò chơi để tiếp tục phần chơi hoặc bắt đầu lượt mới.
+            Chọn một trò chơi để bắt đầu.
           </p>
         </div>
 

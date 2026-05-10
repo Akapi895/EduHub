@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, UserPlus, LogIn, Lock, GraduationCap, Users } from 'lucide-react';
+import { BookOpen, UserPlus, LogIn, Lock, GraduationCap, Users, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { authService } from '@/services/auth.service';
 import type { Role } from '@/utils/constants';
@@ -163,12 +163,21 @@ export default function AuthPage() {
       {/* Main Card */}
       <div className="relative bg-white rounded-4xl shadow-2xl w-full max-w-[1000px] min-h-[650px] overflow-hidden flex flex-col md:flex-row z-10">
         
+        {/* Back to Landing */}
+        <button
+          onClick={() => navigate('/')}
+          className="absolute top-4 left-4 z-30 flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-primary transition-colors bg-white/80 backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span className="text-sm font-medium">Quay về</span>
+        </button>
+
         {/* HEADER MOBILE */}
         <div className="md:hidden p-6 pb-0 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary mb-2">
             <BookOpen className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-primary">EduHub</h1>
+          <h1 className="text-2xl font-bold text-primary">Thế giới cổ tích</h1>
         </div>
 
         {/* LEFT SIDE: LOGIN FORM */}
@@ -253,7 +262,7 @@ export default function AuthPage() {
           <div className="mb-6">
             <h2 className="text-3xl font-bold text-primary mb-2">Tạo tài khoản</h2>
             <p className="text-gray-500">
-              Tham gia cộng đồng EduHub ngay hôm nay!
+              Tham gia cộng đồng Thế giới cổ tích ngay hôm nay!
             </p>
           </div>
 
@@ -389,7 +398,7 @@ export default function AuthPage() {
               Mới tham gia?
             </h2>
             <p className="text-blue-100 mb-8 text-lg">
-              Đăng ký ngay để bắt đầu hành trình học tập thú vị cùng EduHub!
+              Đăng ký ngay để bắt đầu hành trình học tập thú vị cùng Thế giới cổ tích!
             </p>
             
             <button 

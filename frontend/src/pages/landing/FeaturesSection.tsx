@@ -59,7 +59,7 @@ const FeaturesSection = () => {
             Tính năng nổi bật
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-gray-900 mb-4">
-            Vì sao chọn EduHub?
+            Vì sao chọn Thế giới cổ tích?
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
             Mọi thứ bạn cần cho một nền tảng học tập hiện đại, tương tác và hiệu quả

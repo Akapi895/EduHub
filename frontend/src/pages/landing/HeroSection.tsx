@@ -32,10 +32,10 @@ const HeroSection = () => {
             
             {/* Main Headline */}
             <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 leading-tight">
-              Học tập thông minh{' '}
+              Học tập thông minh cùng{' '}
               <span className="relative inline-block">
                 <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-                  Cùng EduHub
+                  Thế giới cổ tích
                 </span>
                 <svg className="absolute -bottom-2 left-0 w-full" height="12" viewBox="0 0 200 12" xmlns="http://www.w3.org/2000/svg">
                   <path d="M0 8 Q50 2, 100 8 T200 8" stroke="url(#gradient)" strokeWidth="3" fill="none" strokeLinecap="round"/>
@@ -62,15 +62,15 @@ const HeroSection = () => {
                 className="px-8 py-4 bg-gradient-to-r from-primary to-blue-600 text-white font-bold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-300 flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-5 h-5" />
-                Bắt đầu miễn phí
+                Bắt đầu khám phá
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
-              <button 
+              {/* <button 
                 className="px-8 py-4 bg-white text-primary font-bold rounded-2xl shadow-lg hover:shadow-xl border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 flex items-center justify-center gap-2"
               >
                 <Star className="w-5 h-5" />
                 Xem demo
-              </button>
+              </button> */}
             </div>
 
             {/* Trust Indicators */}

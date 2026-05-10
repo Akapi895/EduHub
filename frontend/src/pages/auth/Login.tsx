@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen } from 'lucide-react';
+import { BookOpen, ArrowLeft } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { authService } from '@/services/auth.service';
 
@@ -37,12 +37,20 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <button
+        onClick={() => navigate('/')}
+        className="absolute top-6 left-6 z-30 flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-primary transition-colors bg-white/80 backdrop-blur-sm rounded-xl shadow-sm hover:shadow-md"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        <span className="text-sm font-medium">Quay về</span>
+      </button>
+
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary mb-4">
             <BookOpen className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">Đăng nhập EduHub</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Đăng nhập Thế giới cổ tích</h1>
           <p className="text-gray-500 mt-1">Chào mừng bạn trở lại ✨</p>
         </div>
 
