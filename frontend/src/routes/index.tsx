@@ -4,8 +4,8 @@ import { Navigate, type RouteObject } from 'react-router-dom';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 
 // Auth pages
-import Login from '@/pages/auth/Login';
-import Register from '@/pages/auth/Register';
+import AuthPage from '@/pages/auth/AuthPage';
+import LandingPage from '@/pages/landing/LandingPage';
 
 // Teacher pages
 import TeacherDashboard from '@/pages/teacher/Dashboard';
@@ -55,8 +55,8 @@ function withLazyShell(element: ReactNode) {
 }
 
 export const routes: RouteObject[] = [
-  { path: '/login', element: <Login /> },
-  { path: '/register', element: <Register /> },
+  { path: '/login', element: <AuthPage /> },
+  { path: '/register', element: <AuthPage /> },
   { path: '/student/interactive-books/:id', element: withLazyShell(<StudentInteractiveBook />) },
   { path: '/student/interactive-books/:id/scenes/:sceneId', element: withLazyShell(<StudentInteractiveBook />) },
   { path: '/student/games/:packageId', element: withLazyShell(<StudentGamePlayer />) },
@@ -104,6 +104,7 @@ export const routes: RouteObject[] = [
       { path: 'settings', element: <StudentSettings /> },
     ],
   },
-  { path: '/', element: <Navigate to="/login" replace /> },
+  { path: '/', element: <LandingPage /> },
+  { path: '/home', element: <Navigate to="/" replace /> },
   { path: '*', element: <NotFound /> },
 ];
