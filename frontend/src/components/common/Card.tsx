@@ -6,6 +6,7 @@ interface CardProps {
   className?: string;
   hoverable?: boolean;
   onClick?: () => void;
+  padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
 export default function Card({
@@ -13,14 +14,23 @@ export default function Card({
   className,
   hoverable = false,
   onClick,
+  padding = 'md',
 }: CardProps) {
+  const paddingSizes = {
+    none: '',
+    sm: 'p-4',
+    md: 'p-5',
+    lg: 'p-6',
+  };
+
   return (
     <div
       onClick={onClick}
       className={cn(
-        'bg-card rounded-card shadow-md p-4',
+        'bg-white rounded-2xl shadow-sm border border-gray-100/80',
+        paddingSizes[padding],
         hoverable &&
-          'hover:shadow-lg hover:scale-[1.02] transition-all duration-200 cursor-pointer',
+          'hover:shadow-lg hover:border-primary/20 transition-all duration-200 cursor-pointer',
         onClick && 'cursor-pointer',
         className
       )}

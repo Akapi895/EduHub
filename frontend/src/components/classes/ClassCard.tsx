@@ -35,7 +35,10 @@ export default function ClassCard({ classData, onClick, onDelete, showDelete }: 
   const gradientClass = colors[colorIndex];
 
   return (
-    <div className="bg-white rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden group relative">
+    <div 
+      onClick={onClick}
+      className="bg-white rounded-2xl shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden group relative"
+    >
       {/* Thumbnail/Header */}
       <div className={`h-36 bg-gradient-to-br ${gradientClass} relative`}>
         {classData.thumbnail_url && (

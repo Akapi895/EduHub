@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MessageCircle, Loader2, PenSquare, Search } from 'lucide-react';
+import { MessageCircle, Loader2, PenSquare, Search, Mail } from 'lucide-react';
 import ChatWindow from '@/components/chat/ChatWindow';
 import Modal from '@/components/common/Modal';
 import Button from '@/components/common/Button';
@@ -171,7 +171,7 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Hộp thư</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Hộp thư</h1>
           <p className="text-gray-500 mt-1">{subtitle}</p>
         </div>
         <Button onClick={openNewMsg}>
@@ -179,63 +179,73 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
         </Button>
       </div>
 
-      <div className="bg-white rounded-card shadow-sm flex h-[calc(100vh-220px)] overflow-hidden">
-        <div className="w-80 border-r border-border flex flex-col">
-          <div className="p-4 border-b border-border">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100/80 flex h-[calc(100vh-220px)] overflow-hidden">
+        {/* Conversation list */}
+        <div className="w-80 border-r border-gray-100 flex flex-col">
+          <div className="p-4 border-b border-gray-100">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Tìm kiếm cuộc trò chuyện..."
                 value={convSearch}
                 onChange={(e) => setConvSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
+                className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
               />
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">
             {loading ? (
-              <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+              <div className="flex flex-col items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary mb-3" />
+                <p className="text-sm text-gray-500">Đang tải...</p>
+              </div>
             ) : filteredConversations.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-sm text-gray-400 mb-2">
+              <div className="text-center py-12 px-4">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                  <Mail className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-sm text-gray-500 mb-2">
                   {debouncedConvSearch ? 'Không tìm thấy cuộc trò chuyện' : 'Chưa có cuộc trò chuyện nào'}
                 </p>
                 {!debouncedConvSearch && (
-                  <button onClick={openNewMsg} className="text-sm text-primary hover:underline">Bắt đầu trò chuyện</button>
+                  <button onClick={openNewMsg} className="text-sm text-primary hover:underline font-medium">Bắt đầu trò chuyện mới</button>
                 )}
               </div>
             ) : filteredConversations.map((conv) => (
               <button
                 key={conv.id}
                 onClick={() => handleSelectConversation(conv)}
-                className={`w-full p-4 text-left hover:bg-gray-50 transition-colors border-b border-border/50 ${
-                  selected?.id === conv.id ? 'bg-blue-50' : conv.unread_count > 0 ? 'bg-primary/5' : ''
+                className={`w-full p-4 text-left hover:bg-gray-50 transition-colors border-b border-gray-50/80 ${
+                  selected?.id === conv.id ? 'bg-primary/5' : conv.unread_count > 0 ? 'bg-primary/5' : ''
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                    conv.unread_count > 0 ? 'bg-primary/20' : 'bg-primary/10'
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                    conv.unread_count > 0 ? 'bg-gradient-to-br from-primary to-blue-500' : 'bg-gradient-to-br from-gray-100 to-gray-200'
                   }`}>
-                    <span className="text-sm font-bold text-primary">
-                      {conv.participant.full_name.charAt(0)}
+                    <span className={`text-sm font-bold ${conv.unread_count > 0 ? 'text-white' : 'text-gray-600'}`}>
+                      {conv.participant.full_name.charAt(0).toUpperCase()}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className={`text-sm truncate ${conv.unread_count > 0 ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{conv.participant.full_name}</p>
-                    <p className={`text-xs truncate ${conv.unread_count > 0 ? 'text-gray-700' : 'text-gray-500'}`}>{conv.last_message || 'Chưa có tin nhắn'}</p>
+                    <div className="flex items-center justify-between">
+                      <p className={`text-sm truncate ${conv.unread_count > 0 ? 'font-semibold text-gray-900' : 'font-medium text-gray-700'}`}>{conv.participant.full_name}</p>
+                      {conv.unread_count > 0 && (
+                        <span className="min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5">
+                          {conv.unread_count > 9 ? '9+' : conv.unread_count}
+                        </span>
+                      )}
+                    </div>
+                    <p className={`text-xs truncate mt-0.5 ${conv.unread_count > 0 ? 'text-gray-700' : 'text-gray-500'}`}>{conv.last_message || 'Chưa có tin nhắn'}</p>
                   </div>
-                  {conv.unread_count > 0 && (
-                    <span className="min-w-[20px] h-5 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center px-1.5">
-                      {conv.unread_count}
-                    </span>
-                  )}
                 </div>
               </button>
             ))}
           </div>
         </div>
 
+        {/* Chat area */}
         <div className="flex-1">
           {selected ? (
             <ChatWindow
@@ -247,8 +257,11 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-gray-400">
-              <MessageCircle className="w-12 h-12 mb-3" />
-              <p>Chọn cuộc trò chuyện để bắt đầu</p>
+              <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <MessageCircle className="w-10 h-10" />
+              </div>
+              <p className="text-lg font-medium text-gray-600 mb-1">Chưa chọn cuộc trò chuyện</p>
+              <p className="text-sm">Chọn một cuộc trò chuyện hoặc bắt đầu cuộc trò chuyện mới</p>
             </div>
           )}
         </div>
@@ -258,31 +271,31 @@ export default function InboxPage({ subtitle, contactSearchPlaceholder, showCont
       <Modal isOpen={showNewMsg} onClose={() => setShowNewMsg(false)} title="Tin nhắn mới" size="sm">
         <div className="space-y-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
               placeholder={contactSearchPlaceholder}
               value={contactSearch}
               onChange={(e) => setContactSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
+              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all"
             />
           </div>
           <div className="max-h-72 overflow-y-auto -mx-1">
             {contactsLoading ? (
-              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+              <div className="flex justify-center py-6"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
             ) : filteredContacts.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-6">Không tìm thấy</p>
+              <p className="text-sm text-gray-400 text-center py-6">Không tìm thấy người dùng</p>
             ) : filteredContacts.map((c) => (
               <button
                 key={c.id}
                 onClick={() => handleSelectContact(c)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-gray-50 transition-colors"
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors"
               >
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-primary">{c.full_name.charAt(0)}</span>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shrink-0">
+                  <span className="text-sm font-bold text-white">{c.full_name.charAt(0).toUpperCase()}</span>
                 </div>
                 <div className="flex-1 text-left min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">{c.full_name}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{c.full_name}</p>
                 </div>
                 {showContactRole && (
                   <Badge variant={c.role === 'teacher' ? 'purple' : 'blue'}>

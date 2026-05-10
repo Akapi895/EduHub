@@ -11,6 +11,10 @@ import {
   Loader2,
   Settings,
   Gamepad2,
+  GraduationCap,
+  Layers,
+  Send,
+  Trash2,
 } from 'lucide-react';
 
 import ChapterSection from '@/components/classes/ChapterSection';
@@ -20,6 +24,7 @@ import TeacherGamePackageCard from '@/components/games/TeacherGamePackageCard';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import Input from '@/components/common/Input';
+import Badge from '@/components/common/Badge';
 import { classService } from '@/services/class.service';
 import { gameService } from '@/services/game.service';
 import { showErrorToast } from '@/store/toast.store';
@@ -101,29 +106,33 @@ export default function TeacherClassDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+        <p className="text-gray-500">Đang tải thông tin lớp học...</p>
       </div>
     );
   }
 
   if (!classItem) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-lg text-gray-500">Không tìm thấy lớp học</p>
-        <Link to="/teacher/classes" className="mt-2 inline-block text-primary hover:underline">
-          Quay lại danh sách
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
+          <GraduationCap className="w-8 h-8 text-red-500" />
+        </div>
+        <p className="text-lg font-medium text-gray-900 mb-4">Không tìm thấy lớp học</p>
+        <Link to="/teacher/classes" className="text-primary hover:underline">
+          Quay lại danh sách lớp học
         </Link>
       </div>
     );
   }
 
-  const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'materials', label: 'Tài liệu', icon: <BookOpen className="h-4 w-4" /> },
-    { key: 'exams', label: 'Bài kiểm tra', icon: <FileText className="h-4 w-4" /> },
-    { key: 'games', label: 'Trò chơi', icon: <Gamepad2 className="h-4 w-4" /> },
-    { key: 'students', label: 'Học sinh', icon: <Users className="h-4 w-4" /> },
-    { key: 'settings', label: 'Cài đặt', icon: <Settings className="h-4 w-4" /> },
+  const tabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { key: 'materials', label: 'Tài liệu', icon: BookOpen },
+    { key: 'exams', label: 'Bài kiểm tra', icon: FileText },
+    { key: 'games', label: 'Trò chơi', icon: Gamepad2 },
+    { key: 'students', label: 'Học sinh', icon: Users },
+    { key: 'settings', label: 'Cài đặt', icon: Settings },
   ];
 
   const handleCopyCode = () => {
@@ -134,61 +143,81 @@ export default function TeacherClassDetail() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-start gap-4">
-        <Link to="/teacher/classes" className="mt-1.5 text-gray-400 hover:text-gray-600">
-          <ArrowLeft className="h-5 w-5" />
+        <Link to="/teacher/classes" className="mt-1.5 p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
+          <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-800">{classItem.name}</h1>
-          <p className="mt-1 text-gray-500">{classItem.description}</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{classItem.name}</h1>
+            {classItem.subject && <Badge variant="blue">{classItem.subject}</Badge>}
+          </div>
+          {classItem.description && <p className="text-gray-500 mt-1">{classItem.description}</p>}
         </div>
-        <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-2">
-          <span className="text-sm text-gray-500">Mã lớp:</span>
-          <span className="font-mono font-bold text-primary">{classItem.join_code}</span>
-          <button onClick={handleCopyCode} className="text-gray-400 hover:text-primary">
-            {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+        <div className="flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-2.5 border border-gray-100">
+          <div className="text-right">
+            <p className="text-xs text-gray-500">Mã lớp</p>
+            <p className="font-mono font-bold text-primary text-lg">{classItem.join_code}</p>
+          </div>
+          <button onClick={handleCopyCode} className="p-2 rounded-lg hover:bg-gray-200 transition-colors text-gray-400 hover:text-primary">
+            {copied ? <Check className="w-5 h-5 text-green-500" /> : <Copy className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="rounded-card bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-primary">{students.length}</p>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mx-auto mb-2">
+            <Users className="w-5 h-5 text-blue-600" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{students.length}</p>
           <p className="text-sm text-gray-500">Học sinh</p>
         </div>
-        <div className="rounded-card bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-accent-purple">{chapters.length}</p>
+        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center mx-auto mb-2">
+            <Layers className="w-5 h-5 text-purple-600" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{chapters.length}</p>
           <p className="text-sm text-gray-500">Chương</p>
         </div>
-        <div className="rounded-card bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-accent-pink">{exams.length}</p>
+        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
+          <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center mx-auto mb-2">
+            <FileText className="w-5 h-5 text-pink-600" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{exams.length}</p>
           <p className="text-sm text-gray-500">Bài kiểm tra</p>
         </div>
-        <div className="rounded-card bg-white p-4 text-center shadow-sm">
-          <p className="text-2xl font-bold text-sky-600">{gamePackages.length}</p>
+        <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-gray-100/80">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center mx-auto mb-2">
+            <Gamepad2 className="w-5 h-5 text-emerald-600" />
+          </div>
+          <p className="text-2xl font-bold text-gray-900">{gamePackages.length}</p>
           <p className="text-sm text-gray-500">Trò chơi</p>
         </div>
       </div>
 
-      <div className="rounded-card bg-white shadow-sm">
-        <div className="flex border-b border-border">
+      {/* Tabs */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100/80 overflow-hidden">
+        <div className="flex overflow-x-auto border-b border-gray-100">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => handleTabChange(tab.key)}
-              className={`flex items-center gap-2 border-b-2 px-6 py-3.5 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab.key
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              {tab.icon}
+              <tab.icon className="w-4 h-4" />
               {tab.label}
             </button>
           ))}
         </div>
 
-        <div className="p-5">
+        <div className="p-6">
           {activeTab === 'materials' && (
             <div className="space-y-4">
               <div className="flex justify-end">
@@ -213,7 +242,15 @@ export default function TeacherClassDetail() {
                   />
                 ))
               ) : (
-                <p className="py-8 text-center text-gray-400">Chưa có chương nào</p>
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <BookOpen className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500">Chưa có chương nào</p>
+                  <Button size="sm" className="mt-3" onClick={() => setShowAddChapter(true)}>
+                    <Plus className="mr-1 h-4 w-4" /> Thêm chương đầu tiên
+                  </Button>
+                </div>
               )}
             </div>
           )}
@@ -225,12 +262,17 @@ export default function TeacherClassDetail() {
                   <Plus className="mr-1 h-4 w-4" /> Tạo bài kiểm tra
                 </Button>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {exams.map((exam) => (
                   <ExamCard key={exam.id} exam={exam} onClick={() => navigate(`/teacher/exams/${exam.id}`)} />
                 ))}
                 {exams.length === 0 && (
-                  <p className="col-span-2 py-8 text-center text-gray-400">Chưa có bài kiểm tra nào</p>
+                  <div className="col-span-2 text-center py-12">
+                    <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                      <FileText className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-500">Chưa có bài kiểm tra nào</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -245,11 +287,12 @@ export default function TeacherClassDetail() {
               </div>
 
               {gamePackages.length === 0 ? (
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center">
-                  <p className="text-lg font-semibold text-slate-900">Chưa có gói trò chơi nào</p>
-                  <p className="mt-2 text-sm text-slate-500">
-                    Tạo gói mới rồi soạn câu hỏi theo 4 mức độ để học sinh có thể vào chơi ngay.
-                  </p>
+                <div className="text-center py-12 rounded-2xl border border-dashed border-gray-300 bg-gray-50/50">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <Gamepad2 className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 mb-2">Chưa có gói trò chơi nào</p>
+                  <p className="text-sm text-gray-400 mb-4">Tạo gói mới với 4 cấp độ để học sinh có thể chơi</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -293,21 +336,24 @@ export default function TeacherClassDetail() {
 
           {activeTab === 'settings' && (
             <div className="max-w-lg space-y-6">
-              <Input
-                label="Tên lớp"
-                value={editForm.name}
-                onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
-              />
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Mô tả</label>
-                <textarea
-                  value={editForm.description}
-                  onChange={(event) => setEditForm({ ...editForm, description: event.target.value })}
-                  rows={3}
-                  className="w-full resize-none rounded-xl border border-border px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-300"
+              <div className="space-y-4">
+                <Input
+                  label="Tên lớp"
+                  value={editForm.name}
+                  onChange={(event) => setEditForm({ ...editForm, name: event.target.value })}
                 />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Mô tả</label>
+                  <textarea
+                    value={editForm.description}
+                    onChange={(event) => setEditForm({ ...editForm, description: event.target.value })}
+                    rows={3}
+                    className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all bg-gray-50/50 focus:bg-white"
+                    placeholder="Mô tả ngắn về lớp học..."
+                  />
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 pt-2">
                 <Button
                   onClick={async () => {
                     setSaving(true);
@@ -335,8 +381,9 @@ export default function TeacherClassDetail() {
                       showErrorToast(err.response?.data?.message || 'Xóa lớp thất bại');
                     }
                   }}
-                  className="!border-red-200 !text-red-600 hover:!bg-red-50"
+                  className="border-red-200 text-red-600 hover:bg-red-50"
                 >
+                  <Trash2 className="w-4 h-4 mr-2" />
                   Xóa lớp học
                 </Button>
               </div>
@@ -345,6 +392,7 @@ export default function TeacherClassDetail() {
         </div>
       </div>
 
+      {/* Add Chapter Modal */}
       <Modal isOpen={showAddChapter} onClose={() => setShowAddChapter(false)} title="Thêm chương mới" size="sm">
         <div className="space-y-4">
           <Input

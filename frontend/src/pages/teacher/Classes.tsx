@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Search, Loader2, ImagePlus, X, Users, BookOpen, GraduationCap } from 'lucide-react';
+import { Plus, Search, Loader2, ImagePlus, X, Users, BookOpen, GraduationCap, LayoutGrid, List } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ClassCard from '@/components/classes/ClassCard';
 import Button from '@/components/common/Button';
@@ -124,7 +124,7 @@ export default function TeacherClasses() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Lớp học</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Lớp học</h1>
           <p className="text-gray-500 mt-1">Quản lý các lớp học của bạn</p>
         </div>
         <Button onClick={() => setShowCreate(true)}>
@@ -135,52 +135,65 @@ export default function TeacherClasses() {
       {/* Stats bar */}
       {!loading && classes.length > 0 && (
         <div className="grid grid-cols-3 gap-4">
-          <div className="bg-white rounded-xl p-4 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center">
-              <BookOpen className="w-6 h-6 text-blue-500" />
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
+              <GraduationCap className="w-6 h-6 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">{classes.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{classes.length}</p>
               <p className="text-sm text-gray-500">Lớp học</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center">
-              <Users className="w-6 h-6 text-emerald-500" />
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <Users className="w-6 h-6 text-emerald-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">{totalStudents}</p>
+              <p className="text-2xl font-bold text-gray-900">{totalStudents}</p>
               <p className="text-sm text-gray-500">Học sinh</p>
             </div>
           </div>
-          <div className="bg-white rounded-xl p-4 shadow-sm flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-              <GraduationCap className="w-6 h-6 text-purple-500" />
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center">
+              <BookOpen className="w-6 h-6 text-purple-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-800">{totalMaterials}</p>
+              <p className="text-2xl font-bold text-gray-900">{totalMaterials}</p>
               <p className="text-sm text-gray-500">Tài liệu đã gắn</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Tìm kiếm lớp học..."
-          className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm shadow-sm"
-        />
+      {/* Search and filters */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm kiếm lớp học..."
+              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none text-sm transition-all"
+            />
+          </div>
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 px-3 py-2"
+            >
+              <X className="w-4 h-4" /> Xóa
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Classes grid */}
       {loading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="w-10 h-10 animate-spin text-primary" />
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+          <p className="text-gray-500">Đang tải dữ liệu...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -196,17 +209,20 @@ export default function TeacherClasses() {
         </div>
       )}
 
-      {filtered.length === 0 && (
-        <div className="text-center py-16 bg-white rounded-2xl shadow-sm">
-          <BookOpen className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-          <p className="text-lg font-medium text-gray-600">
+      {/* Empty state */}
+      {filtered.length === 0 && !loading && (
+        <div className="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100/80">
+          <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <BookOpen className="w-10 h-10 text-gray-400" />
+          </div>
+          <p className="text-lg font-semibold text-gray-900 mb-2">
             {search ? 'Không tìm thấy lớp học nào' : 'Chưa có lớp học nào'}
           </p>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-sm text-gray-500 mb-6">
             {search ? 'Thử tìm kiếm với từ khóa khác' : 'Tạo lớp học đầu tiên để bắt đầu'}
           </p>
           {!search && (
-            <Button onClick={() => setShowCreate(true)} className="mt-4">
+            <Button onClick={() => setShowCreate(true)}>
               <Plus className="w-4 h-4 mr-2" /> Tạo lớp mới
             </Button>
           )}
@@ -223,11 +239,11 @@ export default function TeacherClasses() {
             placeholder="VD: Toán 10A"
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Môn học</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Môn học</label>
             <select
               value={form.subject}
               onChange={(e) => setForm({ ...form, subject: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-border bg-white text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all appearance-none cursor-pointer"
             >
               <option value="">Chọn môn học</option>
               <option value="Toán">Toán</option>
@@ -244,21 +260,21 @@ export default function TeacherClasses() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Mô tả</label>
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Mô tả ngắn về lớp học..."
               rows={3}
-              className="w-full px-4 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none transition-all resize-none"
             />
           </div>
 
           {/* Thumbnail */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Ảnh đại diện</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Ảnh đại diện</label>
             {thumbnailPreview ? (
-              <div className="relative w-full h-36 rounded-xl overflow-hidden border border-border">
+              <div className="relative w-full h-36 rounded-xl overflow-hidden border border-gray-200">
                 <img src={thumbnailPreview} alt="Preview" className="w-full h-full object-cover" />
                 <button
                   type="button"
@@ -272,10 +288,10 @@ export default function TeacherClasses() {
               <button
                 type="button"
                 onClick={() => thumbnailInputRef.current?.click()}
-                className="w-full h-28 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-primary hover:text-primary transition-colors"
+                className="w-full h-28 rounded-xl border-2 border-dashed border-gray-300 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-primary hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer"
               >
                 <ImagePlus className="w-7 h-7" />
-                <span className="text-sm">Chọn ảnh</span>
+                <span className="text-sm font-medium">Chọn ảnh đại diện</span>
               </button>
             )}
             <input
@@ -299,13 +315,13 @@ export default function TeacherClasses() {
       {/* Delete Confirmation Modal */}
       <Modal isOpen={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Xóa lớp học" size="sm">
         <div className="space-y-4">
-          <div className="flex items-center gap-3 p-4 bg-red-50 rounded-xl">
+          <div className="flex items-start gap-4 p-4 bg-red-50 rounded-xl">
             <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
               <BookOpen className="w-6 h-6 text-red-500" />
             </div>
             <div>
-              <p className="font-medium text-gray-800">Xóa lớp "{deleteTarget?.name}"?</p>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="font-semibold text-gray-900">Xóa lớp "{deleteTarget?.name}"?</p>
+              <p className="text-sm text-gray-600 mt-1">
                 Học sinh và tài liệu trong lớp sẽ bị gỡ. Hành động này không thể hoàn tác.
               </p>
             </div>

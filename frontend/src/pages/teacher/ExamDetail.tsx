@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2, Eye, Cloud } from 'lucide-react';
+import { ArrowLeft, Plus, Save, Clock, Users, FileText, Settings, Loader2, Eye, Cloud, CheckCircle, AlertCircle } from 'lucide-react';
 import QuestionEditor from '@/components/exam/QuestionEditor';
 import Button from '@/components/common/Button';
 import Badge from '@/components/common/Badge';
@@ -27,7 +27,6 @@ export default function TeacherExamDetail() {
   });
   const [submissions, setSubmissions] = useState<Submission[]>([]);
 
-  // Track pending changes to trigger auto-save
   const settingsRef = useRef(settings);
   const questionsRef = useRef(questions);
   settingsRef.current = settings;
@@ -60,7 +59,7 @@ export default function TeacherExamDetail() {
       }
       setLastAutoSaved(new Date());
     } catch {
-      // Silent fail for auto-save, let manual save show error
+      // Silent fail for auto-save
     } finally {
       setAutoSaving(false);
     }
@@ -92,11 +91,10 @@ export default function TeacherExamDetail() {
         allow_review: examData.allow_review ?? true,
         show_answers_policy: examData.show_answers_policy ?? 'never',
       });
-      // Fetch submissions
       try {
         const subsRes = await examService.getSubmissions(examData.id);
         setSubmissions(subsRes.data.data || []);
-      } catch { /* ignore if forbidden */ }
+      } catch { /* ignore */ }
     } catch {
       setExam(null);
     } finally {
@@ -108,13 +106,11 @@ export default function TeacherExamDetail() {
     fetchExamData();
   }, [fetchExamData]);
 
-  // Trigger auto-save when questions change (after mount completes)
   useEffect(() => {
     if (loading) return;
     triggerAutoSave();
   }, [questions, triggerAutoSave, loading]);
 
-  // Trigger auto-save when settings change
   useEffect(() => {
     if (loading) return;
     triggerAutoSave();
@@ -122,25 +118,33 @@ export default function TeacherExamDetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+        <p className="text-gray-500">Đang tải thông tin bài kiểm tra...</p>
       </div>
     );
   }
 
   if (!exam) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500 text-lg">Không tìm thấy bài kiểm tra</p>
-        <Link to="/teacher/classes" className="text-primary hover:underline mt-2 inline-block">
-          Quay lại danh sách
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
+          <AlertCircle className="w-8 h-8 text-red-500" />
+        </div>
+        <p className="text-lg font-medium text-gray-900 mb-4">Không tìm thấy bài kiểm tra</p>
+        <Link to="/teacher/classes" className="text-primary hover:underline">
+          Quay lại danh sách lớp học
         </Link>
       </div>
     );
   }
 
-  const statusColor = exam.status === 'open' ? 'mint' : exam.status === 'upcoming' ? 'yellow' : 'gray';
-  const statusLabel = exam.status === 'open' ? 'Đang mở' : exam.status === 'upcoming' ? 'Sắp tới' : 'Đã đóng';
+  const statusConfig = {
+    open: { variant: 'green' as const, label: 'Đang mở' },
+    upcoming: { variant: 'yellow' as const, label: 'Sắp tới' },
+    closed: { variant: 'gray' as const, label: 'Đã đóng' },
+  };
+  const status = exam.status === 'open' ? statusConfig.open : exam.status === 'upcoming' ? statusConfig.upcoming : statusConfig.closed;
 
   const handleAddQuestion = async () => {
     try {
@@ -175,7 +179,6 @@ export default function TeacherExamDetail() {
       await examService.deleteQuestion(qId);
       const next = questions.filter((q) => q.id !== qId);
       setQuestions(next);
-      // Trigger auto-save after state update
       triggerAutoSave();
     } catch (err: any) {
       showErrorToast(err.response?.data?.message || 'Xóa câu hỏi thất bại');
@@ -185,7 +188,7 @@ export default function TeacherExamDetail() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await saveNow(); // Cancel pending auto-save and save everything immediately
+      await saveNow();
       await examService.updateExam(exam!.id, settings);
       showSuccessToast('Đã lưu thành công!');
       fetchExamData();
@@ -207,91 +210,99 @@ export default function TeacherExamDetail() {
     return `${mins} phút trước`;
   };
 
+  const tabs = [
+    { key: 'questions' as const, label: 'Câu hỏi', icon: FileText },
+    { key: 'settings' as const, label: 'Cài đặt', icon: Settings },
+    { key: 'results' as const, label: 'Kết quả', icon: CheckCircle },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <Link to={`/teacher/classes/${exam.class_id}`} className="mt-1.5 text-gray-400 hover:text-gray-600">
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+        <Link to={`/teacher/classes/${exam.class_id}`} className="mt-1 p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-800">{exam.title}</h1>
-            <Badge variant={statusColor}>{statusLabel}</Badge>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">{exam.title}</h1>
+            <Badge variant={status.variant}>{status.label}</Badge>
           </div>
           <p className="text-gray-500 mt-1">{exam.description}</p>
-          {lastAutoSaved && (
-            <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-400">
+          {(lastAutoSaved || autoSaving) && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
               <Cloud className="w-3.5 h-3.5" />
-              <span>Đã lưu tự động {formatAutoSaveTime(lastAutoSaved)}</span>
-              {autoSaving && (
-                <span className="ml-1 text-primary">· Đang lưu...</span>
-              )}
+              <span>
+                {autoSaving ? 'Đang lưu...' : `Đã lưu tự động ${formatAutoSaveTime(lastAutoSaved)}`}
+              </span>
             </div>
           )}
         </div>
-        <Button onClick={handleSave} disabled={saving || autoSaving}>
+        <Button onClick={handleSave} disabled={saving || autoSaving} className="shrink-0">
           <Save className="w-4 h-4 mr-2" /> {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
         </Button>
       </div>
 
       {/* Exam meta */}
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-white rounded-card p-4 shadow-sm flex items-center gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
-            <FileText className="w-5 h-5 text-primary" />
+            <FileText className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <p className="text-lg font-bold">{questions.length}</p>
+            <p className="text-xl font-bold text-gray-900">{questions.length}</p>
             <p className="text-xs text-gray-500">Câu hỏi</p>
           </div>
         </div>
-        <div className="bg-white rounded-card p-4 shadow-sm flex items-center gap-3">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
-            <Settings className="w-5 h-5 text-accent-purple" />
+            <Settings className="w-5 h-5 text-purple-600" />
           </div>
           <div>
-            <p className="text-lg font-bold">{totalPoints}</p>
+            <p className="text-xl font-bold text-gray-900">{totalPoints}</p>
             <p className="text-xs text-gray-500">Tổng điểm</p>
           </div>
         </div>
-        <div className="bg-white rounded-card p-4 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-            <Clock className="w-5 h-5 text-green-600" />
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center">
+            <Clock className="w-5 h-5 text-emerald-600" />
           </div>
           <div>
-            <p className="text-lg font-bold">{settings.duration_minutes}'</p>
+            <p className="text-xl font-bold text-gray-900">{settings.duration_minutes}'</p>
             <p className="text-xs text-gray-500">Thời gian</p>
           </div>
         </div>
-        <div className="bg-white rounded-card p-4 shadow-sm flex items-center gap-3">
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center">
-            <Users className="w-5 h-5 text-accent-pink" />
+            <Users className="w-5 h-5 text-pink-600" />
           </div>
           <div>
-            <p className="text-lg font-bold">{settings.start_time ? formatDate(settings.start_time) : 'Chưa đặt'}</p>
-            <p className="text-xs text-gray-500">Ngày thi</p>
+            <p className="text-xl font-bold text-gray-900">{submissions.length}</p>
+            <p className="text-xs text-gray-500">Lượt làm</p>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-card shadow-sm">
-        <div className="flex border-b border-border">
-          {(['questions', 'settings', 'results'] as const).map((tab) => (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100/80 overflow-hidden">
+        <div className="flex border-b border-gray-100 overflow-x-auto">
+          {tabs.map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-3.5 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab ? 'text-primary border-primary' : 'text-gray-500 border-transparent hover:text-gray-700'
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-colors whitespace-nowrap ${
+                activeTab === tab.key
+                  ? 'text-primary border-b-2 border-primary bg-primary/5'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
-              {tab === 'questions' ? 'Câu hỏi' : tab === 'settings' ? 'Cài đặt' : 'Kết quả'}
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
             </button>
           ))}
         </div>
 
-        <div className="p-5">
+        <div className="p-6">
           {activeTab === 'questions' && (
             <div className="space-y-4">
               {questions.map((q, idx) => (
@@ -305,82 +316,92 @@ export default function TeacherExamDetail() {
               ))}
               <button
                 onClick={handleAddQuestion}
-                className="w-full py-4 border-2 border-dashed border-gray-300 rounded-card text-gray-400 hover:text-primary hover:border-primary transition-colors flex items-center justify-center gap-2"
+                className="w-full py-4 border-2 border-dashed border-gray-300 rounded-xl text-gray-400 hover:text-primary hover:border-primary hover:bg-primary/5 transition-colors flex items-center justify-center gap-2"
               >
-                <Plus className="w-5 h-5" /> Thêm câu hỏi
+                <Plus className="w-5 h-5" /> Thêm câu hỏi mới
               </button>
             </div>
           )}
 
           {activeTab === 'settings' && (
-            <div className="max-w-lg space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày bắt đầu</label>
-                <input
-                  type="datetime-local"
-                  value={settings.start_time}
-                  onChange={(e) => setSettings({ ...settings, start_time: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-                />
+            <div className="max-w-lg space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Ngày bắt đầu</label>
+                  <input
+                    type="datetime-local"
+                    value={settings.start_time}
+                    onChange={(e) => setSettings({ ...settings, start_time: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Ngày kết thúc</label>
+                  <input
+                    type="datetime-local"
+                    value={settings.end_time}
+                    onChange={(e) => setSettings({ ...settings, end_time: e.target.value })}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                  />
+                </div>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ngày kết thúc</label>
-                <input
-                  type="datetime-local"
-                  value={settings.end_time}
-                  onChange={(e) => setSettings({ ...settings, end_time: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian làm bài (phút)</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Thời gian làm bài (phút)</label>
                 <input
                   type="number"
                   value={settings.duration_minutes}
                   onChange={(e) => setSettings({ ...settings, duration_minutes: Number(e.target.value) })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
+                  min={1}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
               </div>
+              
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Trộn câu hỏi</label>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={settings.shuffle_questions}
-                    onChange={(e) => setSettings({ ...settings, shuffle_questions: e.target.checked })}
-                    className="rounded"
-                  />
-                  <span className="text-sm text-gray-600">Trộn thứ tự câu hỏi cho mỗi học sinh</span>
-                </label>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Số lần làm tối đa</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Số lần làm tối đa</label>
                 <input
                   type="number"
                   value={settings.max_attempts}
                   onChange={(e) => setSettings({ ...settings, max_attempts: Number(e.target.value) })}
                   min={1}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cho phép xem lại bài làm</label>
-                <label className="flex items-center gap-2">
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.shuffle_questions}
+                    onChange={(e) => setSettings({ ...settings, shuffle_questions: e.target.checked })}
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Trộn câu hỏi</p>
+                    <p className="text-xs text-gray-500">Mỗi học sinh sẽ nhận thứ tự câu hỏi khác nhau</p>
+                  </div>
+                </label>
+                
+                <label className="flex items-center gap-3 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={settings.allow_review}
                     onChange={(e) => setSettings({ ...settings, allow_review: e.target.checked })}
-                    className="rounded"
+                    className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary"
                   />
-                  <span className="text-sm text-gray-600">Học sinh có thể xem lại bài đã làm</span>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Cho phép xem lại bài</p>
+                    <p className="text-xs text-gray-500">Học sinh có thể xem lại bài đã làm</p>
+                  </div>
                 </label>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Hiển thị đáp án đúng</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Hiển thị đáp án đúng</label>
                 <select
                   value={settings.show_answers_policy}
                   onChange={(e) => setSettings({ ...settings, show_answers_policy: e.target.value })}
-                  className="w-full px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
                 >
                   <option value="never">Không hiển thị</option>
                   <option value="after_attempts">Sau khi hết lượt làm cá nhân</option>
@@ -394,32 +415,36 @@ export default function TeacherExamDetail() {
           {activeTab === 'results' && (
             <div>
               {submissions.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <p>Chưa có kết quả nào</p>
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500">Chưa có kết quả nào</p>
+                  <p className="text-sm text-gray-400 mt-1">Kết quả sẽ hiển thị sau khi học sinh nộp bài</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border text-left">
-                        <th className="pb-3 font-medium text-gray-500">Học sinh</th>
-                        <th className="pb-3 font-medium text-gray-500">Trạng thái</th>
-                        <th className="pb-3 font-medium text-gray-500">Bắt đầu</th>
-                        <th className="pb-3 font-medium text-gray-500">Nộp bài</th>
-                        <th className="pb-3 font-medium text-gray-500 text-right">Điểm</th>
-                        <th className="pb-3 font-medium text-gray-500 text-center">Chi tiết</th>
+                      <tr className="border-b border-gray-100 text-left">
+                        <th className="pb-3 font-semibold text-gray-600">Học sinh</th>
+                        <th className="pb-3 font-semibold text-gray-600">Trạng thái</th>
+                        <th className="pb-3 font-semibold text-gray-600">Bắt đầu</th>
+                        <th className="pb-3 font-semibold text-gray-600">Nộp bài</th>
+                        <th className="pb-3 font-semibold text-gray-600 text-right">Điểm</th>
+                        <th className="pb-3"></th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border">
+                    <tbody className="divide-y divide-gray-50">
                       {submissions.map((sub) => (
                         <tr
                           key={sub.id}
                           onClick={() => sub.status !== 'in_progress' && navigate(`/teacher/exams/${exam.id}/submissions/${sub.id}`)}
-                          className={`hover:bg-gray-50 ${sub.status !== 'in_progress' ? 'cursor-pointer' : ''}`}
+                          className={`hover:bg-gray-50/50 ${sub.status !== 'in_progress' ? 'cursor-pointer' : ''}`}
                         >
-                          <td className="py-3 font-medium text-gray-800">{sub.student_name || sub.student_id}</td>
+                          <td className="py-3 font-medium text-gray-900">{sub.student_name || sub.student_id}</td>
                           <td className="py-3">
-                            <Badge variant={sub.status === 'graded' ? 'mint' : sub.status === 'submitted' ? 'yellow' : 'gray'}>
+                            <Badge variant={sub.status === 'graded' ? 'green' : sub.status === 'submitted' ? 'yellow' : 'gray'}>
                               {sub.status === 'graded' ? 'Đã chấm' : sub.status === 'submitted' ? 'Đã nộp' : 'Đang làm'}
                             </Badge>
                           </td>

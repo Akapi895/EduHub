@@ -5,6 +5,8 @@ import {
   Plus,
   Sparkles,
   Trophy,
+  Zap,
+  BarChart3,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -47,78 +49,103 @@ export default function TeacherGames() {
   const draftCount = gamePackages.filter((item) => item.status === 'draft' || !item.published_to_hub).length;
 
   return (
-    <div className="space-y-8">
-      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.22),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.18),_transparent_28%),linear-gradient(135deg,#0f172a,#1e293b)] px-6 py-7 text-white shadow-xl sm:px-8">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-100">
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+    <div className="space-y-6">
+      {/* Hero Banner */}
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 px-6 py-8 text-white shadow-2xl">
+        {/* Decorative elements */}
+        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl" />
+        <div className="absolute top-10 right-20 w-4 h-4 bg-amber-400 rounded-full animate-pulse" />
+        <div className="absolute bottom-20 left-20 w-3 h-3 bg-pink-400 rounded-full animate-pulse" />
+        
+        <div className="relative flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-blue-200 mb-4">
+              <Sparkles className="h-4 w-4 text-amber-400" />
               Game Hub
             </div>
-            <div>
-              <h1 className="text-3xl font-semibold sm:text-4xl">Tạo và publish trò chơi cho mọi học sinh</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">
-                Trò chơi được tạo độc lập với lớp học. Khi đã sẵn sàng, bạn publish lên Game Hub để học sinh có thể truy cập và chơi trực tiếp.
-              </p>
-            </div>
+            <h1 className="text-3xl md:text-4xl font-bold mb-3">
+              Tạo trò chơi học tập
+            </h1>
+            <p className="text-blue-200 leading-relaxed">
+              Thiết kế trò chơi với 4 cấp độ khó, theo dõi bảng xếp hạng và xem thống kê chi tiết của học sinh.
+            </p>
           </div>
           <Button
             type="button"
-            className="w-full justify-center bg-white !text-slate-950 hover:bg-slate-100 lg:w-auto"
             onClick={() => navigate('/teacher/games/create')}
+            className="shrink-0 bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-xl hover:shadow-2xl lg:w-auto"
           >
-            <Plus className="mr-1.5 h-4 w-4" />
-            Tạo trò chơi
+            <Plus className="mr-2 h-5 w-5" />
+            Tạo trò chơi mới
           </Button>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-slate-500">Tổng gói game</span>
-            <Gamepad2 className="h-4 w-4 text-sky-500" />
+      {/* Stats */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Tổng gói game</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">{gamePackages.length}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center">
+              <Gamepad2 className="w-6 h-6 text-blue-600" />
+            </div>
           </div>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{gamePackages.length}</p>
         </div>
-        <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-slate-500">Đã publish</span>
-            <Sparkles className="h-4 w-4 text-emerald-500" />
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Đã publish</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">{publishedCount}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center">
+              <Sparkles className="w-6 h-6 text-emerald-600" />
+            </div>
           </div>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{publishedCount}</p>
         </div>
-        <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-slate-500">Cần hoàn thiện</span>
-            <Trophy className="h-4 w-4 text-amber-500" />
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100/80 hover:shadow-md transition-shadow">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Đang phát triển</p>
+              <p className="text-3xl font-bold text-gray-900 mt-1">{draftCount}</p>
+            </div>
+            <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center">
+              <Trophy className="w-6 h-6 text-amber-600" />
+            </div>
           </div>
-          <p className="mt-2 text-3xl font-semibold text-slate-900">{draftCount}</p>
         </div>
       </section>
 
+      {/* Games List */}
       {loading ? (
-        <div className="flex justify-center rounded-[28px] border border-slate-200 bg-white py-20 shadow-sm">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-100/80 bg-white py-20 shadow-sm">
+          <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+          <p className="text-gray-500">Đang tải danh sách trò chơi...</p>
         </div>
       ) : gamePackages.length === 0 ? (
-        <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-10 text-center shadow-sm">
-          <p className="text-lg font-semibold text-slate-900">Chưa có trò chơi nào</p>
-          <p className="mt-2 text-sm text-slate-500">
-            Tạo trò chơi đầu tiên, soạn câu hỏi rồi publish lên Game Hub khi đã sẵn sàng.
+        <section className="rounded-2xl border border-dashed border-gray-300 bg-gray-50/50 px-6 py-16 text-center">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <Gamepad2 className="w-8 h-8 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Chưa có trò chơi nào</h3>
+          <p className="text-gray-500 mb-6 max-w-md mx-auto">
+            Tạo trò chơi đầu tiên, soạn câu hỏi theo 4 cấp độ và publish lên Game Hub khi đã sẵn sàng.
           </p>
-          <Button className="mt-5" onClick={() => navigate('/teacher/games/create')}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Tạo trò chơi
+          <Button onClick={() => navigate('/teacher/games/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Tạo trò chơi đầu tiên
           </Button>
         </section>
       ) : (
         <section className="space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">Trò chơi của bạn</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Mở từng gói để chỉnh nội dung, publish hoặc xem bảng xếp hạng.
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Trò chơi của bạn</h2>
+              <p className="text-sm text-gray-500">{gamePackages.length} trò chơi</p>
+            </div>
           </div>
 
           <div className="space-y-4">

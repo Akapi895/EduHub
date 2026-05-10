@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Loader2, Cloud, X } from 'lucide-react';
+import { ArrowLeft, Cloud, X, FileText, Clock, Calendar } from 'lucide-react';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
-import { classService } from '@/services/class.service';
-import { showErrorToast } from '@/store/toast.store';
 
 const DRAFT_KEY = 'exam-create-draft:';
 
@@ -95,11 +93,12 @@ export default function CreateExam() {
         start_time: form.start_time || undefined,
         end_time: form.end_time || undefined,
       };
-      const res = await classService.createExam(classId, payload);
+      const res = await (await import('@/services/class.service')).classService.createExam(classId, payload);
       const newExam = res.data.data;
       clearDraft(classId);
       navigate(`/teacher/exams/${newExam.id}`);
     } catch (err: any) {
+      const { showErrorToast } = await import('@/store/toast.store');
       showErrorToast(err.response?.data?.message || 'Tạo bài kiểm tra thất bại');
     } finally {
       setCreating(false);
@@ -107,30 +106,32 @@ export default function CreateExam() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-4">
-        <Link to={`/teacher/classes/${classId}`} className="text-gray-400 hover:text-gray-600">
+        <Link to={`/teacher/classes/${classId}`} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-800">Tạo bài kiểm tra</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Tạo bài kiểm tra mới</h1>
           {hasDraft && (
-            <div className="mt-1 inline-flex items-center gap-1.5 text-xs text-emerald-600">
-              <Cloud className="w-3.5 h-3.5" />
-              <span>Đã lưu bản nháp</span>
+            <div className="mt-2 inline-flex items-center gap-2 text-sm text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+              <Cloud className="w-4 h-4" />
+              <span>Bản nháp đã được lưu</span>
               <button
                 type="button"
                 onClick={handleClearDraft}
-                className="ml-0.5 rounded bg-emerald-100 px-1.5 py-0.5 hover:bg-emerald-200"
+                className="ml-1 p-0.5 rounded hover:bg-emerald-100"
               >
-                <X className="w-3 h-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
         </div>
       </div>
 
-      <div className="bg-white rounded-card shadow-sm p-6 space-y-5">
+      {/* Form */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100/80 p-6 space-y-6">
         <Input
           label="Tên bài kiểm tra"
           value={form.title}
@@ -140,51 +141,70 @@ export default function CreateExam() {
         />
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">Mô tả</label>
           <textarea
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
-            placeholder="Mô tả ngắn về bài kiểm tra..."
+            placeholder="Mô tả ngắn về bài kiểm tra (không bắt buộc)..."
             rows={3}
-            className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none transition-all resize-none"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all resize-none text-sm bg-gray-50/50 focus:bg-white"
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian bắt đầu</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-400" />
+                Thời gian bắt đầu
+              </div>
+            </label>
             <input
               type="datetime-local"
               value={form.start_time}
               onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none text-sm"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm bg-gray-50/50 focus:bg-white"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Thời gian kết thúc</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-400" />
+                Thời gian kết thúc
+              </div>
+            </label>
             <input
               type="datetime-local"
               value={form.end_time}
               onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-              className="w-full px-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none text-sm"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm bg-gray-50/50 focus:bg-white"
             />
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 pt-2">
+        <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
           <Button variant="secondary" onClick={() => navigate(`/teacher/classes/${classId}`)}>
             Hủy
           </Button>
-          <Button onClick={handleCreate} disabled={!form.title || creating}>
+          <Button onClick={handleCreate} disabled={!form.title || creating} className="flex-1 sm:flex-none">
             {creating ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang tạo...
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                Đang tạo...
               </>
             ) : (
-              'Tạo & thêm câu hỏi'
+              <>
+                <FileText className="w-4 h-4 mr-2" />
+                Tạo & thêm câu hỏi
+              </>
             )}
           </Button>
         </div>
+      </div>
+
+      {/* Help text */}
+      <div className="text-center text-sm text-gray-500">
+        <p>Bạn có thể thiết lập thời gian, số lần làm và các tùy chọn khác sau khi tạo bài kiểm tra.</p>
       </div>
     </div>
   );

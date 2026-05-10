@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Search, Upload, Filter, Loader2, FolderPlus, Folder, ArrowLeft, Trash2 } from 'lucide-react';
+import { Search, Upload, Filter, Loader2, FolderPlus, Folder, ArrowLeft, Trash2, FileText, BookOpen, Video, HelpCircle, File, Sparkles } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import MaterialCard from '@/components/library/MaterialCard';
 import UploadMaterialModal from '@/components/library/UploadMaterialModal';
@@ -15,13 +15,13 @@ import type { Material, Folder as FolderType } from '@/types';
 import { getMaterialRoute } from '@/utils/materialRoutes';
 
 const TYPES = [
-  { value: '', label: 'Tất cả' },
-  { value: 'book', label: 'Sách' },
-  { value: 'exam', label: 'Đề thi' },
-  { value: 'video', label: 'Video' },
-  { value: 'reference', label: 'Tham khảo' },
-  { value: 'document', label: 'Tài liệu' },
-  { value: 'interactive_book', label: 'Sách tương tác' },
+  { value: '', label: 'Tất cả', icon: FileText },
+  { value: 'book', label: 'Sách', icon: BookOpen },
+  { value: 'exam', label: 'Đề thi', icon: HelpCircle },
+  { value: 'video', label: 'Video', icon: Video },
+  { value: 'reference', label: 'Tham khảo', icon: File },
+  { value: 'document', label: 'Tài liệu', icon: FileText },
+  { value: 'interactive_book', label: 'Sách tương tác', icon: Sparkles },
 ];
 
 interface Props {
@@ -209,40 +209,41 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           {currentFolder ? (
             <div className="flex items-center gap-3">
-              <button onClick={() => setSearchParams({})} className="text-gray-400 hover:text-gray-600">
+              <button 
+                onClick={() => setSearchParams({})} 
+                className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-gray-600"
+              >
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-800">{currentFolder.name}</h1>
-                <p className="text-gray-500 mt-1">{currentFolder.material_count} tài liệu</p>
+                <h1 className="text-2xl font-bold text-gray-900">{currentFolder.name}</h1>
+                <p className="text-gray-500 text-sm">{currentFolder.material_count} tài liệu</p>
               </div>
             </div>
           ) : (
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">
+              <h1 className="text-2xl font-bold text-gray-900">
                 {isSystem ? 'Tài liệu hệ thống' : 'Tài liệu cá nhân'}
               </h1>
-              <p className="text-gray-500 mt-1">
-                {isSystem ? 'Tài liệu chung dùng cho tất cả' : 'Quản lý tài liệu giảng dạy của bạn'}
+              <p className="text-gray-500 text-sm mt-1">
+                {isSystem ? 'Tài liệu chung dùng cho tất cả giáo viên' : 'Quản lý tài liệu giảng dạy của bạn'}
               </p>
             </div>
           )}
         </div>
         {isPersonal && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             {!currentFolder && (
               <Button variant="secondary" onClick={() => setShowCreateFolder(true)}>
                 <FolderPlus className="w-4 h-4 mr-2" /> Tạo thư mục
               </Button>
             )}
-            <Button
-              variant="secondary"
-              onClick={() => navigate('/teacher/interactive-books/new')}
-            >
+            <Button variant="secondary" onClick={() => navigate('/teacher/interactive-books/new')}>
               Tạo sách tương tác
             </Button>
             <Button onClick={() => setShowUpload(true)}>
@@ -253,34 +254,46 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-card p-4 shadow-sm flex flex-wrap items-center gap-4">
-        <div className="flex-1 min-w-[200px] relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tìm kiếm tài liệu..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-border focus:ring-2 focus:ring-blue-300 focus:border-primary outline-none text-sm"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-gray-400" />
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
-          >
-            {TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100/80">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-4">
+          {/* Search */}
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Tìm kiếm tài liệu..."
+              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 focus:ring-2 focus:ring-primary/20 focus:border-primary focus:bg-white outline-none text-sm transition-all"
+            />
+          </div>
+          
+          {/* Filter buttons */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-2 lg:pb-0">
+            {TYPES.map((t) => {
+              const Icon = t.icon;
+              return (
+                <button
+                  key={t.value}
+                  onClick={() => setTypeFilter(t.value)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap ${
+                    typeFilter === t.value
+                      ? 'bg-primary/10 text-primary border border-primary/20'
+                      : 'bg-gray-50 text-gray-600 border border-transparent hover:bg-gray-100'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Subject filter */}
           <select
             value={subjectFilter}
             onChange={(e) => setSubjectFilter(e.target.value)}
-            className="px-3 py-2.5 rounded-xl border border-border text-sm focus:ring-2 focus:ring-blue-300 outline-none"
+            className="px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
           >
             <option value="">Tất cả môn</option>
             {SUBJECTS.map((s) => (
@@ -295,7 +308,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
       {/* Folders grid (only in personal mode, root level) */}
       {isPersonal && !currentFolder && folders.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-gray-500 mb-3">Thư mục</h2>
+          <h2 className="text-sm font-semibold text-gray-500 mb-3 px-1">Thư mục</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {folders.map((folder) => (
               <div
@@ -304,20 +317,22 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
                 onDragOver={(e) => { e.preventDefault(); setDragOverFolder(folder.id); }}
                 onDragLeave={() => setDragOverFolder(null)}
                 onDrop={(e) => handleDropOnFolder(folder.id, e)}
-                className={`bg-white rounded-card shadow-sm hover:shadow-md hover:scale-[1.02] transition-all duration-200 cursor-pointer p-4 flex items-center gap-3 group ${
-                  dragOverFolder === folder.id ? 'ring-2 ring-primary bg-primary/5' : ''
+                className={`bg-white rounded-2xl p-4 shadow-sm border transition-all duration-200 cursor-pointer group hover:shadow-md hover:border-primary/30 ${
+                  dragOverFolder === folder.id ? 'ring-2 ring-primary bg-primary/5' : 'border-gray-100/80'
                 }`}
               >
-                <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                  <Folder className="w-5 h-5 text-amber-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800 truncate">{folder.name}</p>
-                  <p className="text-xs text-gray-400">{folder.material_count} tài liệu</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                    <Folder className="w-6 h-6 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{folder.name}</p>
+                    <p className="text-xs text-gray-500">{folder.material_count} tài liệu</p>
+                  </div>
                 </div>
                 <button
                   onClick={(e) => { e.stopPropagation(); setFolderToDelete(folder); }}
-                  className="p-1.5 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg hover:bg-red-50"
+                  className="absolute top-3 right-3 p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -327,14 +342,18 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
         </div>
       )}
 
-      {/* Materials grid */}
-      {isPersonal && !currentFolder && folders.length > 0 && (
-        <h2 className="text-sm font-medium text-gray-500">Tất cả tài liệu</h2>
-      )}
+      {/* Materials section header */}
+      {(isPersonal && !currentFolder && folders.length > 0) || (loading && materials.length > 0) ? (
+        <h2 className="text-sm font-semibold text-gray-500 mb-3 px-1">
+          {currentFolder ? 'Tài liệu trong thư mục' : 'Tất cả tài liệu'}
+        </h2>
+      ) : null}
 
+      {/* Loading state */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+          <p className="text-gray-500">Đang tải tài liệu...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -359,15 +378,25 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
         </div>
       )}
 
+      {/* Empty state */}
       {!loading && materials.length === 0 && (
-        <div className="text-center py-12 text-gray-400">
-          <p className="text-lg">Không tìm thấy tài liệu nào</p>
-          <p className="text-sm mt-1">
+        <div className="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100/80">
+          <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <FileText className="w-10 h-10 text-gray-400" />
+          </div>
+          <p className="text-lg font-semibold text-gray-900 mb-2">Không tìm thấy tài liệu nào</p>
+          <p className="text-sm text-gray-500 mb-6">
             {currentFolder ? 'Thư mục này chưa có tài liệu' : 'Thử thay đổi bộ lọc hoặc tìm kiếm khác'}
           </p>
+          {isPersonal && !search && !currentFolder && (
+            <Button onClick={() => setShowUpload(true)}>
+              <Upload className="w-4 h-4 mr-2" /> Upload tài liệu đầu tiên
+            </Button>
+          )}
         </div>
       )}
 
+      {/* Upload Modal */}
       {isPersonal && (
         <UploadMaterialModal
           isOpen={showUpload}
@@ -386,6 +415,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
         />
       )}
 
+      {/* Create Folder Modal */}
       <Modal isOpen={showCreateFolder} onClose={() => setShowCreateFolder(false)} title="Tạo thư mục mới" size="sm">
         <div className="space-y-4">
           <Input
@@ -403,6 +433,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
         </div>
       </Modal>
 
+      {/* Delete Folder Modal */}
       <Modal isOpen={!!folderToDelete} onClose={() => setFolderToDelete(null)} title="Xóa thư mục" size="sm">
         <p className="text-gray-600 mb-4">Xóa thư mục &ldquo;{folderToDelete?.name}&rdquo;? Tài liệu bên trong sẽ không bị xóa.</p>
         <div className="flex justify-end gap-3">
@@ -427,7 +458,7 @@ export default function TeacherLibrary({ mode = 'personal' }: Props) {
           <select
             value={saveFolderId}
             onChange={(e) => setSaveFolderId(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-xl border border-border text-sm"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50/50 text-sm"
           >
             <option value="">— Không phân loại —</option>
             {folders.map((f) => (
