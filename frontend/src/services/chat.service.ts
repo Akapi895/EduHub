@@ -14,4 +14,6 @@ export const chatService = {
     api.post(`/conversations/${conversationId}/messages`, data),
   askChatbot: (question: string) =>
     api.post('/chatbot/ask', { question }),
+  getChatbotStatus: () =>
+    api.get('/chatbot/status'),
 };

@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
 
+    gemini_api_key: str = ""
+
     @field_validator("debug", mode="before")
     @classmethod
     def normalize_debug(cls, value):
