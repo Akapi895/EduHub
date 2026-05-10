@@ -5,6 +5,7 @@ import {
   Globe2,
   Layers3,
   Loader2,
+  PlayCircle,
   Plus,
   Save,
   Sparkles,
@@ -18,6 +19,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import GameEditorLayout, { GameEditorStepDefinition } from '@/components/games/editor/GameEditorLayout';
 import GameQuestionEditor from '@/components/games/GameQuestionEditor';
 import MemoryCardPairEditor from '@/components/games/MemoryCardPairEditor';
+import TeacherGamePreviewModal from '@/components/games/TeacherGamePreviewModal';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import {
@@ -176,6 +178,7 @@ export default function TeacherGamePackageDetail() {
   const [savingQuestions, setSavingQuestions] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [leaderboard, setLeaderboard] = useState<GameLeaderboardResponse | null>(null);
   const [activeBand, setActiveBand] = useState<DifficultyBand>('recognition');
   const [title, setTitle] = useState('');
