@@ -291,8 +291,9 @@ export default function MaterialDetail() {
   const downloadUrl = fileAccess?.download_url || (!fileAccessLoading ? material.file_url : '');
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-7xl">
+      {/* Header */}
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-gray-600">
             <ArrowLeft className="h-5 w-5" />
@@ -326,99 +327,124 @@ export default function MaterialDetail() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-card bg-white shadow-sm">
-        {material.thumbnail_url && (
-          <div className="h-64 bg-gray-100">
-            <img
-              src={material.thumbnail_url}
-              alt={material.title}
-              className="h-full w-full object-cover"
-            />
-          </div>
-        )}
-
-        <div className="space-y-4 p-6">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <Icon className="h-6 w-6 text-primary" />
-              <h2 className="text-xl font-bold text-gray-800">{material.title}</h2>
+      {/* Main content: 70% content (left) + 30% sidebar (right) */}
+      <div className="flex gap-6">
+        {/* Left: Content area - 70% */}
+        <div className="w-[70%]">
+          {/* Video player */}
+          {fileAccessLoading ? (
+            <div className="flex items-center justify-center rounded-xl border border-border bg-gray-50 py-20 text-gray-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Đang chuẩn bị nội dung xem trước...
             </div>
-            {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
-          </div>
-
-          {material.description && (
-            <p className="text-gray-600">{material.description}</p>
+          ) : previewKind === 'video' && previewUrl ? (
+            <video controls className="w-full rounded-xl" src={previewUrl}>
+              Trình duyệt không hỗ trợ video.
+            </video>
+          ) : previewKind === 'pdf' && previewUrl ? (
+            <iframe
+              src={previewUrl}
+              title={material.title}
+              className="h-[calc(100vh-16rem)] w-full rounded-xl border border-border"
+            />
+          ) : previewKind === 'image' && previewUrl ? (
+            <img
+              src={previewUrl}
+              alt={material.title}
+              className="w-full rounded-xl border border-border object-contain"
+            />
+          ) : previewKind === 'audio' && previewUrl ? (
+            <div className="rounded-xl border border-border bg-slate-50 p-6">
+              <audio controls className="w-full" src={previewUrl}>
+                Trình duyệt không hỗ trợ audio.
+              </audio>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-slate-50 px-5 py-16 text-center">
+              <FileText className="mb-3 h-12 w-12 text-gray-400" />
+              <p className="text-sm text-gray-500">
+                Không thể xem trước trực tiếp tài liệu này.
+              </p>
+              <p className="mt-1 text-xs text-gray-400">
+                Bạn vẫn có thể tải file về để mở đầy đủ.
+              </p>
+            </div>
           )}
 
-          <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-            {material.subject && <span>Môn: {material.subject}</span>}
-            {material.grade && <span>Khối: {material.grade}</span>}
-            <span>Ngày tạo: {formatDate(material.created_at)}</span>
-          </div>
-
-          {material.file_url && (
-            <div className="border-t border-border pt-4">
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                {downloadUrl ? (
-                  <button
-                    type="button"
-                    onClick={handleDownloadFile}
-                    disabled={downloadingFile}
-                    className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/60"
-                  >
-                    <Download className="h-4 w-4" />
-                    {downloadingFile ? 'Đang tải xuống...' : 'Tải xuống tài liệu'}
-                  </button>
-                ) : (
-                  <Button type="button" disabled>
-                    <Download className="mr-1.5 h-4 w-4" />
-                    Đang chuẩn bị file...
-                  </Button>
-                )}
-                {previewKind === 'none' && (
-                  <span className="text-sm text-gray-500">
-                    Định dạng này chưa hỗ trợ xem trực tiếp trong trình duyệt.
-                  </span>
-                )}
-              </div>
-
-              {fileAccessLoading ? (
-                <div className="flex items-center justify-center rounded-xl border border-border py-12 text-gray-500">
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Đang chuẩn bị nội dung xem trước...
-                </div>
-              ) : previewKind === 'video' && previewUrl ? (
-                <video controls className="w-full rounded-xl" src={previewUrl}>
-                  Trình duyệt không hỗ trợ video.
-                </video>
-              ) : previewKind === 'pdf' && previewUrl ? (
-                <iframe
-                  src={previewUrl}
-                  title={material.title}
-                  className={documentPreviewFrameClass}
-                />
-              ) : previewKind === 'image' && previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt={material.title}
-                  className={imagePreviewClass}
-                />
-              ) : previewKind === 'audio' && previewUrl ? (
-                <div className="rounded-xl border border-border bg-slate-50 p-6">
-                  <audio controls className="w-full" src={previewUrl}>
-                    Trình duyệt không hỗ trợ audio.
-                  </audio>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-dashed border-border bg-slate-50 px-5 py-10 text-center text-sm text-gray-500">
-                  Không thể xem trước trực tiếp tài liệu này. Bạn vẫn có thể tải file về để mở đầy đủ.
-                </div>
+          {/* Download button below content */}
+          {material.file_url && downloadUrl && (
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleDownloadFile}
+                disabled={downloadingFile}
+                className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/60"
+              >
+                <Download className="h-4 w-4" />
+                {downloadingFile ? 'Đang tải xuống...' : 'Tải xuống tài liệu'}
+              </button>
+              {previewKind === 'none' && (
+                <span className="text-sm text-gray-500">
+                  Định dạng này chưa hỗ trợ xem trực tiếp trong trình duyệt.
+                </span>
               )}
             </div>
           )}
         </div>
+
+        {/* Right: Sidebar - 30% */}
+        <div className="w-[30%] space-y-4">
+          {/* Thumbnail */}
+          {material.thumbnail_url && (
+            <div className="overflow-hidden rounded-xl bg-gray-100">
+              <img
+                src={material.thumbnail_url}
+                alt={material.title}
+                className="h-40 w-full object-cover"
+              />
+            </div>
+          )}
+
+          <div className="overflow-hidden rounded-xl bg-white shadow-sm">
+            <div className="border-b border-gray-100 p-5">
+              <div className="flex items-center gap-3">
+                <Icon className="h-6 w-6 flex-shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-lg font-bold text-gray-800">{material.title}</h2>
+                </div>
+              </div>
+              {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
+            </div>
+
+            <div className="space-y-4 p-5">
+              {material.description && (
+                <p className="text-sm text-gray-600">{material.description}</p>
+              )}
+
+              <div className="space-y-2 text-sm text-gray-500">
+                {material.subject && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-700">Môn:</span>
+                    <span>{material.subject}</span>
+                  </div>
+                )}
+                {material.grade && (
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-gray-700">Khối:</span>
+                    <span>{material.grade}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-gray-700">Ngày tạo:</span>
+                  <span>{formatDate(material.created_at)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Modals */}
       <Modal isOpen={showAddToClass} onClose={() => setShowAddToClass(false)} title="Thêm tài liệu vào lớp" size="sm">
         <div className="space-y-4">
           <div>

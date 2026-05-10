@@ -14,6 +14,10 @@ env/
 # FastAPI / SQLite
 *.db
 *.sqlite3
+.agent
+.cursor
+AGENTS.md
+CLAUDE.md
 
 # Node
 node_modules/

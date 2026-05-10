@@ -340,6 +340,16 @@ def _answered_question_ids(attempt: PackageAttempt) -> set[str]:
     }
 
 
+def _correct_question_ids(attempt: PackageAttempt) -> set[str]:
+    """Get IDs of correctly answered questions. Used for Gold Miner progress tracking."""
+    return {
+        item.question_item_id
+        for item in attempt.question_attempts
+        if item.question_item_id
+        and item.is_correct is True
+    }
+
+
 def _presented_question_ids(attempt: PackageAttempt) -> set[str]:
     return {
         item.question_item_id
@@ -349,7 +359,8 @@ def _presented_question_ids(attempt: PackageAttempt) -> set[str]:
 
 
 def _progress_for_attempt(attempt: PackageAttempt) -> dict[str, Any]:
-    question_plan = _ensure_difficulty_progression_question_plan(attempt) if _is_gold_miner_package(attempt.package) else _attempt_question_plan(attempt)
+    is_gold_miner = _is_gold_miner_package(attempt.package)
+    question_plan = _ensure_difficulty_progression_question_plan(attempt) if is_gold_miner else _attempt_question_plan(attempt)
     difficulty_bands = (
         question_plan.get("difficulty_bands")
         if isinstance(question_plan, dict) and isinstance(question_plan.get("difficulty_bands"), list)
@@ -368,7 +379,8 @@ def _progress_for_attempt(attempt: PackageAttempt) -> dict[str, Any]:
             for band in difficulty_bands
         }
 
-    answered_ids = _answered_question_ids(attempt)
+    # For Gold Miner, only count CORRECT answers as answered
+    answered_ids = _correct_question_ids(attempt) if is_gold_miner else _answered_question_ids(attempt)
     by_difficulty: dict[str, dict[str, Any]] = {}
     total_questions = 0
     total_answered = 0
@@ -434,19 +446,16 @@ def _attempt_totals(attempt: PackageAttempt) -> dict:
     active_question_attempt = _active_question_attempt(attempt)
     progress = _progress_for_attempt(attempt)
     questions_total = progress.get("total_questions")
-    questions_answered = sum(
-        1 for item in question_attempts if item.status in ANSWERED_QUESTION_STATUSES or item.answered_at is not None
-    )
-    correct_answers = sum(1 for item in question_attempts if item.is_correct is True)
 
     # Get wrong_attempts from runtime state for Gold Miner
     runtime_state = _runtime_state_dict(attempt)
     wrong_attempts = runtime_state.get("wrong_attempts", 0) if runtime_state else 0
+    correct_answers = sum(1 for item in question_attempts if item.is_correct is True)
 
     return {
         "questions_total": questions_total,
         "questions_presented": len(question_attempts),
-        "questions_answered": progress.get("questions_answered", questions_answered),
+        "questions_answered": progress.get("questions_answered"),
         "questions_remaining": progress.get("questions_remaining"),
         "questions_pending_manual": sum(1 for item in question_attempts if item.status == QuestionAttemptStatus.pending_manual),
         "questions_correct": correct_answers,
@@ -1674,12 +1683,6 @@ def complete_attempt(db: Session, *, package_id: str, student: User, data: GameC
     attempt.submitted_at = attempt.submitted_at or completed_at
     attempt.duration_ms = _extract_duration_ms(data.summary_payload, started_at=attempt.started_at, completed_at=completed_at)
     attempt.status = PackageAttemptStatus.completed
-
-    # Gold Miner: Don't allow leaderboard entry if game over (lost all lives)
-    if _is_gold_miner_package(attempt.package):
-        outcome = data.summary_payload.get("outcome") if isinstance(data.summary_payload, dict) else None
-        if outcome == "game_over":
-            attempt.leaderboard_eligible = False
 
     game_leaderboard_service.update_leaderboard_for_attempt(db, attempt=attempt)
 

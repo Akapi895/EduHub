@@ -129,11 +129,13 @@ export default function TeacherDashboard() {
           to="/teacher/classes"
           className="group bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-5 text-white hover:shadow-lg hover:shadow-blue-500/25 transition-all"
         >
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-3">
-            <GraduationCap className="w-5 h-5" />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <GraduationCap className="w-5 h-5" />
+            </div>
+            <p className="font-semibold leading-tight">Quản lý lớp học</p>
           </div>
-          <p className="font-semibold">Quản lý lớp học</p>
-          <p className="text-xs text-blue-100 mt-1">{data?.total_classes ?? 0} lớp đang hoạt động</p>
+          <p className="text-xs text-blue-100">{data?.total_classes ?? 0} lớp đang hoạt động</p>
           <div className="flex items-center gap-1 mt-3 text-xs text-blue-100 group-hover:text-white">
             <span>Xem chi tiết</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
@@ -143,11 +145,13 @@ export default function TeacherDashboard() {
           to="/teacher/library/personal"
           className="group bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-5 text-white hover:shadow-lg hover:shadow-purple-500/25 transition-all"
         >
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-3">
-            <BookOpen className="w-5 h-5" />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <p className="font-semibold leading-tight">Thư viện tài liệu</p>
           </div>
-          <p className="font-semibold">Thư viện tài liệu</p>
-          <p className="text-xs text-purple-100 mt-1">Quản lý tài liệu giảng dạy</p>
+          <p className="text-xs text-purple-100">Quản lý tài liệu giảng dạy</p>
           <div className="flex items-center gap-1 mt-3 text-xs text-purple-100 group-hover:text-white">
             <span>Khám phá</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
@@ -157,11 +161,13 @@ export default function TeacherDashboard() {
           to="/teacher/games"
           className="group bg-gradient-to-br from-amber-500 to-orange-500 rounded-2xl p-5 text-white hover:shadow-lg hover:shadow-amber-500/25 transition-all"
         >
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-3">
-            <TrendingUp className="w-5 h-5" />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <TrendingUp className="w-5 h-5" />
+            </div>
+            <p className="font-semibold leading-tight">Trò chơi học tập</p>
           </div>
-          <p className="font-semibold">Trò chơi học tập</p>
-          <p className="text-xs text-amber-100 mt-1">Tạo trò chơi cho học sinh</p>
+          <p className="text-xs text-amber-100">Tạo trò chơi cho học sinh</p>
           <div className="flex items-center gap-1 mt-3 text-xs text-amber-100 group-hover:text-white">
             <span>Tạo mới</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
@@ -171,11 +177,13 @@ export default function TeacherDashboard() {
           to="/teacher/inbox"
           className="group bg-gradient-to-br from-emerald-500 to-teal-500 rounded-2xl p-5 text-white hover:shadow-lg hover:shadow-emerald-500/25 transition-all"
         >
-          <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center mb-3">
-            <Inbox className="w-5 h-5" />
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
+              <Inbox className="w-5 h-5" />
+            </div>
+            <p className="font-semibold leading-tight">Hộp thư</p>
           </div>
-          <p className="font-semibold">Hộp thư</p>
-          <p className="text-xs text-emerald-100 mt-1">Tin nhắn với học sinh</p>
+          <p className="text-xs text-emerald-100">Tin nhắn với học sinh</p>
           <div className="flex items-center gap-1 mt-3 text-xs text-emerald-100 group-hover:text-white">
             <span>Mở hộp thư</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />

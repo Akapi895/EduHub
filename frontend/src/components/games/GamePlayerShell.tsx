@@ -38,7 +38,7 @@ import type {
 } from '@/features/games/types';
 import { isGameBridgeEnvelope } from '@/features/games/types';
 import { gameService } from '@/services/game.service';
-import { showErrorToast, showWarningToast } from '@/store/toast.store';
+import { showErrorToast } from '@/store/toast.store';
 import type {
   GamePackagePlayResponse,
   GameLeaderboardResponse,
@@ -311,6 +311,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
     score: number;
     level: number;
     reason: string;
+  } | null>(null);
+
+  // Wrong answer feedback modal
+  const [wrongAnswerModalOpen, setWrongAnswerModalOpen] = useState(false);
+  const [wrongAnswerData, setWrongAnswerData] = useState<{
+    feedbackMessage: string;
+    remainingLives: number;
+    maxLives: number;
   } | null>(null);
 
   const moduleEntry = resolveGameModule(playBundle, startBundle);
@@ -610,10 +618,16 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
       setAttemptTotals(data.attempt_totals ?? null);
       setLastQuestionResult(data);
 
-      // Show feedback toast for wrong answers
+      // Show feedback for wrong answers
       if (data.is_correct === false) {
         const remainingLives = data.wrong_attempts != null ? Math.max(0, 3 - data.wrong_attempts) : 0;
-        showWarningToast(`Sai rồi! Còn ${remainingLives} lượt thử.`);
+        // Show modal for wrong answer
+        setWrongAnswerData({
+          feedbackMessage: data.feedback_message || 'Câu trả lời chưa chính xác. Hãy thử lại!',
+          remainingLives,
+          maxLives: 3,
+        });
+        setWrongAnswerModalOpen(true);
       }
 
       questionFlowActiveRef.current = false;
@@ -1166,6 +1180,48 @@ export default function GamePlayerShell({ playBundle, initialManifest = null }: 
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wrong Answer Modal - Shows when student answers incorrectly */}
+      {wrongAnswerModalOpen && wrongAnswerData && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-amber-200 bg-white p-6 shadow-[0_25px_70px_rgba(15,23,42,0.25)]">
+            <div className="flex flex-col items-center text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
+                <AlertTriangle className="h-8 w-8 text-amber-500" />
+              </div>
+              <h2 className="mt-4 text-2xl font-bold text-slate-900">Sai rồi!</h2>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                {wrongAnswerData.feedbackMessage}
+              </p>
+              {/* Lives indicator */}
+              <div className="mt-4 flex items-center gap-2">
+                <span className="text-sm text-slate-500">Số mạng còn lại:</span>
+                <div className="flex gap-1">
+                  {Array.from({ length: wrongAnswerData.maxLives }).map((_, i) => (
+                    <span
+                      key={i}
+                      className={`text-lg ${i < wrongAnswerData.remainingLives ? 'text-red-500' : 'text-slate-300'}`}
+                    >
+                      ♥
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  setWrongAnswerModalOpen(false);
+                  setWrongAnswerData(null);
+                }}
+                className="mt-6 w-full"
+              >
+                Tiếp tục chơi
+              </Button>
             </div>
           </div>
         </div>

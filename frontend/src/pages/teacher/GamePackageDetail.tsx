@@ -292,7 +292,7 @@ export default function TeacherGamePackageDetail() {
     ?? gamePackage?.assignment?.class_id
     ?? gamePackage?.assignments?.[0]?.class_id
     ?? null;
-  const gameModuleName = gamePackage?.game_module?.title || 'Game';
+  const gameModuleName = gamePackage?.game_module?.title || 'Trò chơi';
   const hasQuestionDistribution = gamePackage?.game_module?.slug !== undefined;
   const goldMinerPackage = gamePackage?.game_module?.slug === 'gold-miner' ||
     gamePackage?.game_module_id === 'gold-miner';
@@ -1265,7 +1265,7 @@ export default function TeacherGamePackageDetail() {
             <div>
               <p className="font-medium text-gray-900">Xác nhận gỡ trò chơi khỏi Game Hub?</p>
               <p className="mt-2 text-sm text-gray-600">
-                Khi gỡ khỏi Game Hub, tất cả nội dung liên quan đến <strong>leaderboard sẽ bị biến mất hoàn toàn</strong>.
+                Khi gỡ khỏi Game Hub, tất cả nội dung liên quan đến <strong>Bảng xếp hạng sẽ bị biến mất hoàn toàn</strong>.
                 Học sinh sẽ không thể xem bảng xếp hạng và điểm số của mình.
               </p>
               <p className="mt-2 text-sm text-gray-500">
