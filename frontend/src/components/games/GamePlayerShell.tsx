@@ -366,7 +366,11 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     reason: string,
     extraPayload: Record<string, unknown> = {},
   ) => {
-    if (!manifest) return;
+    console.info('[QFLOW] sendHostCommand called', { type, reason, hasManifest: !!manifest });
+    if (!manifest) {
+      console.warn('[QFLOW] sendHostCommand: manifest is null!');
+      return;
+    }
 
     postHostCommand(frameRef.current, manifest, type, {
       sessionId,
@@ -406,6 +410,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     options: { watchdog?: boolean } = {},
   ) => {
     const issuedAt = Date.now();
+    console.info('[QFLOW] resumeRuntime called', { reason, eventPayload });
     setRuntimeStatus((current) => (current === 'completed' || current === 'error' ? current : 'running'));
     sendHostCommand('host:resume', reason, eventPayload);
 
@@ -861,7 +866,14 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.source !== frameRef.current?.contentWindow) return;
+      // Debug: log all messages received
+      if (event.data && typeof event.data === 'object' && event.data.channel === 'eduhub:game-bridge') {
+        console.info('[QFLOW] Message received from game iframe:', event.data.type, event.data);
+      }
+      
+      if (event.source !== frameRef.current?.contentWindow) {
+        // Don't return here for debugging - let it process
+      }
       if (!isGameBridgeEnvelope(event.data)) return;
       const message = event.data as GameBridgeEnvelope;
 
@@ -878,9 +890,9 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
             ? 'running'
             : ((message.payload?.status as GameRuntimeStatus) || 'running')
         );
-        if (nextStatus === 'running') {
-          lastRunningGameMessageAtRef.current = Date.now();
-        }
+        // Always update heartbeat for watchdog - game is alive even when paused
+        // as long as it continues sending state updates
+        lastRunningGameMessageAtRef.current = Date.now();
         setRuntimeStatus(nextStatus);
         setRuntimeSnapshot((current) => ({ ...current, ...(message.payload ?? {}) }));
         return;

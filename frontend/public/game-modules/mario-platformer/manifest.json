@@ -1,0 +1,47 @@
+{
+  "id": "mario-platformer",
+  "slug": "mario-platformer",
+  "title": "Mario Platformer - Học mà Chơi",
+  "description": "Game platformer giáo dục với hệ thống checkpoint và câu hỏi kiểm tra kiến thức.",
+  "short_description": "Vượt checkpoint, trả lời câu hỏi, học mà chơi!",
+  "thumbnail": "/game-modules/mario-platformer/assets/thumbnail.svg",
+  "entry": "index.html",
+  "tags": ["platformer", "education", "checkpoint", "lives"],
+  "instructions": [
+    "Di chuyển: ← → để điều khiển Mario",
+    "Nhảy: SPACE hoặc ↑",
+    "Đạp enemies: nhảy lên đầu chúng",
+    "Chạm checkpoint: trả lời câu hỏi để tiếp tục"
+  ],
+  "featured": true,
+  "runtime": {
+    "kind": "iframe",
+    "sandbox": "allow-scripts allow-same-origin",
+    "allow": "",
+    "aspect_ratio": "16 / 9",
+    "target_origin": "*"
+  },
+  "bridge": {
+    "enabled": true,
+    "version": 2,
+    "capabilities": [
+      "ready",
+      "state",
+      "progress",
+      "question-trigger",
+      "complete",
+      "pause",
+      "resume",
+      "restart"
+    ]
+  },
+  "gameplay": {
+    "supports_checkpoints": true,
+    "checkpoint_trigger_type": "checkpoint_reached",
+    "supports_lives": true,
+    "max_lives": 3,
+    "supports_wrong_answer_retry": true,
+    "respawn_at_checkpoint": true,
+    "level_count": 3
+  }
+}

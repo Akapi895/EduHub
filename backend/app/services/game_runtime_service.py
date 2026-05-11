@@ -35,7 +35,7 @@ from app.schemas.game import (
     GameRuntimeTriggerRequest,
 )
 from app.services import game_access_service, game_leaderboard_service
-from app.services.game_seed_service import GOLD_MINER_MODULE_ID, ensure_default_game_modules
+from app.services.game_seed_service import GOLD_MINER_MODULE_ID, MARIO_MODULE_ID, ensure_default_game_modules
 from app.services.grading_service import grade_question_attempt, recalculate_attempt_scores
 from app.utils.datetime_utils import now_local_naive
 from app.utils.enums import ContentPackageType, PackageAttemptStatus, QuestionAttemptStatus, QuestionSourceContext, QuestionType
@@ -148,6 +148,12 @@ def _is_gold_miner_package(package: ContentPackage | None) -> bool:
     if not package or not package.game_config or not package.game_config.game_module:
         return False
     return package.game_config.game_module.slug == GOLD_MINER_MODULE_ID
+
+
+def _is_mario_package(package: ContentPackage | None) -> bool:
+    if not package or not package.game_config or not package.game_config.game_module:
+        return False
+    return package.game_config.game_module.slug == MARIO_MODULE_ID
 
 
 MEMORY_CARD_MODULE_SLUG = "memory-card"
@@ -1431,6 +1437,183 @@ def _handle_difficulty_progression_trigger(
     )
 
 
+def _handle_mario_trigger(
+    db: Session,
+    *,
+    attempt: PackageAttempt,
+    package_id: str,
+    data: GameRuntimeTriggerRequest,
+    checkpoint_id: str | None,
+) -> dict:
+    """Handle Mario checkpoint trigger.
+    
+    Logic:
+    1. Parse checkpoint info from trigger
+    2. Check if already answered correctly for this checkpoint
+    3. Select question based on difficulty band for this checkpoint
+    4. Return ask_question action
+    """
+    event_payload = data.event_payload if isinstance(data.event_payload, dict) else {}
+    level_number = event_payload.get("level", 1)
+    checkpoint_id = checkpoint_id or data.trigger_value or event_payload.get("checkpointId", "")
+
+    logger.info(f"[MARIO] _handle_mario_trigger: checkpoint={checkpoint_id}, level={level_number}")
+
+    # Check if this checkpoint was already passed (question answered correctly)
+    runtime_state = _runtime_state_dict(attempt)
+    mario_state = runtime_state.get("mario", {})
+    checkpoints_passed = mario_state.get("checkpoints_passed", [])
+    lives = mario_state.get("lives", 3)
+
+    if checkpoint_id in checkpoints_passed:
+        logger.info(f"[MARIO] Checkpoint {checkpoint_id} already passed, resuming")
+        return {
+            "action": "resume",
+            "reason": "checkpoint_already_passed",
+            "attempt_totals": _attempt_totals(attempt),
+        }
+
+    # Get checkpoint difficulty from trigger mapping
+    module = attempt.package.game_config.game_module if attempt.package and attempt.package.game_config else None
+    if not module:
+        return {
+            "action": "resume",
+            "reason": "no_module_config",
+            "attempt_totals": _attempt_totals(attempt),
+        }
+
+    mapping = next(
+        (
+            item
+            for item in module.trigger_mappings
+            if item.is_active
+            and item.trigger_type == "checkpoint_reached"
+            and item.trigger_key == "checkpoint_id"
+            and item.trigger_value == checkpoint_id
+        ),
+        None,
+    )
+
+    if not mapping:
+        # No specific mapping found, try to infer from checkpoint pattern
+        # Pattern: l{level}cp{number} -> use level to determine difficulty
+        difficulty_band = _infer_checkpoint_difficulty(checkpoint_id, level_number)
+        selector_strategy = "ordered_no_repeat"
+    else:
+        difficulty_band = mapping.difficulty_band
+        selector_strategy = mapping.selector_strategy or "ordered_no_repeat"
+
+    logger.info(f"[MARIO] Checkpoint {checkpoint_id} -> difficulty={difficulty_band}, strategy={selector_strategy}")
+
+    # Select question for this checkpoint
+    question = _select_question_for_difficulty(
+        attempt,
+        difficulty_band=difficulty_band,
+        selector_strategy=selector_strategy,
+    )
+
+    if not question:
+        _log_runtime_event(
+            db,
+            attempt_id=attempt.id,
+            event_type="trigger_no_question",
+            event_payload={
+                **data.model_dump(),
+                "difficulty_band": difficulty_band,
+                "checkpoint_id": checkpoint_id,
+            },
+        )
+        db.commit()
+        return {
+            "action": "resume",
+            "reason": "no_question_available",
+            "attempt_totals": _attempt_totals(attempt),
+        }
+
+    # Create question attempt
+    question_attempt = PackageQuestionAttempt(
+        package_attempt_id=attempt.id,
+        question_item_id=question.id,
+        source_context=QuestionSourceContext.game_trigger,
+        source_payload={
+            "trigger_type": data.trigger_type,
+            "trigger_key": data.trigger_key,
+            "trigger_value": data.trigger_value,
+            "event_payload": event_payload,
+            "checkpoint_id": checkpoint_id,
+            "level": level_number,
+            "difficulty_band": difficulty_band,
+        },
+        display_order=len(attempt.question_attempts),
+        difficulty_band_snapshot=difficulty_band,
+        presented_at=now_local_naive(),
+        pause_started_at=now_local_naive(),
+        status=QuestionAttemptStatus.presented,
+    )
+    db.add(question_attempt)
+    db.flush()
+
+    # Update Mario runtime state
+    mario_state.setdefault("checkpoints_passed", [])
+    mario_state["current_checkpoint"] = checkpoint_id
+    mario_state["lives"] = lives
+    runtime_state["mario"] = mario_state
+    attempt.runtime_state = runtime_state
+
+    _log_runtime_event(
+        db,
+        attempt_id=attempt.id,
+        event_type="question_triggered",
+        event_payload={
+            **data.model_dump(),
+            "question_attempt_id": question_attempt.id,
+            "question_item_id": question.id,
+            "checkpoint_id": checkpoint_id,
+            "level": level_number,
+            "difficulty_band": difficulty_band,
+            "lives": lives,
+        },
+    )
+    db.commit()
+
+    logger.info(f"[MARIO] Question triggered: question_id={question.id}, checkpoint={checkpoint_id}")
+
+    refreshed_attempt = get_game_attempt(db, attempt.id)
+    if not refreshed_attempt:
+        raise HTTPException(status_code=500, detail="Failed to prepare question")
+    refreshed_question_attempt = next(item for item in refreshed_attempt.question_attempts if item.id == question_attempt.id)
+    return {
+        "action": "ask_question",
+        "question_attempt": _serialize_question_attempt(refreshed_question_attempt),
+        "question": game_crud.serialize_game_question(question, package_id=package_id, include_correct=False),
+        "attempt_totals": _attempt_totals(refreshed_attempt),
+        "checkpoint_id": checkpoint_id,
+        "level": level_number,
+    }
+
+
+def _infer_checkpoint_difficulty(checkpoint_id: str, level: int) -> str:
+    """Infer difficulty band from checkpoint ID pattern and level number."""
+    # Pattern: l{level}cp{number} - e.g., l1cp1, l2cp1, l3cp2
+    try:
+        # Extract level from checkpoint_id if it contains level info
+        if checkpoint_id.startswith("l"):
+            level_from_id = int(checkpoint_id[1:checkpoint_id.index("cp")]) if "cp" in checkpoint_id else level
+        else:
+            level_from_id = level
+    except (ValueError, IndexError):
+        level_from_id = level
+
+    # Map level to difficulty band
+    difficulty_map = {
+        1: "recognition",
+        2: "comprehension",
+        3: "application_basic",
+        4: "application_advanced",
+    }
+    return difficulty_map.get(level_from_id, "recognition")
+
+
 def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRuntimeTriggerRequest, attempt: PackageAttempt | None = None) -> dict:
     ensure_default_game_modules(db)
     if attempt is None:
@@ -1462,6 +1645,7 @@ def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRun
             }
 
     is_gold_miner = _is_gold_miner_package(attempt.package)
+    is_mario = _is_mario_package(attempt.package)
     module_slug = attempt.package.game_config.game_module.slug if attempt.package and attempt.package.game_config and attempt.package.game_config.game_module else None
     # print(f"[GOLD_MINER DEBUG] is_gold_miner={is_gold_miner}, module_slug={module_slug}, GOLD_MINER_MODULE_ID={GOLD_MINER_MODULE_ID}")
     # print(f"[GOLD_MINER DEBUG] package_id={attempt.package.id if attempt.package else None}")
@@ -1474,6 +1658,17 @@ def handle_trigger(db: Session, *, package_id: str, student: User, data: GameRun
             package_id=package_id,
             data=data,
             item_instance_id=item_instance_id if isinstance(item_instance_id, str) else None,
+        )
+
+    if is_mario:
+        event_payload = data.event_payload if isinstance(data.event_payload, dict) else {}
+        checkpoint_id = event_payload.get("checkpointId") or data.trigger_value
+        return _handle_mario_trigger(
+            db,
+            attempt=attempt,
+            package_id=package_id,
+            data=data,
+            checkpoint_id=checkpoint_id if isinstance(checkpoint_id, str) else None,
         )
 
     module = attempt.package.game_config.game_module if attempt.package and attempt.package.game_config else None
@@ -1688,6 +1883,7 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
 
     # Gold Miner: track wrong answers
     is_gold_miner = _is_gold_miner_package(attempt.package)
+    is_mario = _is_mario_package(attempt.package)
     game_over = False
     wrong_attempts = 0
 
@@ -1734,6 +1930,51 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
                 "game_over": game_over,
             },
         )
+    elif is_mario:
+        # Mario: track lives and checkpoints
+        runtime_state = _runtime_state_dict(attempt)
+        mario_state = runtime_state.get("mario", {})
+        wrong_attempts = runtime_state.get("wrong_attempts", 0)
+
+        if question_attempt.is_correct:
+            # Correct answer - mark checkpoint as passed
+            source_payload = question_attempt.source_payload if isinstance(question_attempt.source_payload, dict) else {}
+            checkpoint_id = source_payload.get("checkpoint_id")
+            if checkpoint_id:
+                checkpoints_passed = mario_state.get("checkpoints_passed", [])
+                if checkpoint_id not in checkpoints_passed:
+                    checkpoints_passed.append(checkpoint_id)
+                mario_state["checkpoints_passed"] = checkpoints_passed
+                mario_state["current_checkpoint"] = checkpoint_id
+            runtime_state["mario"] = mario_state
+            attempt.runtime_state = runtime_state
+        else:
+            # Wrong answer - lose a life
+            wrong_attempts += 1
+            runtime_state["wrong_attempts"] = wrong_attempts
+            lives = mario_state.get("lives", 3) - 1
+            mario_state["lives"] = lives
+            runtime_state["mario"] = mario_state
+            attempt.runtime_state = runtime_state
+
+            if wrong_attempts >= 3:
+                game_over = True
+
+        _log_runtime_event(
+            db,
+            attempt_id=attempt.id,
+            event_type="question_answered",
+            event_payload={
+                "question_attempt_id": question_attempt.id,
+                "question_item_id": question_attempt.question_item_id,
+                "status": question_attempt.status,
+                "is_correct": question_attempt.is_correct,
+                "score_awarded": question_attempt.score_awarded,
+                "wrong_attempts": wrong_attempts,
+                "lives_remaining": mario_state.get("lives", 3),
+                "game_over": game_over,
+            },
+        )
     else:
         _log_runtime_event(
             db,
@@ -1771,6 +2012,14 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
 
     if is_gold_miner:
         result["wrong_attempts"] = wrong_attempts
+        if game_over:
+            result["game_over"] = True
+            result["game_over_reason"] = "max_wrong_attempts"
+
+    if is_mario:
+        result["wrong_attempts"] = wrong_attempts
+        result["lives_remaining"] = mario_state.get("lives", 3)
+        result["checkpoints_passed"] = mario_state.get("checkpoints_passed", [])
         if game_over:
             result["game_over"] = True
             result["game_over_reason"] = "max_wrong_attempts"

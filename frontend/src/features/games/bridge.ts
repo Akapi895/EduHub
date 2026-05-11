@@ -55,9 +55,14 @@ export function postHostCommand(
   type: GameHostCommandType,
   payload: GameHostCommandPayload,
 ) {
-  if (!frame?.contentWindow) return;
+  if (!frame?.contentWindow) {
+    console.warn('[postHostCommand] No frame or contentWindow');
+    return;
+  }
+  const envelope = buildHostCommand(type, game, payload);
+  console.info('[postHostCommand] Sending to iframe:', type, envelope);
   frame.contentWindow.postMessage(
-    buildHostCommand(type, game, payload),
+    envelope,
     resolveGameTargetOrigin(game),
   );
 }

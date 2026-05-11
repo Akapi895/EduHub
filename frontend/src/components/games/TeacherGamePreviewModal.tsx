@@ -31,12 +31,12 @@ export default function TeacherGamePreviewModal({ packageId, open, onClose }: Te
     setError(null);
     setPlayBundle(null);
 
-    console.log('[TeacherPreview] Calling API with packageId:', packageId);
+    // console.log('[TeacherPreview] Calling API with packageId:', packageId);
 
     gameService
       .getTeacherGamePreview(packageId)
       .then((response) => {
-        console.log('[TeacherPreview] Success:', response);
+        // console.log('[TeacherPreview] Success:', response);
         if (cancelled) return;
         setPlayBundle(unwrapApiData<GamePackagePlayResponse>(response));
       })

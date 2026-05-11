@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mario Platformer - Học mà Chơi</title>
+    <link rel="stylesheet" href="css/game.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- HUD -->
+        <div id="hud">
+            <div class="hud-left">
+                <span id="score">Điểm: 0</span>
+            </div>
+            <div class="hud-center">
+                <span id="level">Level 1</span>
+            </div>
+            <div class="hud-right">
+                <span id="lives">♥♥♥</span>
+                <span id="checkpoint">Checkpoint: -</span>
+            </div>
+        </div>
+        
+        <!-- Game Canvas -->
+        <div id="game-wrapper">
+            <canvas id="game-canvas"></canvas>
+            
+            <!-- Quiz Modal (hidden by default) -->
+            <div id="quiz-modal" class="hidden">
+                <div class="quiz-content">
+                    <div class="quiz-header">
+                        <span id="quiz-type" class="quiz-type">Câu hỏi</span>
+                        <span id="quiz-points" class="quiz-points">0 điểm</span>
+                    </div>
+                    <div class="quiz-body">
+                        <p id="quiz-question" class="quiz-question"></p>
+                        <div id="quiz-options" class="quiz-options"></div>
+                        <textarea id="quiz-text-input" class="quiz-text-input hidden" rows="4"></textarea>
+                    </div>
+                    <div class="quiz-actions">
+                        <button id="quiz-submit" class="quiz-submit" disabled>Nộp câu trả lời</button>
+                    </div>
+                    <div id="quiz-feedback" class="quiz-feedback hidden">
+                        <div class="feedback-icon"></div>
+                        <p class="feedback-text"></p>
+                        <p class="feedback-explanation"></p>
+                        <button id="quiz-continue" class="quiz-continue">Tiếp tục</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Game Over Modal -->
+        <div id="game-over-modal" class="hidden">
+            <div class="modal-content">
+                <h2 id="game-over-title">Game Over!</h2>
+                <p id="game-over-score">Điểm: 0</p>
+                <p id="game-over-checkpoints">Checkpoint đã vượt qua: 0</p>
+                <button id="restart-btn" class="modal-btn">Chơi lại</button>
+            </div>
+        </div>
+        
+        <!-- Level Complete Modal -->
+        <div id="level-complete-modal" class="hidden">
+            <div class="modal-content">
+                <h2>Level Hoàn Thành!</h2>
+                <p id="level-complete-score">Điểm: 0</p>
+                <button id="next-level-btn" class="modal-btn">Level Tiếp Theo</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/bridge.js"></script>
+    <script src="js/game/GameState.js"></script>
+    <script src="js/game/Player.js"></script>
+    <script src="js/game/Checkpoint.js"></script>
+    <script src="js/game/LevelManager.js"></script>
+    <script src="js/game/LivesManager.js"></script>
+    <script src="js/game/ScoreManager.js"></script>
+    <script src="js/game/QuizManager.js"></script>
+    <script src="js/game/Physics.js"></script>
+    <script src="js/game/InputHandler.js"></script>
+    <script src="js/game/GameRenderer.js"></script>
+    <script src="js/game/Game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

@@ -16,6 +16,12 @@ MEMORY_CARD_MANIFEST_URL = "/game-modules/memory-card/manifest.json"
 MEMORY_CARD_ENTRY_URL = "/game-modules/memory-card/index.html"
 MEMORY_CARD_THUMBNAIL_URL = "/game-modules/memory-card/thumbnail.svg"
 
+# Mario Platformer Module
+MARIO_MODULE_ID = "mario-platformer"
+MARIO_MANIFEST_URL = "/game-modules/mario-platformer/manifest.json"
+MARIO_ENTRY_URL = "/game-modules/mario-platformer/index.html"
+MARIO_THUMBNAIL_URL = "/game-modules/mario-platformer/assets/thumbnail.png"
+
 # New mapping: difficulty -> itemType (mixed items per difficulty)
 # - recognition -> rock
 # - comprehension -> mystery_bag, medium_gold
@@ -117,6 +123,71 @@ MEMORY_CARD_TRIGGER_MAPPINGS = (
         "trigger_type": "pair_matched",
         "trigger_key": "difficulty_band",
         "trigger_value": "application_advanced",
+        "difficulty_band": DifficultyBand.application_advanced,
+        "selector_strategy": "ordered_no_repeat",
+    },
+)
+
+# Mario Platformer Trigger Mappings
+# Checkpoints map to difficulty bands based on level position
+MARIO_TRIGGER_MAPPINGS = (
+    # Level 1 checkpoints - recognition level questions
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l1cp1",
+        "difficulty_band": DifficultyBand.recognition,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l1cp2",
+        "difficulty_band": DifficultyBand.recognition,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    # Level 2 checkpoints - comprehension level questions
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l2cp1",
+        "difficulty_band": DifficultyBand.comprehension,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l2cp2",
+        "difficulty_band": DifficultyBand.comprehension,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    # Level 3 checkpoints - application_basic level questions
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l3cp1",
+        "difficulty_band": DifficultyBand.application_basic,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l3cp2",
+        "difficulty_band": DifficultyBand.application_basic,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    # Level 4 checkpoints - application_advanced level questions
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l4cp1",
+        "difficulty_band": DifficultyBand.application_advanced,
+        "selector_strategy": "ordered_no_repeat",
+    },
+    {
+        "trigger_type": "checkpoint_reached",
+        "trigger_key": "checkpoint_id",
+        "trigger_value": "l4cp2",
         "difficulty_band": DifficultyBand.application_advanced,
         "selector_strategy": "ordered_no_repeat",
     },
@@ -240,6 +311,65 @@ MEMORY_CARD_CAPABILITY_CONFIG = {
     ],
 }
 
+# Mario Platformer capability config
+MARIO_CAPABILITY_CONFIG = {
+    "entry": MARIO_ENTRY_URL,
+    "thumbnail_url": MARIO_THUMBNAIL_URL,
+    "bridge": {
+        "enabled": True,
+        "version": 2,
+        "capabilities": [
+            "ready",
+            "state",
+            "progress",
+            "complete",
+            "pause",
+            "resume",
+            "restart",
+            "question_trigger",
+        ],
+    },
+    "runtime": {
+        "kind": "iframe",
+        "sandbox": "allow-scripts allow-same-origin",
+        "allow": "fullscreen",
+        "aspect_ratio": "16 / 9",
+    },
+    "session": {
+        "default_levels": 3,
+        "item_count_per_level": 15,  # Total game items (coins, enemies)
+        "default_time_limit_seconds": 0,  # No time limit
+        "target_score_base": 1000,
+        "max_lives": 3,
+        "checkpoint_count_per_level": 2,  # 2 checkpoints per level
+    },
+    "question_distribution": {
+        "mode": "progressive",  # Progressive difficulty through levels
+        "questions_per_level": 8,  # 8 questions per level
+        "checkpoint_triggers": 2,  # 2 checkpoint triggers per level
+        "wrong_answer_max": 3,  # Game over after 3 wrong answers
+        "score_correct_boost": 50,  # Bonus points for correct answer
+        "checkpoint_pass_bonus": 100,  # Bonus for passing checkpoint
+    },
+    "checkpoint": {
+        "respawn_at_checkpoint": True,
+        "checkpoint_trigger_type": "checkpoint_reached",
+    },
+    "supports_blocking_modal": True,
+    "supports_timer_pause": True,
+    "supports_lives": True,
+    "supports_wrong_answer_retry": True,
+    "supports_checkpoints": True,
+    "question_time_tracking": True,
+    "ranking_by_time": True,
+    "supported_question_types": [
+        QuestionType.single_choice,
+        QuestionType.multi_choice,
+        QuestionType.text,
+        QuestionType.matching,
+    ],
+}
+
 DEFAULT_GAME_MODULE_DEFINITIONS = (
     {
         "id": GOLD_MINER_MODULE_ID,
@@ -260,6 +390,16 @@ DEFAULT_GAME_MODULE_DEFINITIONS = (
         "manifest_url": MEMORY_CARD_MANIFEST_URL,
         "capability_config": MEMORY_CARD_CAPABILITY_CONFIG,
         "trigger_mappings": MEMORY_CARD_TRIGGER_MAPPINGS,
+    },
+    {
+        "id": MARIO_MODULE_ID,
+        "slug": MARIO_MODULE_ID,
+        "title": "Mario Platformer",
+        "description": "Game platformer giáo dục với hệ thống checkpoint và câu hỏi kiểm tra kiến thức.",
+        "runtime_kind": "iframe",
+        "manifest_url": MARIO_MANIFEST_URL,
+        "capability_config": MARIO_CAPABILITY_CONFIG,
+        "trigger_mappings": MARIO_TRIGGER_MAPPINGS,
     },
 )
 

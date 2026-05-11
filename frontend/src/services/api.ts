@@ -10,7 +10,7 @@ const api = axios.create({
 // Request interceptor: attach JWT token
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
-  console.log('[API] Request:', config.method?.toUpperCase(), config.url, 'Token:', token ? 'Yes' : 'No');
+  // console.log('[API] Request:', config.method?.toUpperCase(), config.url, 'Token:', token ? 'Yes' : 'No');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -21,7 +21,7 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.log('[API] Response Error:', error.response?.status, error.response?.data);
+    // console.log('[API] Response Error:', error.response?.status, error.response?.data);
     if (error.response?.status === 401) {
       useAuthStore.getState().logout();
       window.location.href = '/login';

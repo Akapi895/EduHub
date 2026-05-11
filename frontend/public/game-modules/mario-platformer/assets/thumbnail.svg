@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300">
+  <defs>
+    <linearGradient id="skyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#87CEEB"/>
+      <stop offset="60%" style="stop-color:#87CEEB"/>
+      <stop offset="60%" style="stop-color:#90EE90"/>
+      <stop offset="100%" style="stop-color:#228B22"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="400" height="300" fill="url(#skyGrad)"/>
+  
+  <!-- Sun -->
+  <circle cx="350" cy="50" r="30" fill="#FFD700"/>
+  
+  <!-- Clouds -->
+  <g fill="#fff" opacity="0.9">
+    <circle cx="80" cy="40" r="20"/>
+    <circle cx="100" cy="35" r="25"/>
+    <circle cx="120" cy="40" r="20"/>
+    <circle cx="250" cy="60" r="18"/>
+    <circle cx="270" cy="55" r="22"/>
+    <circle cx="290" cy="60" r="18"/>
+  </g>
+  
+  <!-- Ground -->
+  <rect x="0" y="250" width="400" height="50" fill="#8B4513"/>
+  <rect x="0" y="250" width="400" height="8" fill="#228B22"/>
+  
+  <!-- Mario Character -->
+  <g transform="translate(100, 180)">
+    <!-- Hat -->
+    <rect x="10" y="0" width="40" height="12" fill="#3498db"/>
+    <!-- Head -->
+    <rect x="10" y="12" width="40" height="24" fill="#f5d0a9"/>
+    <!-- Eyes -->
+    <rect x="36" y="18" width="6" height="6" fill="#000"/>
+    <!-- Body (Shirt) -->
+    <rect x="10" y="36" width="40" height="24" fill="#e74c3c"/>
+    <!-- Arms -->
+    <rect x="0" y="36" width="10" height="18" fill="#f5d0a9"/>
+    <rect x="50" y="36" width="10" height="18" fill="#f5d0a9"/>
+    <!-- Pants -->
+    <rect x="10" y="60" width="40" height="12" fill="#2c3e50"/>
+    <!-- Feet -->
+    <rect x="10" y="72" width="18" height="10" fill="#654321"/>
+    <rect x="32" y="72" width="18" height="10" fill="#654321"/>
+  </g>
+  
+  <!-- Checkpoint Flag -->
+  <g transform="translate(280, 186)">
+    <!-- Pole -->
+    <rect x="10" y="0" width="6" height="64" fill="#8B4513"/>
+    <!-- Flag -->
+    <polygon points="16,5 55,15 55,35 16,40" fill="#27ae60"/>
+    <!-- Ball -->
+    <circle cx="13" cy="5" r="5" fill="#f1c40f"/>
+  </g>
+  
+  <!-- Platform -->
+  <g>
+    <rect x="180" y="210" width="100" height="15" fill="#DEB887"/>
+    <rect x="180" y="210" width="100" height="4" fill="#F5DEB3"/>
+  </g>
+  
+  <!-- Coin -->
+  <circle cx="230" cy="185" r="12" fill="#f1c40f" stroke="#f39c12" stroke-width="2"/>
+  <text x="230" y="190" text-anchor="middle" font-size="12" fill="#fff">★</text>
+  
+  <!-- Enemy (Goomba) -->
+  <g transform="translate(320, 215)">
+    <rect x="4" y="5" width="24" height="30" fill="#8b4513"/>
+    <rect x="8" y="12" width="16" height="16" fill="#d2691e"/>
+    <rect x="8" y="14" width="6" height="6" fill="#fff"/>
+    <rect x="18" y="14" width="6" height="6" fill="#fff"/>
+    <rect x="10" y="16" width="3" height="3" fill="#000"/>
+    <rect x="20" y="16" width="3" height="3" fill="#000"/>
+    <rect x="2" y="28" width="10" height="6" fill="#654321"/>
+    <rect x="20" y="28" width="10" height="6" fill="#654321"/>
+  </g>
+  
+  <!-- Title -->
+  <text x="200" y="35" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="28" fill="#fff" stroke="#333" stroke-width="3">
+    MARIO PLATFORMER
+  </text>
+  <text x="200" y="35" text-anchor="middle" font-family="Arial Black, sans-serif" font-size="28" fill="#FFD700" stroke="none">
+    MARIO PLATFORMER
+  </text>
+</svg>
