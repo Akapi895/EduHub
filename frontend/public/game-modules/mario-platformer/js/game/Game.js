@@ -17,14 +17,18 @@ class Game {
         this.scoreManager = new ScoreManager();
         this.inputHandler = new InputHandler();
         this.renderer = new GameRenderer(this.canvas);
-        this.physics = new Physics();
+        // NOTE: Physics.js đã bị xóa (không sử dụng)
         
         // Game state
         this.isRunning = false;
         this.isPaused = false;
-        this.isInitialized = false; // Guard to prevent double init
+        this.isInitialized = false;
         this.lastTime = 0;
         this.runtimeConfig = null;
+        
+        // Max questions per level (cấu hình từ manifest/runtimeConfig)
+        this.maxQuestionsPerLevel = 99;    // 99 = không giới hạn (mặc định)
+        this.questionsAnsweredThisLevel = 0; // đếm số câu đã trả lời trong level hiện tại
         
         // HUD elements
         this.hudScore = document.getElementById('score');
@@ -175,6 +179,11 @@ class Game {
             const session = payload.runtimeConfig.session;
             this.livesManager.init(session.maxLives || 3);
             this.state.totalLevels = session.levelCount || 3;
+            // Đọc giới hạn số câu hỏi từ config
+            this.maxQuestionsPerLevel = session.maxQuestionsPerLevel
+                ?? payload.runtimeConfig?.maxQuestionsPerLevel
+                ?? 99;
+            console.log('[GAME] maxQuestionsPerLevel:', this.maxQuestionsPerLevel);
         }
         
         // CRITICAL-2: Handle active question restoration on page reload
@@ -342,6 +351,7 @@ class Game {
         this.checkpointManager.reset();
         this.levelManager.loadLevel(1);
         this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
+        this.questionsAnsweredThisLevel = 0; // reset question counter
         
         // Hide modals
         this.gameOverModal?.classList.add('hidden');
@@ -354,6 +364,7 @@ class Game {
     
     nextLevel() {
         this.levelCompleteModal?.classList.add('hidden');
+        this.questionsAnsweredThisLevel = 0; // reset khi sang level mới
         
         const nextLevel = this.levelManager.nextLevel();
         if (nextLevel) {
@@ -431,39 +442,7 @@ class Game {
             this.checkCollisions();
         }
 
-        // HIGH-4: Block player from passing unpassed checkpoints more robustly
-        const blockingCheckpoint = this.checkpointManager.getBlockingCheckpoint(
-            this.player.x,
-            this.player.velocityX,
-            this.player.width
-        );
-        if (blockingCheckpoint) {
-            // Get checkpoint collision zone
-            const checkpointX = blockingCheckpoint.x;
-            const playerCenterX = this.player.x + this.player.width / 2;
-            
-            // If player center is to the left of checkpoint and moving right, block
-            if (playerCenterX < checkpointX && this.player.velocityX > 0) {
-                // Push player back to just before checkpoint
-                this.player.x = checkpointX - this.player.width - 5;
-                this.player.velocityX = 0;
-            }
-            
-            // If player is already past checkpoint (could happen with high speed), block
-            if (playerCenterX >= checkpointX && playerCenterX < checkpointX + 40) {
-                // Push back to before checkpoint
-                this.player.x = checkpointX - this.player.width - 5;
-                this.player.velocityX = Math.min(0, this.player.velocityX);
-            }
-            
-            // Also handle jumping over - push down if jumping over the checkpoint area
-            if (this.player.y < blockingCheckpoint.y - 10 && this.player.velocityY < 0) {
-                this.player.velocityY = 2; // Push down
-                this.player.y = blockingCheckpoint.y - this.player.height + 5;
-            }
-        }
-        
-        // Update camera
+        // Cập nhật camera
         this.renderer.updateCamera(this.player.x, this.canvas.width);
         
         // Check level completion - ONLY if all checkpoints are passed
@@ -539,11 +518,20 @@ class Game {
             }
         }
         
-        // Checkpoint collisions - MUST reach checkpoint
+        // Checkpoint collisions — trigger quiz khi chạm checkpoint chưa pass
         const hitCheckpoint = checkpoints.checkCollisions(this.player, this);
         if (hitCheckpoint) {
-            // Pause and wait for question
-            this.pause();
+            if (this.questionsAnsweredThisLevel >= this.maxQuestionsPerLevel) {
+                // Đã đủ số câu hỏi cho level này → auto-pass checkpoint
+                console.log('[GAME] Max questions reached, auto-passing:', hitCheckpoint.id);
+                this.checkpointManager.markPassed(hitCheckpoint.id);
+                this.scoreManager.addCheckpointBonus();
+                this.updateHUD();
+                // Không pause, không trigger quiz
+            } else {
+                // Còn quota → trigger quiz bình thường
+                this.pause();
+            }
         }
     }
     
@@ -668,6 +656,10 @@ class Game {
         // Mark quiz as not active
         this.state.quiz.active = false;
         
+        // Tăng counter số câu đã trả lời trong level này
+        this.questionsAnsweredThisLevel++;
+        console.log('[GAME] questionsAnsweredThisLevel:', this.questionsAnsweredThisLevel, '/', this.maxQuestionsPerLevel);
+        
         // Determine if answer is correct
         const isCorrect = result.is_correct || result.isCorrect || result.correct;
         
@@ -754,6 +746,9 @@ class Game {
         // Player
         this.player.render(ctx, this.renderer.cameraX);
         
+        // Arrow indicator — chỉ hướng đến checkpoint tiếp theo
+        this.renderNextCheckpointArrow(ctx);
+        
         // Game over overlay
         if (this.state.status === 'game_over') {
             this.renderer.renderGameOver(this.scoreManager.getScore(), this.checkpointManager.getPassedCount());
@@ -763,6 +758,42 @@ class Game {
         if (this.state.status === 'level_complete') {
             this.renderer.renderLevelComplete(this.state.currentLevel, this.scoreManager.getScore());
         }
+    }
+    
+    /**
+     * Vẽ mũi tên chỉ hướng đến checkpoint tiếp theo chưa pass
+     */
+    renderNextCheckpointArrow(ctx) {
+        if (this.isPaused || this.state.status !== 'playing') return;
+        
+        const nextCp = this.checkpointManager.getNextUnpassedCheckpoint();
+        if (!nextCp) return;
+        
+        const dx = nextCp.x - this.player.x;
+        if (Math.abs(dx) < 200) return; // đủ gần rồi, không cần arrow
+        
+        const arrowX = dx > 0 ? this.canvas.width - 55 : 55;
+        const arrowY = this.canvas.height / 2;
+        
+        // Nền bán trong suốt
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.roundRect(arrowX - 30, arrowY - 30, 60, 60, 8);
+        ctx.fill();
+        
+        // Mũi tên
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 26px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(dx > 0 ? '\u25b6' : '\u25c4', arrowX, arrowY - 8);
+        
+        // Chữ "CP"
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 11px Arial';
+        ctx.fillText('CP', arrowX, arrowY + 16);
+        ctx.restore();
     }
     
     renderPlatform(ctx, platform) {
@@ -811,8 +842,9 @@ class Game {
         if (this.hudLevel) this.hudLevel.textContent = `Level ${this.state.currentLevel}`;
         if (this.hudLives) this.hudLives.textContent = this.livesManager.getDisplayString();
         if (this.hudCheckpoint) {
-            const cp = this.checkpointManager.getCurrentCheckpointId();
-            this.hudCheckpoint.textContent = `Checkpoint: ${cp || '-'}`;
+            const answered = this.questionsAnsweredThisLevel;
+            const max = this.maxQuestionsPerLevel >= 99 ? '\u221e' : this.maxQuestionsPerLevel;
+            this.hudCheckpoint.textContent = `📍 ${answered}/${max} câu`;
         }
     }
     

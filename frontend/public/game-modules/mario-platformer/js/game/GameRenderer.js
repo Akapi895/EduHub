@@ -216,10 +216,10 @@ class GameRenderer {
     updateCamera(playerX, canvasWidth) {
         // Smooth camera follow
         const targetCameraX = playerX - canvasWidth / 3;
-        this.cameraX += (targetCameraX - this.cameraX) * 0.1;
+        this.cameraX += (targetCameraX - this.cameraX) * 0.12;
         
-        // Clamp camera - allow scrolling for wider levels
-        const maxCameraX = 2000; // Max level width minus visible area
+        // Clamp camera — phải đủ rộng cho map mới (goalX tối đa 2600, canvas 1280)
+        const maxCameraX = 2700 - canvasWidth;
         if (this.cameraX < 0) this.cameraX = 0;
         if (this.cameraX > maxCameraX) this.cameraX = maxCameraX;
     }

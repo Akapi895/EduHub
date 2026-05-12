@@ -20,115 +20,143 @@ class LevelManager {
     }
     
     loadLevelData() {
-        // Level data with platforms, enemies, coins, and checkpoints
-        // Checkpoints are placed ON the ground (not floating)
-        // Ground level is at y=540, with height 60, so ground surface is at y=540
+        // =============================================================
+        // LEVEL DESIGN v2
+        // Nguyên tắc:
+        //   - Checkpoint NẰM TRÊN floating Platform (player phải nhảy mới đến)
+        //   - Có khe hổng thật giữa các ground section
+        //   - Coins breadcrumb trên platform dẫn đưỜng cho player
+        //   - Ground surface y=540, Flag height=64 → checkpoint.y = platform.y - 64
+        // =============================================================
         const levelConfigs = {
             1: {
                 level: 1,
                 platforms: [
-                    // Main ground sections
-                    { x: 0, y: 540, width: 700, height: 60, isGround: true },
-                    { x: 700, y: 540, width: 600, height: 60, isGround: true },
-                    { x: 1300, y: 540, width: 700, height: 60, isGround: true },
-                    // Floating platforms
-                    { x: 200, y: 460, width: 150, height: 20 },
-                    { x: 500, y: 380, width: 150, height: 20 },
-                    { x: 800, y: 300, width: 150, height: 20 },
-                    { x: 1050, y: 400, width: 200, height: 20 },
-                    { x: 1400, y: 350, width: 150, height: 20 },
-                    { x: 1700, y: 280, width: 150, height: 20 },
+                    // Ground sections (có khe hổng thật giữa các section)
+                    { x: 0,    y: 540, width: 600,  height: 60, isGround: true },
+                    { x: 800,  y: 540, width: 600,  height: 60, isGround: true },
+                    { x: 1600, y: 540, width: 600,  height: 60, isGround: true },
+                    // Gap 1: x=600→800 (200px) — player phải nhảy qua
+                    // Gap 2: x=1400→1600 (200px) — player phải nhảy qua
+                    // Floating platforms (dẫn đưỜng + đừ checkpoint)
+                    { x: 500,  y: 400, width: 150, height: 20 }, // PA: bridge gap 1
+                    { x: 650,  y: 330, width: 150, height: 20 }, // PB: CHECKPOINT 1
+                    { x: 1250, y: 380, width: 150, height: 20 }, // PC: bridge gap 2
+                    { x: 1400, y: 310, width: 150, height: 20 }, // PD: CHECKPOINT 2
+                    { x: 1600, y: 400, width: 120, height: 20 }, // PE: decoration
+                    { x: 1800, y: 320, width: 120, height: 20 }, // PF: decoration
                 ],
                 enemies: [
-                    { x: 300, y: 510, type: 'goomba' },
-                    { x: 800, y: 510, type: 'goomba' },
-                    { x: 1500, y: 510, type: 'goomba' },
+                    { x: 200,  y: 508, type: 'goomba' },
+                    { x: 1000, y: 508, type: 'goomba' },
+                    { x: 1700, y: 508, type: 'koopa'  },
                 ],
                 coins: [
-                    { x: 230, y: 420 },
-                    { x: 270, y: 420 },
-                    { x: 530, y: 340 },
-                    { x: 570, y: 340 },
-                    { x: 830, y: 260 },
-                    { x: 870, y: 260 },
+                    // Breadcrumb trên PA → PB dẫn đưỜng
+                    { x: 515, y: 370 }, { x: 550, y: 370 }, { x: 590, y: 370 },
+                    // Gần CP1 trên PB
+                    { x: 665, y: 300 }, { x: 700, y: 300 },
+                    // Breadcrumb trên PC
+                    { x: 1265, y: 350 }, { x: 1300, y: 350 },
+                    // Gần CP2 trên PD
+                    { x: 1415, y: 280 }, { x: 1450, y: 280 },
+                    // Trên PF
+                    { x: 1815, y: 290 },
                 ],
-                // Checkpoints ON ground - x is position, y is top of flag
-                // Flag height is 64px, so y=476 means flag sits on ground (540-64=476)
+                // Checkpoints TRÊN PLATFORM (y = platform.y - 64)
                 checkpoints: [
-                    { id: 'l1cp1', x: 600, y: 476, level: 1 },
-                    { id: 'l1cp2', x: 1200, y: 476, level: 1 },
+                    { id: 'l1cp1', x: 680,  y: 266, level: 1 }, // trên PB (y=330), 330-64=266
+                    { id: 'l1cp2', x: 1430, y: 246, level: 1 }, // trên PD (y=310), 310-64=246
                 ],
-                goalX: 1950,
+                goalX: 2100,
             },
             2: {
                 level: 2,
                 platforms: [
-                    { x: 0, y: 540, width: 600, height: 60, isGround: true },
-                    { x: 600, y: 540, width: 700, height: 60, isGround: true },
-                    { x: 1300, y: 540, width: 700, height: 60, isGround: true },
-                    { x: 200, y: 440, width: 120, height: 20 },
-                    { x: 450, y: 360, width: 120, height: 20 },
-                    { x: 700, y: 280, width: 150, height: 20 },
-                    { x: 1000, y: 350, width: 120, height: 20 },
-                    { x: 1300, y: 270, width: 150, height: 20 },
-                    { x: 1600, y: 350, width: 150, height: 20 },
+                    // Ground sections với 3 khe hổng
+                    { x: 0,    y: 540, width: 500,  height: 60, isGround: true },
+                    { x: 700,  y: 540, width: 400,  height: 60, isGround: true },
+                    { x: 1300, y: 540, width: 500,  height: 60, isGround: true },
+                    { x: 2000, y: 540, width: 500,  height: 60, isGround: true },
+                    // Floating platforms (stepping stone pattern)
+                    { x: 420,  y: 430, width: 120, height: 20 }, // PA: bridge gap 1
+                    { x: 560,  y: 360, width: 130, height: 20 }, // PB: CHECKPOINT 1
+                    { x: 900,  y: 310, width: 120, height: 20 }, // PC: high platform
+                    { x: 1050, y: 380, width: 120, height: 20 }, // PD: bridge gap 2
+                    { x: 1230, y: 320, width: 130, height: 20 }, // PE: CHECKPOINT 2
+                    { x: 1700, y: 400, width: 120, height: 20 }, // PF: bridge gap 3
+                    { x: 1850, y: 330, width: 120, height: 20 }, // PG: decoration
                 ],
                 enemies: [
-                    { x: 300, y: 510, type: 'goomba' },
-                    { x: 900, y: 510, type: 'goomba' },
-                    { x: 1500, y: 510, type: 'koopa' },
+                    { x: 200,  y: 508, type: 'goomba' },
+                    { x: 950,  y: 508, type: 'goomba' },
+                    { x: 1500, y: 508, type: 'koopa'  },
+                    { x: 1100, y: 278, type: 'goomba' }, // trên PC
                 ],
                 coins: [
-                    { x: 230, y: 400 },
-                    { x: 480, y: 320 },
-                    { x: 730, y: 240 },
-                    { x: 1030, y: 310 },
-                    { x: 1330, y: 230 },
-                    { x: 1630, y: 310 },
+                    // Dẫn đưỜng qua gap 1
+                    { x: 435, y: 400 }, { x: 470, y: 400 },
+                    { x: 575, y: 330 }, { x: 610, y: 330 }, // gần CP1
+                    // Dẫn đưỜng qua gap 2
+                    { x: 915, y: 280 }, { x: 950, y: 280 },
+                    { x: 1065, y: 350 }, { x: 1100, y: 350 },
+                    { x: 1245, y: 290 }, { x: 1280, y: 290 }, // gần CP2
+                    // Gap 3
+                    { x: 1715, y: 370 }, { x: 1865, y: 300 },
                 ],
                 checkpoints: [
-                    { id: 'l2cp1', x: 550, y: 476, level: 2 },
-                    { id: 'l2cp2', x: 1200, y: 476, level: 2 },
+                    { id: 'l2cp1', x: 585,  y: 296, level: 2 }, // trên PB (y=360), 360-64=296
+                    { id: 'l2cp2', x: 1255, y: 256, level: 2 }, // trên PE (y=320), 320-64=256
                 ],
-                goalX: 1950,
+                goalX: 2400,
             },
             3: {
                 level: 3,
                 platforms: [
-                    { x: 0, y: 540, width: 600, height: 60, isGround: true },
-                    { x: 600, y: 540, width: 400, height: 60, isGround: true },
-                    { x: 1000, y: 540, width: 400, height: 60, isGround: true },
-                    { x: 1400, y: 540, width: 600, height: 60, isGround: true },
-                    // Stepping stones leading up to platform
-                    { x: 600, y: 480, width: 100, height: 20 },
-                    { x: 800, y: 420, width: 100, height: 20 },
-                    { x: 1000, y: 360, width: 100, height: 20 },
-                    { x: 1200, y: 300, width: 100, height: 20 },
-                    { x: 1400, y: 360, width: 100, height: 20 },
-                    { x: 1600, y: 420, width: 100, height: 20 },
-                    { x: 300, y: 450, width: 80, height: 20 },
-                    { x: 500, y: 380, width: 80, height: 20 },
+                    // Ground sections với 4 khe hổng — độ khó tăng dần
+                    { x: 0,    y: 540, width: 400,  height: 60, isGround: true },
+                    { x: 650,  y: 540, width: 300,  height: 60, isGround: true },
+                    { x: 1200, y: 540, width: 250,  height: 60, isGround: true },
+                    { x: 1700, y: 540, width: 300,  height: 60, isGround: true },
+                    { x: 2200, y: 540, width: 500,  height: 60, isGround: true },
+                    // Floating platforms (multi-level — có tầng cao và tầng thấp)
+                    { x: 300,  y: 450, width: 100, height: 20 }, // PA: bridge gap 1
+                    { x: 500,  y: 380, width: 100, height: 20 }, // PB
+                    { x: 610,  y: 310, width: 130, height: 20 }, // PC: CHECKPOINT 1 (tầng cao)
+                    { x: 790,  y: 390, width: 100, height: 20 }, // PD: xuống
+                    { x: 1000, y: 320, width: 120, height: 20 }, // PE: bridge gap 2
+                    { x: 1110, y: 260, width: 130, height: 20 }, // PF: CHECKPOINT 2 (rất cao)
+                    { x: 1290, y: 340, width: 100, height: 20 }, // PG: bridge gap 3
+                    { x: 1460, y: 420, width: 100, height: 20 }, // PH: xuống
+                    { x: 1610, y: 350, width: 100, height: 20 }, // PI
+                    { x: 1760, y: 280, width: 130, height: 20 }, // PJ: CHECKPOINT 3 (đỉnh)
+                    { x: 1960, y: 360, width: 100, height: 20 }, // PK: bridge gap 4
                 ],
                 enemies: [
-                    { x: 350, y: 510, type: 'goomba' },
-                    { x: 700, y: 390, type: 'koopa' },
-                    { x: 1100, y: 270, type: 'goomba' },
-                    { x: 1550, y: 330, type: 'koopa' },
+                    { x: 150,  y: 508, type: 'goomba' },
+                    { x: 840,  y: 508, type: 'koopa'  },
+                    { x: 1350, y: 508, type: 'goomba' },
+                    { x: 1760, y: 508, type: 'koopa'  },
+                    { x: 1140, y: 228, type: 'goomba' }, // trên PF
                 ],
                 coins: [
-                    { x: 620, y: 440 },
-                    { x: 820, y: 380 },
-                    { x: 1020, y: 320 },
-                    { x: 1220, y: 260 },
-                    { x: 1420, y: 320 },
-                    { x: 1620, y: 380 },
+                    // Gap 1 — dẫn lên tầng cao
+                    { x: 315, y: 420 }, { x: 515, y: 350 },
+                    { x: 625, y: 280 }, { x: 660, y: 280 }, // gần CP1
+                    // Gap 2
+                    { x: 805, y: 360 }, { x: 1015, y: 290 },
+                    { x: 1125, y: 230 }, { x: 1160, y: 230 }, // gần CP2
+                    // Gap 3
+                    { x: 1305, y: 310 }, { x: 1475, y: 390 },
+                    { x: 1625, y: 320 }, { x: 1775, y: 250 }, // gần CP3
+                    { x: 1975, y: 330 },
                 ],
-                // Level 3 checkpoint is on the upper platform area
                 checkpoints: [
-                    { id: 'l3cp1', x: 1100, y: 296, level: 3 }, // On platform at y=300
-                    { id: 'l3cp2', x: 1700, y: 476, level: 3 }, // On ground
+                    { id: 'l3cp1', x: 635,  y: 246, level: 3 }, // trên PC (y=310), 310-64=246
+                    { id: 'l3cp2', x: 1135, y: 196, level: 3 }, // trên PF (y=260), 260-64=196
+                    { id: 'l3cp3', x: 1785, y: 216, level: 3 }, // trên PJ (y=280), 280-64=216
                 ],
-                goalX: 1950,
+                goalX: 2600,
             }
         };
         
@@ -228,6 +256,7 @@ class Enemy {
     constructor(x, y, type = 'goomba') {
         this.x = x;
         this.y = y;
+        this.startX = x; // lưu vị trí khởi tạo cho patrol range
         this.width = 32;
         this.height = 32;
         this.type = type;
@@ -246,8 +275,9 @@ class Enemy {
         
         this.x += this.velocityX;
         
-        // Simple boundary check - reverse direction at edges
-        if (this.x < 50 || this.x > 1200) {
+        // Patrol range dựa trên startX (thay vì hardcode 1200)
+        const patrolRange = 150;
+        if (this.x < this.startX - patrolRange || this.x > this.startX + patrolRange) {
             this.velocityX *= -1;
         }
     }

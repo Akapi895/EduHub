@@ -75,20 +75,26 @@ class Checkpoint {
         const screenX = this.x - cameraX;
         const screenY = this.y;
         
-        // Only render if on screen
+        // Chỉ render nếu trên màn hình
         if (screenX < -100 || screenX > ctx.canvas.width + 100) return;
         
-        // Pole (from top to ground)
+        // Pulse animation cho checkpoint chưa pass
+        if (!this.passed) {
+            const pulse = Math.sin(Date.now() / 300) * 0.25 + 0.75;
+            ctx.globalAlpha = pulse;
+        }
+        
+        // Cột cờ
         ctx.fillStyle = '#8b4513';
         ctx.fillRect(screenX + 17, screenY, 6, this.flagHeight);
         
-        // Flag
+        // Cờ
         if (this.passed) {
-            ctx.fillStyle = '#27ae60'; // Green when passed
+            ctx.fillStyle = '#27ae60'; // Xanh khi đã pass
         } else if (this.triggered) {
-            ctx.fillStyle = '#f39c12'; // Orange when triggered
+            ctx.fillStyle = '#f39c12'; // Cam khi triggered
         } else {
-            ctx.fillStyle = '#e74c3c'; // Red when inactive
+            ctx.fillStyle = '#e74c3c'; // Đỏ khi inactive
         }
         
         // Flag wave animation
@@ -101,11 +107,14 @@ class Checkpoint {
         ctx.closePath();
         ctx.fill();
         
-        // Flag ball top
+        // Bóng cờ
         ctx.fillStyle = '#f1c40f';
         ctx.beginPath();
         ctx.arc(screenX + 20, screenY + 5, 5, 0, Math.PI * 2);
         ctx.fill();
+        
+        // Reset opacity
+        ctx.globalAlpha = 1.0;
     }
 }
 
@@ -218,6 +227,21 @@ class CheckpointManager {
             }
         }
         return null;
+    }
+    
+    /**
+     * Lấy checkpoint tiếp theo chưa pass (gần nhất theo hướng phải)
+     */
+    getNextUnpassedCheckpoint() {
+        let next = null;
+        for (const cp of this.checkpoints.values()) {
+            if (!cp.passed) {
+                if (!next || cp.x < next.x) {
+                    next = cp;
+                }
+            }
+        }
+        return next;
     }
     
     update(deltaTime) {

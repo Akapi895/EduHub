@@ -42,6 +42,7 @@
     "max_lives": 3,
     "supports_wrong_answer_retry": true,
     "respawn_at_checkpoint": true,
-    "level_count": 3
+    "level_count": 3,
+    "max_questions_per_level": 2
   }
 }

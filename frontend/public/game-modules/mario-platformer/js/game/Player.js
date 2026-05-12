@@ -166,21 +166,14 @@ class Player {
             this.handlePlatformCollision(platform);
         }
         
-        // Ground check - use canvas height
-        const groundY = this.game.canvas.height - 60;
-        if (this.y + this.height > groundY) {
-            this.y = groundY - this.height;
-            this.velocityY = 0;
-            this.isGrounded = true;
-            this.isJumping = false;
-        }
+        // NOTE: Ground vô hình đã bị xóa — ground thật được xử lý hoàn toàn
+        // bởi platform collision ở trên. Death zone xử lý ở Game.js (player.y > canvas.height + 100)
         
         // Update animation
         this.updateAnimation(deltaTime);
         
-        // Keep player in bounds - use level width instead of canvas width
-        // Level width is ~2000px, canvas width is smaller (e.g. 800px)
-        const levelWidth = 2200; // Approximate level width for all levels
+        // Keep player in bounds horizontally (level width tăng cho map mới)
+        const levelWidth = 2700;
         if (this.x < 0) this.x = 0;
         if (this.x > levelWidth - this.width) {
             this.x = levelWidth - this.width;
