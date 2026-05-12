@@ -214,15 +214,15 @@ class GameRenderer {
     }
     
     updateCamera(playerX, canvasWidth) {
-        // Smooth camera follow
         const targetCameraX = playerX - canvasWidth / 3;
         this.cameraX += (targetCameraX - this.cameraX) * 0.12;
         
-        // Clamp camera — phải đủ rộng cho map mới (goalX tối đa 2600, canvas 1280)
-        const maxCameraX = 2700 - canvasWidth;
+        // maxCameraX lớn để hỗ trợ map động (N checkpoint × ~1250px)
+        const maxCameraX = Math.max(50000, playerX + canvasWidth);
         if (this.cameraX < 0) this.cameraX = 0;
         if (this.cameraX > maxCameraX) this.cameraX = maxCameraX;
     }
+
     
     renderGameOver(score, checkpointsPassed) {
         const ctx = this.ctx;

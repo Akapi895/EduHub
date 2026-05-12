@@ -166,9 +166,6 @@ class Player {
             this.handlePlatformCollision(platform);
         }
         
-        // NOTE: Ground vô hình đã bị xóa — ground thật được xử lý hoàn toàn
-        // bởi platform collision ở trên. Death zone xử lý ở Game.js (player.y > canvas.height + 100)
-        
         // Update animation
         this.updateAnimation(deltaTime);
         

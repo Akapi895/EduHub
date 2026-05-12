@@ -178,12 +178,15 @@ class Game {
         if (payload.runtimeConfig?.session) {
             const session = payload.runtimeConfig.session;
             this.livesManager.init(session.maxLives || 3);
-            this.state.totalLevels = session.levelCount || 3;
-            // Đọc giới hạn số câu hỏi từ config
-            this.maxQuestionsPerLevel = session.maxQuestionsPerLevel
-                ?? payload.runtimeConfig?.maxQuestionsPerLevel
-                ?? 99;
-            console.log('[GAME] maxQuestionsPerLevel:', this.maxQuestionsPerLevel);
+            this.state.totalLevels = 1; // Dynamic map: always 1 level
+            // Số câu hỏi được giáo viên assign
+            const questionCount = session.questionCount
+                || session.totalQuestions
+                || session.maxQuestionsPerLevel
+                || 3;
+            console.log('[GAME] questionCount:', questionCount);
+            this.levelManager.generateDynamicLevel(questionCount);
+            this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
         }
         
         // CRITICAL-2: Handle active question restoration on page reload
@@ -224,9 +227,12 @@ class Game {
             this.restoreGameState(payload.restored_game_state);
         }
         
-        // Load first level for fresh start
-        this.levelManager.loadLevel(1);
-        this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
+        // Load level cho fresh start (dynamic level đã được generate trong handleInit)
+        // Nếu chưa được generate (không có session config), dùng default 3 checkpoints
+        if (!this.levelManager.levelData) {
+            this.levelManager.generateDynamicLevel(3);
+            this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
+        }
         
         // Signal ready and start
         bridge.ready();
@@ -548,7 +554,10 @@ class Game {
     }
     
     handlePlayerDeath() {
-        this.handlePlayerHit();
+        // Khi rơi xuống — KHÔNG mất mạng, chỉ respawn tại checkpoint gần nhất
+        // Mạng chỉ mất khi trả lời SAI câu hỏi
+        const respawnPos = this.checkpointManager.getRespawnPosition();
+        this.player.respawn(respawnPos.x, respawnPos.y - 50);
     }
     
     handleLevelComplete() {
@@ -653,58 +662,43 @@ class Game {
     handleQuestionResult(result) {
         console.log('[GAME] handleQuestionResult called:', result);
         
-        // Mark quiz as not active
         this.state.quiz.active = false;
-        
-        // Tăng counter số câu đã trả lời trong level này
         this.questionsAnsweredThisLevel++;
-        console.log('[GAME] questionsAnsweredThisLevel:', this.questionsAnsweredThisLevel, '/', this.maxQuestionsPerLevel);
         
-        // Determine if answer is correct
         const isCorrect = result.is_correct || result.isCorrect || result.correct;
         
         if (isCorrect) {
-            // Correct answer - mark checkpoint as passed
             if (this.state.quiz.currentCheckpointId) {
-                console.log('[GAME] Marking checkpoint as passed:', this.state.quiz.currentCheckpointId);
                 this.checkpointManager.markPassed(this.state.quiz.currentCheckpointId);
             }
-            this.scoreManager.addCheckpointBonus();
-            this.scoreManager.addCorrectAnswerBonus();
             
-            // Clear checkpoint from state
+            // Cộng điểm theo độ khó câu hỏi (backend trả về trong result)
+            const questionPoints = result.points
+                ?? result.score
+                ?? result.question_points
+                ?? 100; // mặc định nếu backend không gửi
+            this.scoreManager.addAnswerBonus(questionPoints);
+            this.scoreManager.addCheckpointBonus();
+            console.log('[GAME] Correct! +', questionPoints, 'points (question difficulty)');
+            
             this.state.quiz.currentCheckpointId = null;
             this.state.quiz.currentAttemptId = null;
-            
-            // Update HUD
             this.updateHUD();
             
         } else {
-            // CRITICAL-3: Wrong answer - DON'T increment wrongAnswers locally
-            // Trust the backend's wrong_attempts count which is the source of truth
-            // The sync in host:resume handler already updated scoreManager.wrongAnswers
-            
-            // Get lives from backend (already synced) or use current
+            // Trả lời SAI → mất mạng (lives đã được sync từ backend trong host:resume)
             const livesRemaining = this.livesManager.getCurrentLives();
             
-            // Reset checkpoint state so player can try again at same checkpoint
             this.state.quiz.currentCheckpointId = null;
             this.state.quiz.currentAttemptId = null;
             
-            // Check if game over (backend's wrong_attempts >= 3)
-            const wrongAttempts = typeof result.wrong_attempts === 'number' 
-                ? result.wrong_attempts 
-                : this.scoreManager.wrongAnswers;
-            
-            if (wrongAttempts >= 3 || livesRemaining <= 0) {
+            if (livesRemaining <= 0) {
                 this.handleGameOver();
             } else {
-                // Respawn at checkpoint
+                // Respawn tại checkpoint để thử lại
                 const respawnPos = this.checkpointManager.getRespawnPosition();
-                this.player.respawn(respawnPos.x, respawnPos.y);
+                this.player.respawn(respawnPos.x, respawnPos.y - 50);
                 this.updateHUD();
-                
-                // DO NOT call resume() here - it's already called in host:resume handler
             }
         }
     }

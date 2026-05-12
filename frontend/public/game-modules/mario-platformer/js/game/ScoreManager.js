@@ -29,6 +29,15 @@ class ScoreManager {
         this.checkpointsPassed++;
     }
     
+    /**
+     * Cộng điểm theo độ khó câu hỏi (backend trả về points/difficulty)
+     * Thay thế addCorrectAnswerBonus cố định
+     */
+    addAnswerBonus(points) {
+        this.score += (points || this.correctAnswerBonus);
+        this.correctAnswers++;
+    }
+    
     addCorrectAnswerBonus() {
         this.score += this.correctAnswerBonus;
         this.correctAnswers++;
