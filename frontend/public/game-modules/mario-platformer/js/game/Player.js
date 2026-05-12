@@ -178,10 +178,12 @@ class Player {
         // Update animation
         this.updateAnimation(deltaTime);
         
-        // Keep player in bounds
+        // Keep player in bounds - use level width instead of canvas width
+        // Level width is ~2000px, canvas width is smaller (e.g. 800px)
+        const levelWidth = 2200; // Approximate level width for all levels
         if (this.x < 0) this.x = 0;
-        if (this.x > this.game.canvas.width - this.width) {
-            this.x = this.game.canvas.width - this.width;
+        if (this.x > levelWidth - this.width) {
+            this.x = levelWidth - this.width;
         }
     }
     
