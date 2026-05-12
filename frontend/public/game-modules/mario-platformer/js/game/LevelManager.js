@@ -25,95 +25,92 @@ class LevelManager {
     }
     
     /**
-     * Tạo level động dựa trên số lượng checkpoint = số câu hỏi giáo viên assign.
-     * Map tự động kéo dài để chứa đủ checkpoint.
+     * Tạo level động — ground LIÊN TỤC, không có khe hổng.
+     * Thử thách: player phải nhảy LÊN 2 stepping stone → CP platform.
+     * Nếu fail, rơi xuống ground và thử lại (không chết).
      *
-     * Mỗi section (1 checkpoint):
-     *   [ground 400px] → [gap 180px] → [bridge 130px] → [gap 40px]
-     *   → [cp_platform 170px + checkpoint] → [gap 50px]
-     *   → [descent 120px] → [gap 160px]
-     *   Tổng ~1 250px / checkpoint
+     * Mỗi section (~900px):
+     *   stepping stone 1 → stepping stone 2 → checkpoint platform
+     *   (3 tiers độ cao xen kẽ cho đa dạng hình ảnh)
+     *
+     * Phạm vi nhảy đã verify (jumpForce=-12, gravity=0.5, maxJump≈144px):
+     *   ground(y=508) → stone1(y~398): cần 110px ✓
+     *   stone1       → stone2(y~313): cần  85px ✓
+     *   stone2       → CP  (y~228):   cần  85px ✓
      */
     generateDynamicLevel(checkpointCount) {
         checkpointCount = Math.max(1, Math.min(checkpointCount, 30));
-        
+
         const GROUND_Y = 540;
-        const GH      = 60;   // ground height
-        const FLAG_H  = 64;   // checkpoint flag height
-        
-        // Xen kẽ 3 độ cao cho đa dạng hình ảnh
-        const BRIDGE_TIERS = [410, 380, 350];
-        const CP_TIERS     = [330, 300, 270];
-        
-        const platforms  = [];
-        const coins      = [];
+        const GH       = 60;  // ground height
+        const FLAG_H   = 64;  // checkpoint flag height
+
+        // 3 tiers độ cao xen kẽ — tất cả đều nhảy được từ ground
+        //  [stone1_y, stone2_y, cp_y]
+        const TIERS = [
+            [430, 355, 290],  // tier 0: thấp
+            [420, 345, 280],  // tier 1: trung bình
+            [410, 335, 270],  // tier 2: cao hơn chút
+        ];
+
+        const SECTION_W  = 900;  // chiều rộng mỗi section
+        const START_W    = 350;  // ground trước section đầu
+        const END_W      = 400;  // ground sau section cuối
+        const totalWidth = START_W + checkpointCount * SECTION_W + END_W;
+
+        const platforms      = [];
+        const coins          = [];
         const checkpointDefs = [];
-        const enemies    = [];
-        
-        let x = 0;
-        
-        // Ground khởi đầu
-        platforms.push({ x: 0, y: GROUND_Y, width: 420, height: GH, isGround: true });
-        x = 420;
-        
+        const enemies        = [];
+
+        // Ground liên tục — MỘT dải duy nhất từ 0 đến totalWidth
+        platforms.push({ x: 0, y: GROUND_Y, width: totalWidth, height: GH, isGround: true });
+
         for (let i = 0; i < checkpointCount; i++) {
-            const tier  = i % 3;
-            const bY    = BRIDGE_TIERS[tier]; // bridge platform y
-            const cpY   = CP_TIERS[tier];     // checkpoint platform y
-            
-            // Gap 1: ground → bridge
-            x += 180;
-            
-            // Bridge platform (bước đệm)
-            platforms.push({ x, y: bY, width: 130, height: 20 });
-            coins.push({ x: x + 15, y: bY - 35 });
-            coins.push({ x: x + 65, y: bY - 35 });
-            coins.push({ x: x + 110, y: bY - 35 });
-            x += 130;
-            
-            // Gap 2: bridge → checkpoint platform
-            x += 40;
-            
-            // Checkpoint platform
-            const cpPlatWidth = 170;
-            platforms.push({ x, y: cpY, width: cpPlatWidth, height: 20 });
-            
-            // Đặt checkpoint ở giữa platform
-            const cpX = x + 55;
+            const [s1Y, s2Y, cpY] = TIERS[i % 3];
+            const sx = START_W + i * SECTION_W;  // điểm bắt đầu section này
+
+            // --- Stepping stone 1 (bước đệm thấp) ---
+            // Offset: +80 tính từ đầu section
+            platforms.push({ x: sx + 80,  y: s1Y, width: 120, height: 20 });
+            coins.push({ x: sx + 105, y: s1Y - 38 });
+            coins.push({ x: sx + 145, y: s1Y - 38 });
+
+            // --- Stepping stone 2 (bước đệm cao) ---
+            // Offset: +250 — gap 50px từ stone1 (jumpable)
+            platforms.push({ x: sx + 250, y: s2Y, width: 120, height: 20 });
+            coins.push({ x: sx + 275, y: s2Y - 38 });
+            coins.push({ x: sx + 315, y: s2Y - 38 });
+
+            // --- Checkpoint platform (cao nhất) ---
+            // Offset: +420 — gap 50px từ stone2
+            const cpPlatW = 160;
+            platforms.push({ x: sx + 420, y: cpY, width: cpPlatW, height: 20 });
+
+            // Checkpoint ở giữa platform
+            const cpX = sx + 420 + 55;
             checkpointDefs.push({ id: `cp${i + 1}`, x: cpX, y: cpY - FLAG_H, level: 1 });
-            
-            // Coins gần checkpoint (dẫn đường)
-            coins.push({ x: x + 20, y: cpY - 40 });
-            coins.push({ x: cpX + 35, y: cpY - 40 });
-            
-            x += cpPlatWidth;
-            
-            // Gap 3: sau checkpoint platform
-            x += 50;
-            
-            // Descent platform (bước xuống)
-            const descY = bY + 20;
-            platforms.push({ x, y: descY, width: 120, height: 20 });
-            x += 120;
-            
-            // Gap 4: descent → ground tiếp theo
-            x += 160;
-            
-            // Ground section tiếp theo
-            const groundW = i === checkpointCount - 1 ? 500 : 420; // rộng hơn ở cuối
-            platforms.push({ x, y: GROUND_Y, width: groundW, height: GH, isGround: true });
-            
-            // Enemy trên ground (xen kẽ loại)
+
+            // Coins dẫn đường gần checkpoint
+            coins.push({ x: sx + 440, y: cpY - 42 });
+            coins.push({ x: cpX + 30, y: cpY - 42 });
+
+            // --- Descending stone (bước xuống sau CP) ---
+            // Offset: +630 — dễ nhảy xuống từ CP
+            platforms.push({ x: sx + 630, y: s2Y, width: 110, height: 20 });
+
+            // --- Enemy trên ground (canh gác trước section) ---
             const enemyType = i % 3 === 2 ? 'koopa' : 'goomba';
-            enemies.push({ x: x + 80, y: 508, type: enemyType });
-            
-            x += groundW;
+            enemies.push({ x: sx + 20,  y: 508, type: enemyType });
+            // Enemy thứ 2 sau CP để tăng thử thách
+            if (i % 2 === 1) {
+                enemies.push({ x: sx + 760, y: 508, type: 'goomba' });
+            }
         }
-        
-        const goalX = x - 150; // goal ở gần cuối ground cuối
-        
-        console.log(`[LEVEL] Generated ${checkpointCount} checkpoints, totalWidth=${x}px, goalX=${goalX}`);
-        
+
+        const goalX = totalWidth - 200;
+        console.log(`[LEVEL] Generated ${checkpointCount} CPs, width=${totalWidth}px, goalX=${goalX}`);
+
         this.currentLevel = 1;
         this.totalLevels  = 1;
         this.levelData = { level: 1, platforms, enemies, coins, checkpoints: checkpointDefs, goalX };
@@ -122,9 +119,10 @@ class LevelManager {
         this.coins     = coins.map(c => new Coin(c.x, c.y));
         this.checkpoints = checkpointDefs.map(cp => new Checkpoint(cp.id, cp.x, cp.y, cp.level));
         this.checkpointPositions = checkpointDefs.map(cp => cp.x);
-        
+
         return 1;
     }
+
 
 
 
@@ -163,19 +161,19 @@ class LevelManager {
     }
     
     /**
-     * Check if all checkpoints in this level have been passed
-     * Player MUST pass all checkpoints before completing level
+     * Portal active khi tất cả checkpoint đã pass (dùng checkpointManager)
+     * LevelManager.checkpoints không được mark — delegate sang checkpointManager
      */
-    areAllCheckpointsPassed() {
-        if (!this.levelData || !this.levelData.checkpoints) {
-            return true; // No checkpoints required
+    areAllCheckpointsPassed(checkpointManager) {
+        if (!this.levelData?.checkpoints?.length) return true;
+        if (checkpointManager) {
+            // Source of truth: checkpointManager.passedCheckpoints
+            return checkpointManager.getPassedCount() >= this.levelData.checkpoints.length;
         }
-        
+        // Fallback: check levelManager.checkpoints (chỉ đúng khi cùng object)
         for (const cp of this.levelData.checkpoints) {
             const checkpoint = this.checkpoints.find(c => c.id === cp.id);
-            if (!checkpoint || !checkpoint.passed) {
-                return false;
-            }
+            if (!checkpoint || !checkpoint.passed) return false;
         }
         return true;
     }

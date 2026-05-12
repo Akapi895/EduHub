@@ -21,10 +21,10 @@ class Player {
         
         // Physics constants
         this.gravity = 0.5;
-        this.jumpForce = -12;
-        this.moveSpeed = 0.8;
-        this.maxSpeed = 5;
-        this.friction = 0.9;
+        this.jumpForce = -11;   // giảm từ -12 → nhảy vừa phải
+        this.moveSpeed = 3;     // tốc độ di chuyển mồi frame (giảm từ 5)
+        this.maxSpeed  = 3;     // giới hạn tốc độ ngang
+        // friction đã xóa — không dùng quán tính
         
         // Animation
         this.animationFrame = 0;
@@ -127,34 +127,26 @@ class Player {
             }
         }
         
-        // Apply continuous movement based on input state
-        if (this.movingLeft) {
-            this.velocityX -= this.moveSpeed;
+        // Di chuyển ngang — KHÔNG quán tính: set velocity trực tiếp
+        if (this.movingLeft && !this.movingRight) {
+            this.velocityX = -this.moveSpeed;
             this.direction = -1;
             if (this.isGrounded) this.currentAnimation = 'run';
-        }
-        if (this.movingRight) {
-            this.velocityX += this.moveSpeed;
+        } else if (this.movingRight && !this.movingLeft) {
+            this.velocityX = this.moveSpeed;
             this.direction = 1;
             if (this.isGrounded) this.currentAnimation = 'run';
+        } else {
+            // Không nhấn phím → dừng ngược lại ngay (không trượt)
+            this.velocityX = 0;
+            if (this.isGrounded) this.currentAnimation = 'idle';
         }
         
         // Apply gravity
         this.velocityY += this.gravity;
         
-        // Apply friction
-        this.velocityX *= this.friction;
-        
-        // Clamp horizontal velocity
+        // Clamp horizontal velocity (bảo vệ an toàn)
         this.velocityX = Math.max(-this.maxSpeed, Math.min(this.maxSpeed, this.velocityX));
-        
-        // Stop if very slow
-        if (Math.abs(this.velocityX) < 0.1) {
-            this.velocityX = 0;
-            if (this.isGrounded) {
-                this.currentAnimation = 'idle';
-            }
-        }
         
         // Update position
         this.x += this.velocityX;

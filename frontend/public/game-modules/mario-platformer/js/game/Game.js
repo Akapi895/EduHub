@@ -178,16 +178,27 @@ class Game {
         if (payload.runtimeConfig?.session) {
             const session = payload.runtimeConfig.session;
             this.livesManager.init(session.maxLives || 3);
-            this.state.totalLevels = 1; // Dynamic map: always 1 level
-            // Số câu hỏi được giáo viên assign
-            const questionCount = session.questionCount
-                || session.totalQuestions
-                || session.maxQuestionsPerLevel
-                || 3;
-            console.log('[GAME] questionCount:', questionCount);
-            this.levelManager.generateDynamicLevel(questionCount);
-            this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
         }
+        this.state.totalLevels = 1; // Dynamic map: always 1 level
+
+        
+        // Số câu hỏi = source of truth từ backend (attemptTotals.questions_total)
+        // host:init gửi attemptTotals từ GamePlayerShell
+        const totals = payload.attemptTotals;
+        const session = payload.runtimeConfig?.session || {};
+        const questionCount = (totals?.questions_total)
+            || (totals?.questions_remaining)
+            || session.questionCount
+            || session.totalQuestions
+            || session.maxQuestionsPerLevel
+            || payload.runtimeConfig?.max_questions_per_level
+            || 3;
+        console.log('[GAME] questionCount:', questionCount, '(from attemptTotals.questions_total:', totals?.questions_total, ')');
+        this.maxQuestionsPerLevel = questionCount;
+        this.levelManager.generateDynamicLevel(questionCount);
+        this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
+
+
         
         // CRITICAL-2: Handle active question restoration on page reload
         // If there's an active question from previous session, restore game state
@@ -330,11 +341,12 @@ class Game {
     resume() {
         this.isPaused = false;
         this.state.setStatus('playing');
-        this.lastTime = performance.now();
+        // Không reset lastTime — để RAF tự cập nhật, tránh deltaTime spike
+        // this.lastTime = performance.now(); ← đã xóa
         
-        // console.log('[GAME] resume() called - isPaused:', this.isPaused, 'status:', this.state.status);
+        // Reset input state khi resume để tránh stuck keys
+        this.inputHandler.releaseAllKeys();
         
-        // Send progress message to React to indicate game is running again
         bridge.send('game:progress', {
             status: 'running',
             score: this.scoreManager.getScore(),
@@ -387,7 +399,9 @@ class Game {
     }
     
     gameLoop(timestamp) {
-        const deltaTime = timestamp - this.lastTime;
+        // Clamp deltaTime — tránh spike lớn sau khi resume (do lastTime bị reset)
+        const rawDelta = timestamp - this.lastTime;
+        const deltaTime = Math.min(rawDelta, 50); // tối đa 50ms (~20fps) để tránh lag spike
         this.lastTime = timestamp;
         
         // Always update and render, regardless of pause state
@@ -451,18 +465,21 @@ class Game {
         // Cập nhật camera
         this.renderer.updateCamera(this.player.x, this.canvas.width);
         
-        // Check level completion - ONLY if all checkpoints are passed
-        if (this.levelManager.isLevelComplete(this.player.x)) {
-            if (this.levelManager.areAllCheckpointsPassed()) {
+        // Kiểm tra Portal (chỉ khi tất cả checkpoint đã pass)
+        if (this.levelManager.areAllCheckpointsPassed(this.checkpointManager)) {
+            const goalX = this.levelManager.levelData?.goalX || 9999;
+            const portalLeft  = goalX - 30;
+            const portalRight = goalX + 30;
+            if (this.player.x + this.player.width > portalLeft
+                && this.player.x < portalRight) {
                 this.handleLevelComplete();
-            } else {
-                // Block player from passing goal until all checkpoints are done
-                // Push player back before goal
-                const lastCheckpointX = Math.max(...this.levelManager.checkpointPositions);
-                if (this.player.x > lastCheckpointX + 50) {
-                    this.player.x = lastCheckpointX + 50;
-                    this.player.velocityX = -2; // Push back
-                }
+            }
+        } else {
+            // Chưa xong checkpoint — chặn player khỏi vùng goal
+            const goalX = this.levelManager.levelData?.goalX || 9999;
+            if (this.player.x > goalX - 60) {
+                this.player.x = goalX - 60;
+                this.player.velocityX = 0;
             }
         }
         
@@ -732,10 +749,16 @@ class Game {
             checkpoint.render(ctx, this.renderer.cameraX);
         });
         
-        // Goal flag
+        // Portal / Goal — sáng lên khi tất cả checkpoint đã pass
         if (this.levelManager.levelData) {
-            this.renderer.renderGoal(this.levelManager.levelData.goalX);
+            const allPassed = this.levelManager.areAllCheckpointsPassed(this.checkpointManager);
+            this.renderer.renderPortal(
+                this.levelManager.levelData.goalX,
+                allPassed,
+                this.state.elapsedTime
+            );
         }
+
         
         // Player
         this.player.render(ctx, this.renderer.cameraX);
@@ -797,18 +820,29 @@ class Game {
         // Skip if off screen
         if (screenX + platform.width < 0 || screenX > this.renderer.width) return;
         
-        // Ground
-        if (platform.y >= this.renderer.height - 60) {
+        if (platform.isGround) {
+            // Ground: dùng flag isGround thay vì so sánh y (y=540 ≠ height-60=660)
             ctx.fillStyle = '#8B4513';
             ctx.fillRect(screenX, screenY, platform.width, platform.height);
             ctx.fillStyle = '#228B22';
             ctx.fillRect(screenX, screenY, platform.width, 8);
+            // Brick lines
+            ctx.strokeStyle = '#654321';
+            ctx.lineWidth = 2;
+            for (let x = 0; x < platform.width && x < this.renderer.width + this.renderer.cameraX; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(screenX + x, screenY);
+                ctx.lineTo(screenX + x, screenY + platform.height);
+                ctx.stroke();
+            }
         } else {
             // Floating platform
             ctx.fillStyle = '#DEB887';
             ctx.fillRect(screenX, screenY, platform.width, platform.height);
             ctx.fillStyle = '#F5DEB3';
             ctx.fillRect(screenX, screenY, platform.width, 4);
+            ctx.fillStyle = '#A0522D';
+            ctx.fillRect(screenX, screenY + platform.height - 4, platform.width, 4);
         }
     }
     

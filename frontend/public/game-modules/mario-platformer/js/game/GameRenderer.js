@@ -186,32 +186,102 @@ class GameRenderer {
         });
     }
     
-    renderGoal(goalX) {
-        const ctx = this.ctx;
-        const screenX = goalX - this.cameraX;
+    /**
+     * Vẽ cổng dịch chuyển tại goalX.
+     * @param {number} goalX - tọa độ world của portal
+     * @param {boolean} active - true khi tất cả checkpoint đã pass (portal mở)
+     * @param {number} time - elapsed time để animate
+     */
+    renderPortal(goalX, active, time) {
+        const ctx  = this.ctx;
+        const sx   = goalX - this.cameraX; // screen x
+        const sy   = 540;  // world ground surface y (ground platform.y = 540)
         
-        if (screenX < -100 || screenX > this.width + 100) return;
+        if (sx < -120 || sx > this.width + 120) return;
         
-        // Flag pole
-        ctx.fillStyle = '#8B4513';
-        ctx.fillRect(screenX + 20, this.height - 160, 8, 100);
+        const pulse = 0.7 + 0.3 * Math.sin(time / 300); // nhấp nháy ~3Hz
         
-        // Flag
-        ctx.fillStyle = '#FF6347';
+        if (!active) {
+            // Chưa mở: vẽ cột đơn giản, xám
+            ctx.fillStyle = '#888';
+            ctx.fillRect(sx - 4, sy - 100, 8, 100);
+            ctx.fillStyle = '#aaa';
+            ctx.beginPath();
+            ctx.arc(sx, sy - 104, 10, 0, Math.PI * 2);
+            ctx.fill();
+            return;
+        }
+        
+        // === PORTAL ACTIVE ===
+        ctx.save();
+        
+        // --- Glow halo ngoài ---
+        const glow = ctx.createRadialGradient(sx, sy - 70, 10, sx, sy - 70, 65);
+        glow.addColorStop(0, `rgba(140, 60, 255, ${0.35 * pulse})`);
+        glow.addColorStop(1, 'rgba(140, 60, 255, 0)');
+        ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.moveTo(screenX + 28, this.height - 160);
-        ctx.lineTo(screenX + 80, this.height - 140);
-        ctx.lineTo(screenX + 80, this.height - 110);
-        ctx.lineTo(screenX + 28, this.height - 90);
+        ctx.ellipse(sx, sy - 70, 65, 90, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // --- Cột trái và phải ---
+        ctx.fillStyle = '#6a0dad';
+        ctx.fillRect(sx - 35, sy - 130, 12, 130); // cột trái
+        ctx.fillRect(sx + 23, sy - 130, 12, 130); // cột phải
+        
+        // Đầu cột
+        ctx.fillStyle = '#9b30ff';
+        ctx.beginPath();
+        ctx.arc(sx - 29, sy - 132, 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(sx + 29, sy - 132, 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // --- Vòm cổng ---
+        ctx.strokeStyle = `rgba(180, 100, 255, ${pulse})`;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(sx, sy - 130, 34, Math.PI, 0, false); // nửa vòm trên
+        ctx.stroke();
+        
+        // --- Hiệu ứng bên trong portal (swirl) ---
+        const innerAlpha = 0.6 * pulse;
+        const inner = ctx.createLinearGradient(sx - 22, sy - 130, sx + 22, sy);
+        inner.addColorStop(0,   `rgba(80, 0, 200, ${innerAlpha})`);
+        inner.addColorStop(0.5, `rgba(140, 60, 255, ${innerAlpha})`);
+        inner.addColorStop(1,   `rgba(30, 0, 120, ${innerAlpha})`);
+        ctx.fillStyle = inner;
+        ctx.beginPath();
+        ctx.moveTo(sx - 23, sy);
+        ctx.lineTo(sx + 23, sy);
+        ctx.lineTo(sx + 23, sy - 130);
+        ctx.arc(sx, sy - 130, 23, 0, Math.PI, true);
         ctx.closePath();
         ctx.fill();
         
-        // Flag ball
-        ctx.fillStyle = '#FFD700';
-        ctx.beginPath();
-        ctx.arc(screenX + 24, this.height - 160, 6, 0, Math.PI * 2);
-        ctx.fill();
+        // --- Particles ngẫu nhiên từ portal ---
+        const t = time / 1000;
+        for (let i = 0; i < 6; i++) {
+            const angle  = (i / 6) * Math.PI * 2 + t * 2;
+            const radius = 18 + 8 * Math.sin(t * 3 + i);
+            const px = sx + Math.cos(angle) * radius;
+            const py = sy - 80 + Math.sin(angle) * 40;
+            ctx.fillStyle = `rgba(200, 150, 255, ${0.5 + 0.5 * Math.sin(t * 4 + i)})`;
+            ctx.beginPath();
+            ctx.arc(px, py, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // --- Label "VÀO!" ---
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = `rgba(255, 220, 255, ${pulse})`;
+        ctx.fillText('VÀO!', sx, sy - 145);
+        
+        ctx.restore();
     }
+
     
     updateCamera(playerX, canvasWidth) {
         const targetCameraX = playerX - canvasWidth / 3;
@@ -224,6 +294,31 @@ class GameRenderer {
     }
 
     
+    /**
+     * Cập nhật camera theo vị trí player.
+     * @param {number} playerX - world x của player
+     * @param {number} canvasWidth - chiều rộng canvas
+     */
+    updateCamera(playerX, canvasWidth) {
+        // Player ở 1/3 bên trái màn hình
+        const targetCameraX = playerX - canvasWidth / 3;
+        
+        // Giới hạn trái: không scroll trái quá x=0
+        const minCameraX = 0;
+        
+        // Giới hạn phải: dynamic theo map (lấy từ levelData nếu có, không thì dùng lớn)
+        // Không giới hạn cứng để hỗ trợ map động dài bất kỳ
+        const clampedTarget = Math.max(minCameraX, targetCameraX);
+        
+        // Smooth follow (lerp 15%)
+        this.cameraX += (clampedTarget - this.cameraX) * 0.15;
+        
+        // Snap nếu rất gần (tránh rung)
+        if (Math.abs(this.cameraX - clampedTarget) < 0.5) {
+            this.cameraX = clampedTarget;
+        }
+    }
+
     renderGameOver(score, checkpointsPassed) {
         const ctx = this.ctx;
         
