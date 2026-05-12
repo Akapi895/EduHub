@@ -54,15 +54,63 @@ export function postHostCommand(
   game: GameManifest,
   type: GameHostCommandType,
   payload: GameHostCommandPayload,
-) {
+): boolean {
   if (!frame?.contentWindow) {
-    console.warn('[postHostCommand] No frame or contentWindow');
-    return;
+    console.error('[postHostCommand] FAILED: No frame or contentWindow available', {
+      type,
+      hasFrame: !!frame,
+      hasContentWindow: !!(frame?.contentWindow),
+      timestamp: new Date().toISOString(),
+    });
+    return false;
   }
+  
   const envelope = buildHostCommand(type, game, payload);
-  console.info('[postHostCommand] Sending to iframe:', type, envelope);
-  frame.contentWindow.postMessage(
-    envelope,
-    resolveGameTargetOrigin(game),
-  );
+  const targetOrigin = resolveGameTargetOrigin(game);
+  
+  try {
+    frame.contentWindow.postMessage(envelope, targetOrigin);
+    console.info('[postHostCommand] SUCCESS:', type, {
+      targetOrigin,
+      payloadKeys: Object.keys(payload),
+      timestamp: new Date().toISOString(),
+    });
+    return true;
+  } catch (error) {
+    console.error('[postHostCommand] EXCEPTION while sending:', type, error);
+    return false;
+  }
+}
+
+// HIGH-2: Wrapper với callback để handle thành công/thất bại
+export interface PostHostCommandOptions {
+  onSuccess?: () => void;
+  onError?: (error: Error) => void;
+  timeout?: number;
+}
+
+export function postHostCommandWithAck(
+  frame: HTMLIFrameElement | null,
+  game: GameManifest,
+  type: GameHostCommandType,
+  payload: GameHostCommandPayload,
+  options: PostHostCommandOptions = {},
+): boolean {
+  const { onSuccess, onError, timeout = 5000 } = options;
+  
+  const success = postHostCommand(frame, game, type, payload);
+  
+  if (!success) {
+    if (onError) {
+      onError(new Error('postHostCommand: frame or contentWindow unavailable'));
+    }
+    return false;
+  }
+  
+  // Call success callback
+  if (onSuccess) {
+    onSuccess();
+  }
+  
+  return true;
 }

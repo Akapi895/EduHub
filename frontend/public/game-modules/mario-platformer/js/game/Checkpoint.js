@@ -179,20 +179,32 @@ class CheckpointManager {
     
     /**
      * Check if player is approaching a checkpoint and should be blocked
+     * @param {number} playerX - Player X position
+     * @param {number} playerVelocityX - Player X velocity
+     * @param {number} playerWidth - Player width (optional, for better collision)
      * @returns {Checkpoint|null} - The checkpoint that should block player, or null
      */
-    getBlockingCheckpoint(playerX, playerVelocityX) {
+    getBlockingCheckpoint(playerX, playerVelocityX, playerWidth = 32) {
         // Check if player is moving toward an unpassed checkpoint
         for (const checkpoint of this.checkpoints.values()) {
             if (checkpoint.passed) continue;
-            
+
             // Define a "danger zone" around the checkpoint
+            // HIGH-4: Use playerWidth for better detection
+            const playerRight = playerX + playerWidth;
             const dangerZoneStart = checkpoint.x - 50;
             const dangerZoneEnd = checkpoint.x + checkpoint.width + 20;
-            
-            // Player is in danger zone
-            if (playerX + 30 > dangerZoneStart && playerX < dangerZoneEnd) {
-                return checkpoint;
+
+            // HIGH-4: Check if player overlaps with checkpoint danger zone
+            if (playerRight > dangerZoneStart && playerX < dangerZoneEnd) {
+                // Also check if player is actually trying to move right (toward checkpoint)
+                if (playerVelocityX > 0) {
+                    return checkpoint;
+                }
+                // Even if not moving, if player is partially past checkpoint left edge, block
+                if (playerRight > checkpoint.x && playerX < checkpoint.x + checkpoint.width) {
+                    return checkpoint;
+                }
             }
         }
         return null;

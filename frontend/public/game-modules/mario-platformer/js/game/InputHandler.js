@@ -110,4 +110,12 @@ class InputHandler {
         this.keys.jump = false;
         this.keys.action = false;
     }
+
+    // MEDIUM-1: Release all keys (called when game is paused)
+    releaseAllKeys() {
+        this.keys.left = false;
+        this.keys.right = false;
+        this.keys.jump = false;
+        this.keys.action = false;
+    }
 }

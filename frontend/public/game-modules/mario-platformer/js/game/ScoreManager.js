@@ -44,6 +44,11 @@ class ScoreManager {
         this.enemiesDefeated++;
     }
     
+    // HIGH-1: Set score directly (for state restoration)
+    setScore(value) {
+        this.score = Math.max(0, value);
+    }
+    
     subtractEnemyPenalty() {
         this.score = Math.max(0, this.score - 25);
     }

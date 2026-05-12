@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     cors_origin_regex: str | None = None
     app_timezone: str = "Asia/Ho_Chi_Minh"
 
-    database_url: str = "postgresql://eduhub:eduhub@localhost:5433/eduhub"
+    database_url: str = "postgresql://eduhub:eduhub@localhost:15432/eduhub"
     db_bootstrap_on_startup: bool = False
     db_run_legacy_migrations: bool = False
     database_ssl_mode: str | None = None

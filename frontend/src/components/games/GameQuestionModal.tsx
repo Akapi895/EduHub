@@ -146,6 +146,18 @@ export default function GameQuestionModal({
       overlayMode: portalContainer ? 'fixed-in-viewport-portal' : 'fixed-in-body-portal',
     });
 
+    // MEDIUM-5: Auto-focus first focusable element when modal opens
+    // This improves keyboard accessibility
+    const focusableSelectors = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusableElements = document.querySelectorAll(focusableSelectors);
+    if (focusableElements.length > 0) {
+      const firstFocusable = focusableElements[0] as HTMLElement;
+      // Small delay to ensure DOM is ready
+      requestAnimationFrame(() => {
+        firstFocusable.focus();
+      });
+    }
+
     return () => {
       console.info('[QFLOW] modal:unmount', {
         questionId: question.id,

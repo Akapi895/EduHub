@@ -2007,19 +2007,28 @@ def submit_runtime_answer(db: Session, *, package_id: str, student: User, data: 
         "resume_payload": {
             "question_result": _serialize_question_attempt(refreshed_question_attempt),
             "attempt_totals": totals,
+            # CRITICAL-3: Include game state for sync
+            "wrong_attempts": wrong_attempts,
+            "lives_remaining": mario_state.get("lives", 3) if is_mario else None,
+            "checkpoints_passed": mario_state.get("checkpoints_passed", []) if is_mario else [],
+            "game_over": game_over,
         },
     }
 
     if is_gold_miner:
         result["wrong_attempts"] = wrong_attempts
+        result["resume_payload"]["wrong_attempts"] = wrong_attempts
+        result["resume_payload"]["game_over"] = game_over
         if game_over:
             result["game_over"] = True
             result["game_over_reason"] = "max_wrong_attempts"
 
     if is_mario:
         result["wrong_attempts"] = wrong_attempts
-        result["lives_remaining"] = mario_state.get("lives", 3)
-        result["checkpoints_passed"] = mario_state.get("checkpoints_passed", [])
+        result["resume_payload"]["wrong_attempts"] = wrong_attempts
+        result["resume_payload"]["lives_remaining"] = mario_state.get("lives", 3)
+        result["resume_payload"]["checkpoints_passed"] = mario_state.get("checkpoints_passed", [])
+        result["resume_payload"]["game_over"] = game_over
         if game_over:
             result["game_over"] = True
             result["game_over_reason"] = "max_wrong_attempts"

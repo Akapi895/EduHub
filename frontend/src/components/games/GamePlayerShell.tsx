@@ -30,6 +30,7 @@ import {
 } from '@/features/games/helpers';
 import { createSessionId, postHostCommand } from '@/features/games/bridge';
 import type {
+  GameAnswerSubmittedPayload,
   GameBridgeEnvelope,
   GameHostCommandType,
   GameManifest,
@@ -70,6 +71,8 @@ const MAX_AUTO_FRAME_RECOVERIES = 2;
 const RESUME_WATCHDOG_MS = 1_500;
 const RESUME_RECOVERY_MS = 4_000;
 const QUESTION_BUSY_VISIBILITY_DELAY_MS = 180;
+// CRITICAL-4: Trigger timeout - if trigger doesn't get response in this time, allow retry
+const TRIGGER_TIMEOUT_MS = 10_000;
 
 // Preview mode service helpers
 function getTriggerService(previewMode?: boolean) {
@@ -295,6 +298,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
   const questionBusyTimerRef = useRef<number | null>(null);
   const exitConfirmedRef = useRef(false);
   const isFirstRenderRef = useRef(true);
+  // CRITICAL-4: Track trigger timeouts so stuck triggers can be retried
+  const triggerTimeoutRef = useRef<Map<string, number>>(new Map());
 
   const [manifest, setManifest] = useState<GameManifest | null>(initialManifest);
   const [manifestError, setManifestError] = useState<string | null>(null);
@@ -372,7 +377,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       return;
     }
 
-    postHostCommand(frameRef.current, manifest, type, {
+    const success = postHostCommand(frameRef.current, manifest, type, {
       sessionId,
       attemptId: attemptId ?? undefined,
       packageId: gamePackage.id,
@@ -382,6 +387,15 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       runtimeConfig,
       ...extraPayload,
     });
+
+    // HIGH-2: Handle send failure for critical commands
+    if (!success) {
+      console.error('[QFLOW] sendHostCommand FAILED:', type, reason);
+      // For critical commands, we might need to retry or recover
+      if (type === 'host:pause' || type === 'host:resume') {
+        showErrorToast('Không thể gửi lệnh đến trò chơi. Đang thử lại...');
+      }
+    }
   };
 
   const logRuntimeEvent = async (eventType: string, eventPayload: Record<string, unknown>) => {
@@ -407,11 +421,22 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
   const resumeRuntime = (
     reason: string,
     eventPayload: Record<string, unknown> = {},
-    options: { watchdog?: boolean } = {},
+    options: { watchdog?: boolean; force?: boolean } = {},
   ) => {
     const issuedAt = Date.now();
-    console.info('[QFLOW] resumeRuntime called', { reason, eventPayload });
-    setRuntimeStatus((current) => (current === 'completed' || current === 'error' ? current : 'running'));
+    console.info('[QFLOW] resumeRuntime called', { reason, eventPayload, currentStatus: runtimeStatus, options });
+
+    // HIGH-3: Resume if paused OR if force flag is set (for answer submission)
+    // When force=true, we always want to resume regardless of current status
+    const shouldResume = options.force || runtimeStatus === 'paused';
+    
+    if (!shouldResume) {
+      console.warn('[QFLOW] resumeRuntime: Not resuming - game is not paused (status:', runtimeStatus, '), forcing...');
+    }
+
+    // CRITICAL-FIX: Always set status to running and send command
+    // This ensures the game receives the resume command even if there's a race condition
+    setRuntimeStatus('running');
     sendHostCommand('host:resume', reason, eventPayload);
 
     if (!options.watchdog) return;
@@ -524,16 +549,34 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     }
 
     const triggerIdentity = getTriggerIdentity(trigger);
+
+    // CRITICAL-4: Check if trigger was already handled (dedup) BUT allow retry after timeout
+    const existingTimeout = triggerTimeoutRef.current.get(triggerIdentity);
     if (
       triggerInFlightRef.current
       || questionFlowActiveRef.current
-      || handledTriggerIdsRef.current.has(triggerIdentity)
     ) {
+      // Trigger is in flight, don't duplicate
+      console.info('[QFLOW] trigger:already-in-flight', { triggerIdentity });
       return;
     }
+    
+    // Check if this exact trigger was already handled
+    if (handledTriggerIdsRef.current.has(triggerIdentity)) {
+      // CRITICAL-4: Check if timeout has passed - if so, allow retry
+      if (existingTimeout && Date.now() < existingTimeout) {
+        console.info('[QFLOW] trigger:already-handled-still-valid', { triggerIdentity, remainingMs: existingTimeout - Date.now() });
+        return;
+      }
+      // Timeout passed - allow retry
+      console.info('[QFLOW] trigger:retrying-expired-handled', { triggerIdentity });
+      handledTriggerIdsRef.current.delete(triggerIdentity);
+    }
 
+    // Mark trigger as in-flight and set timeout
     triggerInFlightRef.current = true;
     handledTriggerIdsRef.current.add(triggerIdentity);
+    triggerTimeoutRef.current.set(triggerIdentity, Date.now() + TRIGGER_TIMEOUT_MS);
     beginQuestionLookup();
     pauseRuntime('question-trigger', { trigger });
     setLastQuestionResult(null);
@@ -563,7 +606,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
           trigger,
         });
 
-        // Keep fullscreen active; modal is rendered via portal into the fullscreen element.
+        // Clear the timeout since trigger was handled successfully
+        triggerTimeoutRef.current.delete(triggerIdentity);
         return;
       }
 
@@ -598,6 +642,8 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       }, { watchdog: true });
     } catch (error) {
       showErrorToast(extractApiErrorMessage(error, 'Không thể tải câu hỏi cho lượt chơi này.'));
+      // CRITICAL-4: Clear timeout on error so trigger can be retried
+      triggerTimeoutRef.current.delete(triggerIdentity);
       resumeRuntime('question-trigger-error', { trigger }, { watchdog: true });
     } finally {
       triggerInFlightRef.current = false;
@@ -636,43 +682,151 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     }
 
     setSubmittingAnswer(true);
+    // MEDIUM-2: Apply optimistic update immediately for better UX
+    // We'll apply it after we know the result
     try {
       const response = await getAnswerService(previewMode)(gamePackage.id, payload);
       const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
-      setAttemptTotals(data.attempt_totals ?? null);
+      
+      // MEDIUM-2: Optimistic update for immediate feedback
+      const currentTotals = attemptTotals as Record<string, unknown> | null;
+      const optimisticTotals = currentTotals
+        ? {
+            ...currentTotals,
+            total_attempts: ((currentTotals.total_attempts as number) ?? 0) + 1,
+            total_correct: data.is_correct === true ? ((currentTotals.total_correct as number) ?? 0) + 1 : (currentTotals.total_correct as number) ?? 0,
+            total_incorrect: data.is_correct === false ? ((currentTotals.total_incorrect as number) ?? 0) + 1 : (currentTotals.total_incorrect as number) ?? 0,
+          }
+        : null;
+      
+      // MEDIUM-2: Use server response if available, otherwise optimistic
+      setAttemptTotals(data.attempt_totals ?? optimisticTotals ?? null);
       setLastQuestionResult(data);
 
       // Show feedback for wrong answers
       if (data.is_correct === false) {
         const remainingLives = data.wrong_attempts != null ? Math.max(0, 3 - data.wrong_attempts) : 0;
-        // Show modal for wrong answer
+        // MEDIUM-4: Don't resume game while showing wrong answer modal
+        // Game should remain paused until user dismisses the modal
         setWrongAnswerData({
           feedbackMessage: data.feedback_message || 'Câu trả lời chưa chính xác. Hãy thử lại!',
           remainingLives,
           maxLives: 3,
         });
         setWrongAnswerModalOpen(true);
-      }
 
+        // Clear question flow but DON'T resume game - modal will handle resume
+        questionFlowActiveRef.current = false;
+        setQuestionFlow(null);
+        endQuestionLookup();
+        setSubmittingAnswer(false);
+        resetQuestionDraft(null);
+
+        // Note: Game remains paused (via host:pause from question)
+        // User must click "Tiếp tục chơi" to dismiss modal and resume
+      } else {
+        // For correct answers, resume immediately
+        questionFlowActiveRef.current = false;
+        setQuestionFlow(null);
+        endQuestionLookup();
+        setSubmittingAnswer(false);
+        resetQuestionDraft(null);
+
+        resumeRuntime('question-answered', {
+          questionResult: data.resume_payload ?? {
+            questionAttemptId: data.question_attempt_id,
+            isCorrect: data.is_correct,
+            scoreAwarded: data.score_awarded,
+            feedbackMessage: data.feedback_message,
+          },
+          attemptTotals: data.attempt_totals ?? null,
+          wrong_attempts: data.wrong_attempts,
+          game_over: data.game_over,
+        }, { watchdog: true, force: true });
+      }
+    } catch (error) {
+      showErrorToast(extractApiErrorMessage(error, 'Không thể nộp câu trả lời.'));
+    } finally {
+      setSubmittingAnswer(false);
+    }
+  };
+
+  // CRITICAL-1: Handle answer from game's native modal (e.g., Mario's own quiz modal)
+  // This is called when the game sends game:answer-submitted instead of React modal handling
+  const handleGameNativeAnswer = async (answerPayload: GameAnswerSubmittedPayload) => {
+    if (!questionFlow || !attemptId) {
+      console.warn('[QFLOW] handleGameNativeAnswer: No active questionFlow or attemptId');
+      return;
+    }
+
+    console.info('[QFLOW] Processing native answer from game:', answerPayload);
+
+    // Build the answer payload based on question type from the active question
+    const payload: GameRuntimeAnswerRequest = {
+      attempt_id: attemptId,
+      question_attempt_id: questionFlow.questionAttempt.id,
+    };
+
+    const questionType = questionFlow.question.type;
+    const answer = answerPayload.answer;
+
+    if (questionType === 'single_choice' || questionType === 'multi_choice') {
+      // Answer from game may be array of option IDs or single ID
+      const optionIds = Array.isArray(answer) ? answer : [answer];
+      payload.selected_option_ids = optionIds.filter((id): id is string => typeof id === 'string');
+    }
+
+    if (questionType === 'text') {
+      payload.text_answer = typeof answer === 'string' ? answer : String(answer ?? '');
+    }
+
+    if (questionType === 'image_upload') {
+      payload.uploaded_image_url = typeof answer === 'string' ? answer : '';
+    }
+
+    if (questionType === 'matching') {
+      // Answer from game may be array of {left_item_id, selected_right_key} or in different format
+      if (Array.isArray(answer)) {
+        payload.matching_answers = answer.map((item) => ({
+          left_item_id: typeof item === 'object' && item !== null ? (item as { left_item_id?: string }).left_item_id ?? '' : '',
+          selected_right_key: typeof item === 'object' && item !== null ? (item as { selected_right_key?: string }).selected_right_key ?? '' : '',
+        })).filter(item => item.left_item_id && item.selected_right_key);
+      }
+    }
+
+    setSubmittingAnswer(true);
+    try {
+      const response = await getAnswerService(previewMode)(gamePackage.id, payload);
+      const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
+
+      console.info('[QFLOW] Answer result:', data);
+      // MEDIUM-2: Use server response (authoritative), preserve current if not returned
+      setAttemptTotals(data.attempt_totals ?? attemptTotals ?? null);
+      setLastQuestionResult(data);
+
+      // Clear questionFlow since game modal handled the answer
       questionFlowActiveRef.current = false;
       setQuestionFlow(null);
-      endQuestionLookup();
-      setSubmittingAnswer(false);
       resetQuestionDraft(null);
 
+      // Send resume to game with result
+      // Note: wrongAnswerModal is NOT shown for game native modal - game handles its own feedback
       resumeRuntime('question-answered', {
         questionResult: data.resume_payload ?? {
           questionAttemptId: data.question_attempt_id,
           isCorrect: data.is_correct,
+          is_correct: data.is_correct,
           scoreAwarded: data.score_awarded,
           feedbackMessage: data.feedback_message,
         },
         attemptTotals: data.attempt_totals ?? null,
         wrong_attempts: data.wrong_attempts,
         game_over: data.game_over,
-      }, { watchdog: true });
+      }, { watchdog: true, force: true });
     } catch (error) {
       showErrorToast(extractApiErrorMessage(error, 'Không thể nộp câu trả lời.'));
+      // Still try to resume the game
+      resumeRuntime('question-submit-error', {}, { watchdog: true, force: true });
     } finally {
       setSubmittingAnswer(false);
     }
@@ -775,11 +929,47 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     const sendInit = (reason: string, extraPayload: Record<string, unknown> = {}) => {
       if (initTokenRef.current === initToken) return;
       initTokenRef.current = initToken;
+
+      // CRITICAL-2: Include active question info so game can restore state on reload
+      const activeQuestionPayload = (() => {
+        // Try from startBundle first (fresh start), then playBundle (resume)
+        const activeQuestion = startBundle?.active_question ?? playBundle?.active_question;
+        const activeAttempt = startBundle?.active_question_attempt ?? playBundle?.active_question_attempt;
+        if (activeQuestion && activeAttempt) {
+          return {
+            active_question: activeQuestion,
+            active_question_attempt: activeAttempt,
+            active_question_trigger: buildRestoredQuestionTrigger(activeAttempt),
+          };
+        }
+        return {};
+      })();
+
+      // HIGH-1: Try to restore game state from sessionStorage (set during recovery)
+      const restoredGameState = (() => {
+        try {
+          const key = `game_state_${gamePackage.id}_${attemptId}`;
+          const saved = sessionStorage.getItem(key);
+          if (saved) {
+            const state = JSON.parse(saved);
+            // Clear after reading to avoid stale state on next reload
+            sessionStorage.removeItem(key);
+            return state;
+          }
+        } catch {
+          // sessionStorage unavailable or corrupted
+        }
+        return null;
+      })();
+
       sendHostCommand('host:init', reason, {
         attemptId,
         packageId: gamePackage.id,
         attemptTotals,
+        ...activeQuestionPayload,
         ...extraPayload,
+        // HIGH-1: Include restored game state for iframe to use
+        restored_game_state: restoredGameState,
       });
     };
 
@@ -788,8 +978,19 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       return;
     }
 
+    // MEDIUM-3: Guard to prevent double init - track if init has been sent
+    let initSent = false;
+    const sendInitOnce = (reason: string, extraPayload: Record<string, unknown> = {}) => {
+      if (initSent) {
+        console.info('[QFLOW] sendInit: already sent, skipping duplicate:', reason);
+        return;
+      }
+      initSent = true;
+      sendInit(reason, extraPayload);
+    };
+
     const fallbackTimer = window.setTimeout(() => {
-      sendInit('bridge-ready-timeout', { handshakeFallback: true });
+      sendInitOnce('bridge-ready-timeout', { handshakeFallback: true });
     }, INIT_HANDSHAKE_FALLBACK_MS);
 
     return () => window.clearTimeout(fallbackTimer);
@@ -809,12 +1010,27 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
 
   const recoverGameFrame = (reason: string, eventPayload: Record<string, unknown> = {}) => {
     if (autoFrameRecoveriesRef.current >= MAX_AUTO_FRAME_RECOVERIES) {
-      showErrorToast('Module trÃ² chÆ¡i Ä‘ang gáº·p lá»—i. HÃ£y báº¥m ChÆ¡i láº¡i Ä‘á»ƒ táº£i láº¡i mÃ n chÆ¡i.');
+      showErrorToast('Module trò chơi đang gặp lỗi. Hãy bấm Chơi lại để tải lại màn chơi.');
       return;
     }
 
     autoFrameRecoveriesRef.current += 1;
-    void logRuntimeEvent('frame_recovery', { reason, ...eventPayload });
+
+    // HIGH-1: Log current game state before recovery for potential restore
+    void logRuntimeEvent('frame_recovery', {
+      reason,
+      gameState: runtimeSnapshot,
+      ...eventPayload
+    });
+
+    // HIGH-1: Store current state in sessionStorage for restore after reload
+    // This helps preserve UI state even if iframe fully reloads
+    try {
+      sessionStorage.setItem(`game_state_${gamePackage.id}_${attemptId}`, JSON.stringify(runtimeSnapshot));
+    } catch {
+      // sessionStorage may be full or unavailable
+    }
+
     setBridgeReady(false);
     setFrameLoaded(false);
     initTokenRef.current = '';
@@ -846,17 +1062,25 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
   }, [bridgeReady, sessionKey]);
 
   useEffect(() => {
-    // Skip restoration on first render (page load) to allow game to start fresh
-    // Only restore active question on tab visibility changes (user comes back to tab)
-    if (isFirstRenderRef.current) {
-      isFirstRenderRef.current = false;
-      return;
-    }
+    // CRITICAL-2: Restore active question state on page load/reload
+    // This is needed because when user reloads the page:
+    // 1. Backend still has active_question_attempt
+    // 2. Game iframe resets to initial state
+    // 3. We need to restore the game to checkpoint position with active question
+    const activeQuestion = playBundle?.active_question;
+    const activeAttempt = playBundle?.active_question_attempt;
 
-    if (playBundle.active_question && playBundle.active_question_attempt) {
-      restoreActiveQuestion(playBundle.active_question, playBundle.active_question_attempt);
+    if (activeQuestion && activeAttempt) {
+      console.info('[QFLOW] Restoring active question on mount:', {
+        questionId: activeQuestion.id,
+        attemptId: activeAttempt.id,
+      });
+      restoreActiveQuestion(activeQuestion, activeAttempt);
+    } else {
+      // Mark as restored even if no active question (normal fresh start)
+      isFirstRenderRef.current = false;
     }
-  }, [playBundle.active_question?.id, playBundle.active_question_attempt?.id]);
+  }, [playBundle?.active_question?.id, playBundle?.active_question_attempt?.id]);
 
   useEffect(() => {
     if (!questionFlow) {
@@ -868,12 +1092,15 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     const onMessage = (event: MessageEvent) => {
       // Debug: log all messages received
       if (event.data && typeof event.data === 'object' && event.data.channel === 'eduhub:game-bridge') {
-        console.info('[QFLOW] Message received from game iframe:', event.data.type, event.data);
+        // console.info('[QFLOW] Message received from game iframe:', event.data.type, event.data);
       }
-      
+
+      // MEDIUM-6: Validate message source - only accept messages from our game iframe
       if (event.source !== frameRef.current?.contentWindow) {
-        // Don't return here for debugging - let it process
+        // Ignore messages from other sources (e.g., ads, analytics)
+        return;
       }
+
       if (!isGameBridgeEnvelope(event.data)) return;
       const message = event.data as GameBridgeEnvelope;
 
@@ -902,6 +1129,25 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
         const trigger = message.payload as GameQuestionTriggerPayload | undefined;
         if (!trigger) return;
         void handleQuestionTrigger(trigger);
+        return;
+      }
+
+      // CRITICAL-1: Handle answer-submitted from game native modal (e.g., Mario quiz modal)
+      if (message.type === 'game:answer-submitted') {
+        const answerPayload = message.payload as GameAnswerSubmittedPayload | undefined;
+        if (!answerPayload) return;
+
+        console.info('[QFLOW] game:answer-submitted received:', answerPayload);
+
+        // If we already have a questionFlow, the React modal will handle it
+        // This handler is for when game sends answer from its own modal
+        if (questionFlow) {
+          console.info('[QFLOW] Answer from game modal, but React modal is active - ignoring game modal answer');
+          return;
+        }
+
+        // Process answer from game native modal
+        void handleGameNativeAnswer(answerPayload);
         return;
       }
 
@@ -972,17 +1218,24 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.hidden) {
-        pauseRuntime('document-hidden');
+        // Only pause if game is running
+        if (runtimeStatus === 'running') {
+          pauseRuntime('document-hidden');
+        }
         return;
       }
 
+      // Only resume if question flow is not active AND game is paused
+      // This prevents sending redundant resume commands
       if (questionFlowActive) return;
+      if (runtimeStatus !== 'paused') return;
+      
       resumeRuntime('document-visible');
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, [questionFlowActive]);
+  }, [questionFlowActive, runtimeStatus]);
 
   // Handle page unload / back navigation - ask user before leaving
   useEffect(() => {
@@ -1049,6 +1302,12 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
         // Continue anyway - restart is still valid
       }
     }
+
+    // CRITICAL-4: Clear trigger state for fresh restart
+    handledTriggerIdsRef.current.clear();
+    triggerTimeoutRef.current.clear();
+    questionFlowActiveRef.current = false;
+    triggerInFlightRef.current = false;
 
     sendHostCommand('host:restart', 'host-restart');
     void logRuntimeEvent('restart', { reason: 'host-restart' });
@@ -1256,6 +1515,10 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
                 onClick={() => {
                   setWrongAnswerModalOpen(false);
                   setWrongAnswerData(null);
+                  // MEDIUM-4: Resume game when user dismisses wrong answer modal
+                  resumeRuntime('wrong-answer-modal-dismissed', {
+                    questionResult: lastQuestionResult?.resume_payload ?? lastQuestionResult ?? {},
+                  }, { force: true });
                 }}
                 className="mt-6 w-full"
               >

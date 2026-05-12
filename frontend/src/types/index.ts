@@ -547,6 +547,8 @@ export interface GameRuntimeAnswerResponse {
   resume_payload?: Record<string, unknown> | null;
   wrong_attempts?: number | null;
   game_over?: boolean | null;
+  lives_remaining?: number | null;
+  checkpoints_passed?: string[];
 }
 
 export interface GameRuntimeEventRequest {

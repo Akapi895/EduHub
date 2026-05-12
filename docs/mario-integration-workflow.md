@@ -96,14 +96,15 @@ Tài liệu này mô tả chi tiết workflow tích hợp game Mario platformer 
 Checkpoints là vị trí bắt buộc trong level mà học sinh phải vượt qua bằng cách trả lời đúng câu hỏi.
 
 **Checkpoint Properties:**
+
 ```typescript
 interface Checkpoint {
   id: string;
-  x: number;           // Vị trí X trong level
-  y: number;           // Vị trí Y trong level
-  width: number;       // Chiều rộng hitbox
-  height: number;      // Chiều cao hitbox
-  level: number;       // Level chứa checkpoint
+  x: number; // Vị trí X trong level
+  y: number; // Vị trí Y trong level
+  width: number; // Chiều rộng hitbox
+  height: number; // Chiều cao hitbox
+  level: number; // Level chứa checkpoint
   triggerKey: string; // Key để trigger question
   isRequired: boolean; // Bắt buộc hay tùy chọn
   nextCheckpoint?: string; // ID checkpoint tiếp theo
@@ -111,17 +112,18 @@ interface Checkpoint {
 ```
 
 **Checkpoint Layout (ví dụ Level 1):**
+
 ```
 Level 1 (World 1-1)
 ────────────────────────────────────────────────────────────
-                                                           
-    ☁                          ☁                    ☁       
-                                                          
-  ═════                    ══════                 ══════  
-         💰💰                      💰💰💰                
-                                 
-                              🚩                        🚩   
-  ══════════════════════════════════════════════════════════  
+
+    ☁                          ☁                    ☁
+
+  ═════                    ══════                 ══════
+         💰💰                      💰💰💰
+
+                              🚩                        🚩
+  ══════════════════════════════════════════════════════════
          P ← Start    CP1        CP2              Goal
 
 CP1 = Checkpoint 1 (checkpoint_id: "l1cp1")
@@ -133,13 +135,13 @@ P = Player spawn point
 
 ```typescript
 interface LivesState {
-  currentLives: number;      // Số mạng hiện tại (max: 3)
-  maxLives: number;           // Số mạng tối đa
-  lastCheckpointId: string;   // ID checkpoint cuối cùng đã vượt qua
-  
+  currentLives: number; // Số mạng hiện tại (max: 3)
+  maxLives: number; // Số mạng tối đa
+  lastCheckpointId: string; // ID checkpoint cuối cùng đã vượt qua
+
   // Khi trả lời sai
-  wrongAttempts: number;      // Số lần sai trong attempt hiện tại
-  failedQuestions: string[];  // IDs của câu hỏi chưa trả lời đúng
+  wrongAttempts: number; // Số lần sai trong attempt hiện tại
+  failedQuestions: string[]; // IDs của câu hỏi chưa trả lời đúng
 }
 
 // Game Over conditions
@@ -148,9 +150,10 @@ interface LivesState {
 ```
 
 **Restart Logic:**
+
 ```typescript
-function handleRestart(reason: 'game_over' | 'manual') {
-  if (reason === 'game_over') {
+function handleRestart(reason: "game_over" | "manual") {
+  if (reason === "game_over") {
     // Hỏi có muốn restart không
     // Nếu restart: quay về checkpoint gần nhất đã vượt qua
     // Hoặc bắt đầu lại từ đầu nếu không có checkpoint
@@ -265,13 +268,17 @@ frontend/public/game-modules/
 ### 4.1 Message Protocol
 
 **Envelope Structure:**
+
 ```typescript
-interface GameBridgeEnvelope<TType extends string, TPayload = Record<string, unknown>> {
-  channel: 'eduhub:game-bridge';  // Fixed channel name
-  type: TType;                      // Message type
-  gameId: string;                   // Game module ID
-  timestamp: string;                // ISO timestamp
-  payload: TPayload;               // Message payload
+interface GameBridgeEnvelope<
+  TType extends string,
+  TPayload = Record<string, unknown>,
+> {
+  channel: "eduhub:game-bridge"; // Fixed channel name
+  type: TType; // Message type
+  gameId: string; // Game module ID
+  timestamp: string; // ISO timestamp
+  payload: TPayload; // Message payload
 }
 ```
 
@@ -417,12 +424,12 @@ interface HostResumePayload {
 class GameBridge {
   constructor(gameId) {
     this.gameId = gameId;
-    this.channel = 'eduhub:game-bridge';
+    this.channel = "eduhub:game-bridge";
     this.handlers = new Map();
-    
-    window.addEventListener('message', this.handleMessage.bind(this));
+
+    window.addEventListener("message", this.handleMessage.bind(this));
   }
-  
+
   // Send message to host
   send(type, payload = {}) {
     const envelope = {
@@ -430,59 +437,59 @@ class GameBridge {
       type,
       gameId: this.gameId,
       timestamp: new Date().toISOString(),
-      payload
+      payload,
     };
-    window.parent.postMessage(envelope, '*');
+    window.parent.postMessage(envelope, "*");
   }
-  
+
   // Register handler for host messages
   onHostMessage(type, handler) {
     this.handlers.set(type, handler);
   }
-  
+
   handleMessage(event) {
     const msg = event.data;
     if (!msg || msg.channel !== this.channel) return;
-    
+
     const handler = this.handlers.get(msg.type);
     if (handler) {
       handler(msg.payload);
     }
   }
-  
+
   // Convenience methods
   ready() {
-    this.send('game:ready', {
-      version: '2.0.0',
-      capabilities: ['state', 'checkpoint', 'quiz', 'lives']
+    this.send("game:ready", {
+      version: "2.0.0",
+      capabilities: ["state", "checkpoint", "quiz", "lives"],
     });
   }
-  
+
   triggerQuestion(checkpointId, level, position) {
-    this.send('game:question-trigger', {
-      triggerType: 'checkpoint_reached',
+    this.send("game:question-trigger", {
+      triggerType: "checkpoint_reached",
       triggerKey: checkpointId,
-      triggerValue: 'checkpoint',
+      triggerValue: "checkpoint",
       eventPayload: {
         checkpointId,
         level,
         playerX: position.x,
-        playerY: position.y
-      }
+        playerY: position.y,
+      },
     });
   }
-  
+
   updateState(state) {
-    this.send('game:state', state);
+    this.send("game:state", state);
   }
-  
+
   complete(outcome, stats) {
-    this.send('game:complete', outcome, stats);
+    this.send("game:complete", outcome, stats);
   }
 }
 
 // Usage in game
-const bridge = new GameBridge('mario-platformer');
+const bridge = new GameBridge("mario-platformer");
 
 // When checkpoint reached
 function onCheckpointCollision(checkpoint) {
@@ -490,12 +497,12 @@ function onCheckpointCollision(checkpoint) {
 }
 
 // Handle host commands
-bridge.onHostMessage('host:pause', (payload) => {
+bridge.onHostMessage("host:pause", (payload) => {
   game.pause();
   showQuestionModal(payload.questionAttemptId);
 });
 
-bridge.onHostMessage('host:resume', (payload) => {
+bridge.onHostMessage("host:resume", (payload) => {
   game.resume();
   if (!payload.questionResult.isCorrect) {
     game.loseLife();
@@ -503,7 +510,7 @@ bridge.onHostMessage('host:resume', (payload) => {
   }
 });
 
-bridge.onHostMessage('host:restart', () => {
+bridge.onHostMessage("host:restart", () => {
   game.restart();
 });
 ```
@@ -568,15 +575,16 @@ Game Mario hỗ trợ **tất cả** question types từ question bank:
 
 ```typescript
 // Question types từ EduHub system
-type QuestionType = 
-  | 'single_choice'      // Trắc nghiệm 1 đáp án
-  | 'multi_choice'       // Trắc nghiệm nhiều đáp án
-  | 'text'               // Tự luận
-  | 'image_upload'       // Upload hình ảnh
-  | 'matching';          // Nối cột
+type QuestionType =
+  | "single_choice" // Trắc nghiệm 1 đáp án
+  | "multi_choice" // Trắc nghiệm nhiều đáp án
+  | "text" // Tự luận
+  | "image_upload" // Upload hình ảnh
+  | "matching"; // Nối cột
 ```
 
 **Implementation:**
+
 ```javascript
 // QuizManager.js
 class QuizManager {
@@ -585,61 +593,64 @@ class QuizManager {
     this.currentQuestion = null;
     this.currentAttemptId = null;
   }
-  
+
   // Render question based on type
   renderQuestion(question) {
     this.currentQuestion = question;
     this.currentAttemptId = question.attempt_id;
-    
-    const container = document.getElementById('question-container');
-    
+
+    const container = document.getElementById("question-container");
+
     switch (question.type) {
-      case 'single_choice':
+      case "single_choice":
         return this.renderSingleChoice(question, container);
-      case 'multi_choice':
+      case "multi_choice":
         return this.renderMultiChoice(question, container);
-      case 'text':
+      case "text":
         return this.renderText(question, container);
-      case 'matching':
+      case "matching":
         return this.renderMatching(question, container);
-      case 'image_upload':
+      case "image_upload":
         return this.renderImageUpload(question, container);
     }
   }
-  
+
   // Submit answer to host
   async submitAnswer(answer) {
     // Answer format based on question type
     const payload = this.buildAnswerPayload(answer);
-    
+
     // Send to backend via bridge (host handles API call)
     return new Promise((resolve, reject) => {
-      this.bridge.onHostMessage('host:resume', (resumePayload) => {
+      this.bridge.onHostMessage("host:resume", (resumePayload) => {
         resolve(resumePayload.questionResult);
       });
-      
+
       // Trigger answer submission through shell
-      window.parent.postMessage({
-        channel: 'eduhub:game-bridge',
-        type: 'game:answer-submit',
-        payload: {
-          attemptId: this.currentAttemptId,
-          answer: payload
-        }
-      }, '*');
+      window.parent.postMessage(
+        {
+          channel: "eduhub:game-bridge",
+          type: "game:answer-submit",
+          payload: {
+            attemptId: this.currentAttemptId,
+            answer: payload,
+          },
+        },
+        "*",
+      );
     });
   }
-  
+
   buildAnswerPayload(answer) {
     switch (this.currentQuestion.type) {
-      case 'single_choice':
-      case 'multi_choice':
+      case "single_choice":
+      case "multi_choice":
         return { selected_option_ids: answer };
-      case 'text':
+      case "text":
         return { text_answer: answer };
-      case 'matching':
+      case "matching":
         return { matching_answers: answer };
-      case 'image_upload':
+      case "image_upload":
         return { uploaded_image_url: answer };
       default:
         return {};
@@ -651,11 +662,13 @@ class QuizManager {
 ### 5.3 Question Modal (Game-side rendering)
 
 Game Mario có thể render question modal riêng hoặc delegate cho host. Khuyến nghị: **delegate cho host** (GamePlayerShell) để:
+
 - Đồng nhất UI với các game khác
 - Tận dụng component đã có
 - Dễ maintain
 
 **Hybrid Approach (Modal trong game):**
+
 ```javascript
 // QuizModal.js
 class QuizModal {
@@ -663,17 +676,17 @@ class QuizModal {
     this.container = container;
     this.onSubmit = null;
   }
-  
+
   show(question) {
-    this.container.classList.remove('hidden');
+    this.container.classList.remove("hidden");
     this.container.innerHTML = this.buildHTML(question);
     this.attachEventListeners(question);
   }
-  
+
   hide() {
-    this.container.classList.add('hidden');
+    this.container.classList.add("hidden");
   }
-  
+
   buildHTML(question) {
     return `
       <div class="quiz-modal">
@@ -700,28 +713,28 @@ class QuizModal {
       </div>
     `;
   }
-  
+
   renderQuestionInput(question) {
     switch (question.type) {
-      case 'single_choice':
-      case 'multi_choice':
+      case "single_choice":
+      case "multi_choice":
         return this.renderOptions(question);
-      case 'text':
+      case "text":
         return '<textarea class="quiz-text-input"></textarea>';
-      case 'matching':
+      case "matching":
         return this.renderMatching(question);
       default:
-        return '<p>Unsupported question type</p>';
+        return "<p>Unsupported question type</p>";
     }
   }
-  
+
   getQuestionTypeLabel(type) {
     const labels = {
-      'single_choice': 'Trắc nghiệm 1 đáp án',
-      'multi_choice': 'Trắc nghiệm nhiều đáp án',
-      'text': 'Tự luận',
-      'matching': 'Nối cột',
-      'image_upload': 'Tải ảnh'
+      single_choice: "Trắc nghiệm 1 đáp án",
+      multi_choice: "Trắc nghiệm nhiều đáp án",
+      text: "Tự luận",
+      matching: "Nối cột",
+      image_upload: "Tải ảnh",
     };
     return labels[type] || type;
   }
@@ -737,35 +750,42 @@ class QuizModal {
 ```typescript
 interface MarioGameState {
   // Core gameplay
-  status: 'loading' | 'ready' | 'playing' | 'paused' | 'quiz' | 'game_over' | 'level_complete';
-  
+  status:
+    | "loading"
+    | "ready"
+    | "playing"
+    | "paused"
+    | "quiz"
+    | "game_over"
+    | "level_complete";
+
   // Player
   player: {
     x: number;
     y: number;
     velocityX: number;
     velocityY: number;
-    direction: 'left' | 'right';
+    direction: "left" | "right";
     isJumping: boolean;
     isGrounded: boolean;
     animationFrame: number;
   };
-  
+
   // Progression
   lives: {
     current: number;
     max: number;
   };
-  
+
   score: number;
   currentLevel: number;
-  
+
   // Checkpoint system
   checkpoints: {
-    passed: string[];      // IDs of passed checkpoints
+    passed: string[]; // IDs of passed checkpoints
     current: string | null; // Current checkpoint (for respawn)
   };
-  
+
   // Quiz state
   quiz: {
     active: boolean;
@@ -774,7 +794,7 @@ interface MarioGameState {
     wrongAnswers: number;
     failedQuestions: string[];
   };
-  
+
   // Level data
   level: {
     platforms: Platform[];
@@ -782,13 +802,13 @@ interface MarioGameState {
     coins: Coin[];
     checkpoints: Checkpoint[];
   };
-  
+
   // Camera
   camera: {
     x: number;
     y: number;
   };
-  
+
   // Time tracking
   elapsedTime: number;
   questionTimeMs: number;
@@ -830,56 +850,56 @@ class CheckpointManager {
     this.state = state;
     this.checkpoints = new Map();
   }
-  
+
   registerCheckpoint(checkpoint) {
     this.checkpoints.set(checkpoint.id, checkpoint);
   }
-  
+
   onCheckpointPassed(checkpointId) {
     // Add to passed list
     if (!this.state.checkpoints.passed.includes(checkpointId)) {
       this.state.checkpoints.passed.push(checkpointId);
     }
-    
+
     // Update current checkpoint for respawn
     this.state.checkpoints.current = checkpointId;
-    
+
     // Send to backend via bridge
     bridge.updateState({
       checkpointId,
-      checkpointsPassed: this.state.checkpoints.passed
+      checkpointsPassed: this.state.checkpoints.passed,
     });
   }
-  
+
   getRespawnPosition() {
     const checkpointId = this.state.checkpoints.current;
     if (!checkpointId) {
       // No checkpoint, start from level beginning
       return this.getLevelStartPosition(this.state.currentLevel);
     }
-    
+
     const checkpoint = this.checkpoints.get(checkpointId);
     return {
       x: checkpoint.x,
-      y: checkpoint.y - 32  // Spawn above checkpoint
+      y: checkpoint.y - 32, // Spawn above checkpoint
     };
   }
-  
+
   handleWrongAnswer() {
     this.state.lives.current--;
-    
+
     if (this.state.lives.current <= 0) {
-      this.state.status = 'game_over';
+      this.state.status = "game_over";
       bridge.complete({
-        outcome: 'game_over',
-        reason: 'max_wrong_attempts',
+        outcome: "game_over",
+        reason: "max_wrong_attempts",
         score: this.state.score,
         level: this.state.currentLevel,
-        lives: 0
+        lives: 0,
       });
       return;
     }
-    
+
     // Respawn at checkpoint
     const respawnPos = this.getRespawnPosition();
     this.state.player.x = respawnPos.x;
@@ -909,7 +929,7 @@ class Checkpoint {
     this.triggered = false;
     this.passed = false;
   }
-  
+
   checkCollision(player) {
     return (
       player.x < this.x + this.width &&
@@ -918,29 +938,29 @@ class Checkpoint {
       player.y + player.height > this.y
     );
   }
-  
+
   onPlayerCollision(player, gameState) {
-    if (this.passed) return;  // Already triggered
-    
+    if (this.passed) return; // Already triggered
+
     // Visual feedback
     this.triggered = true;
     this.showQuestion();
-    
+
     // Game pauses automatically
-    gameState.status = 'quiz';
-    
+    gameState.status = "quiz";
+
     // Trigger question
     bridge.triggerQuestion(this.id, this.level, {
       x: player.x,
-      y: player.y
+      y: player.y,
     });
   }
-  
+
   showQuestion() {
     // Show checkpoint flag animation
-    this.element.classList.add('checkpoint-triggered');
+    this.element.classList.add("checkpoint-triggered");
   }
-  
+
   onQuestionResult(result) {
     if (result.isCorrect) {
       this.passed = true;
@@ -948,14 +968,14 @@ class Checkpoint {
       gameState.checkpoints.current = this.id;
       // Award bonus points
       gameState.score += 100;
-      gameState.status = 'playing';
+      gameState.status = "playing";
     } else {
       gameState.lives.current--;
       // Show wrong answer feedback
       this.showWrongAnswer();
       // Respawn at last checkpoint
       gameState.respawnAtCheckpoint();
-      gameState.status = 'playing';
+      gameState.status = "playing";
     }
   }
 }
@@ -969,18 +989,18 @@ class LivesManager {
   constructor(maxLives) {
     this.maxLives = maxLives;
     this.current = maxLives;
-    this.displayElement = document.getElementById('lives-display');
+    this.displayElement = document.getElementById("lives-display");
   }
-  
+
   loseLife() {
     this.current--;
     this.updateDisplay();
-    
+
     if (this.current <= 0) {
       this.onGameOver();
     }
   }
-  
+
   gainLife() {
     // Optional: bonus life on certain achievements
     if (this.current < this.maxLives) {
@@ -988,21 +1008,21 @@ class LivesManager {
       this.updateDisplay();
     }
   }
-  
+
   updateDisplay() {
-    const hearts = '♥'.repeat(this.current) + 
-                   '♡'.repeat(this.maxLives - this.current);
+    const hearts =
+      "♥".repeat(this.current) + "♡".repeat(this.maxLives - this.current);
     this.displayElement.textContent = hearts;
     this.displayElement.className = `lives-display lives-${this.current}`;
   }
-  
+
   onGameOver() {
     bridge.complete({
-      outcome: 'game_over',
-      reason: 'max_wrong_attempts',
+      outcome: "game_over",
+      reason: "max_wrong_attempts",
       score: gameState.score,
       level: gameState.currentLevel,
-      lives: 0
+      lives: 0,
     });
   }
 }
@@ -1014,41 +1034,41 @@ class LivesManager {
 
 ### 8.1 Educational Mechanics
 
-| Gameplay Element | Learning Purpose |
-|-----------------|------------------|
-| Checkpoint 1 | Test kiến thức cơ bản (Nhận biết) |
-| Checkpoint 2 | Test kiến thức trung bình (Thông hiểu) |
-| Checkpoint 3 | Test kiến thức nâng cao (Vận dụng) |
-| Final Checkpoint | Tổng hợp (Vận dụng cao) |
-| Collect Coins | Bonus points, không ảnh hưởng checkpoint |
-| Defeat Enemies | Bonus points, không ảnh hưởng checkpoint |
-| Wrong Answer | Mất mạng, phải retry checkpoint |
+| Gameplay Element | Learning Purpose                         |
+| ---------------- | ---------------------------------------- |
+| Checkpoint 1     | Test kiến thức cơ bản (Nhận biết)        |
+| Checkpoint 2     | Test kiến thức trung bình (Thông hiểu)   |
+| Checkpoint 3     | Test kiến thức nâng cao (Vận dụng)       |
+| Final Checkpoint | Tổng hợp (Vận dụng cao)                  |
+| Collect Coins    | Bonus points, không ảnh hưởng checkpoint |
+| Defeat Enemies   | Bonus points, không ảnh hưởng checkpoint |
+| Wrong Answer     | Mất mạng, phải retry checkpoint          |
 
 ### 8.2 Question Distribution by Difficulty
 
 ```typescript
 // Question plan for Mario (similar to Gold Miner)
 interface MarioQuestionPlan {
-  distribution_mode: 'progressive' | 'random';
-  
+  distribution_mode: "progressive" | "random";
+
   // Number of questions per level
-  questions_per_level: number[];  // [10, 10, 10, 10]
-  
+  questions_per_level: number[]; // [10, 10, 10, 10]
+
   // Difficulty bands mapped to checkpoints
   checkpoints_per_level: {
-    recognition: string[];      // Checkpoint IDs for basic questions
-    comprehension: string[];    // Checkpoint IDs for understanding
-    application_basic: string[];// Checkpoint IDs for basic application
+    recognition: string[]; // Checkpoint IDs for basic questions
+    comprehension: string[]; // Checkpoint IDs for understanding
+    application_basic: string[]; // Checkpoint IDs for basic application
     application_advanced: string[]; // Checkpoint IDs for advanced
   };
-  
+
   // Checkpoint positions in level
   checkpoint_positions: {
     [levelId: string]: {
       x: number;
       y: number;
       difficulty_band: DifficultyBand;
-    }[]
+    }[];
   };
 }
 ```
@@ -1058,28 +1078,28 @@ interface MarioQuestionPlan {
 ```typescript
 interface ScoringConfig {
   // Checkpoint completion
-  checkpoint_passed: 100,
-  
+  checkpoint_passed: 100;
+
   // Correct answer at checkpoint
-  answer_correct: 50,
-  
+  answer_correct: 50;
+
   // Wrong answer penalty
-  answer_wrong: -25,  // Reduces potential score
-  
+  answer_wrong: -25; // Reduces potential score
+
   // Coin collection
-  coin_collected: 10,
-  
+  coin_collected: 10;
+
   // Enemy defeated
-  enemy_defeated: 25,
-  
+  enemy_defeated: 25;
+
   // Level completion bonus
-  level_complete: 200,
-  
+  level_complete: 200;
+
   // Game completion bonus
-  game_complete: 500,
-  
+  game_complete: 500;
+
   // Perfect score (all correct, no lives lost)
-  perfect_clear_bonus: 300
+  perfect_clear_bonus: 300;
 }
 ```
 
@@ -1090,7 +1110,7 @@ interface LearningProgress {
   totalCheckpoints: number;
   passedCheckpoints: number;
   currentLevel: number;
-  
+
   questions: {
     total: number;
     answered: number;
@@ -1098,14 +1118,14 @@ interface LearningProgress {
     wrong: number;
     accuracy: number;
   };
-  
+
   byDifficulty: {
     [band: string]: {
       total: number;
       correct: number;
-    }
+    };
   };
-  
+
   topicsEncountered: string[];
   averageResponseTimeMs: number;
 }
@@ -1143,27 +1163,27 @@ Game Mario sử dụng fullscreen giống các game khác trong hệ thống:
 interface MarioLeaderboardPayload {
   attempt_id: string;
   package_id: string;
-  user_id: string;  // From session
-  
+  user_id: string; // From session
+
   // Primary ranking metric
   score_total: number;
-  
+
   // Tie-breaker metrics
-  score_gameplay: number;      // From coins, enemies, etc.
-  score_checkpoint: number;    // From checkpoint/quiz
-  
+  score_gameplay: number; // From coins, enemies, etc.
+  score_checkpoint: number; // From checkpoint/quiz
+
   // Time-based tie-breaker
-  total_time_ms: number;       // Total game time
-  question_time_ms: number;     // Time spent on questions (lower is better)
-  
+  total_time_ms: number; // Total game time
+  question_time_ms: number; // Time spent on questions (lower is better)
+
   // Quality metrics
-  accuracy: number;             // % correct answers
+  accuracy: number; // % correct answers
   lives_remaining: number;
   checkpoints_passed: number;
   levels_completed: number;
-  
+
   summary_payload: {
-    outcome: 'completed' | 'game_over';
+    outcome: "completed" | "game_over";
     final_level: number;
     total_coins: number;
     total_enemies: number;
@@ -1176,6 +1196,7 @@ interface MarioLeaderboardPayload {
 ## 11. Testing Checklist
 
 ### 11.1 Gameplay Testing
+
 - [ ] Player movement left/right
 - [ ] Jumping mechanics
 - [ ] Enemy collision detection
@@ -1187,6 +1208,7 @@ interface MarioLeaderboardPayload {
 - [ ] Level progression
 
 ### 11.2 Question System Testing
+
 - [ ] Question modal displays correctly
 - [ ] All question types render properly
 - [ ] Answer submission works
@@ -1195,6 +1217,7 @@ interface MarioLeaderboardPayload {
 - [ ] Skip non-required questions
 
 ### 11.3 Integration Testing
+
 - [ ] postMessage bridge communication
 - [ ] host:init received and processed
 - [ ] host:pause pauses game
@@ -1204,6 +1227,7 @@ interface MarioLeaderboardPayload {
 - [ ] Session persistence
 
 ### 11.4 Edge Cases
+
 - [ ] Multiple rapid checkpoint hits
 - [ ] Answer while game loading
 - [ ] Tab visibility change during quiz

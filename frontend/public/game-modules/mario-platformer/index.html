@@ -22,34 +22,10 @@
             </div>
         </div>
         
-        <!-- Game Canvas -->
-        <div id="game-wrapper">
-            <canvas id="game-canvas"></canvas>
-            
-            <!-- Quiz Modal (hidden by default) -->
-            <div id="quiz-modal" class="hidden">
-                <div class="quiz-content">
-                    <div class="quiz-header">
-                        <span id="quiz-type" class="quiz-type">Câu hỏi</span>
-                        <span id="quiz-points" class="quiz-points">0 điểm</span>
-                    </div>
-                    <div class="quiz-body">
-                        <p id="quiz-question" class="quiz-question"></p>
-                        <div id="quiz-options" class="quiz-options"></div>
-                        <textarea id="quiz-text-input" class="quiz-text-input hidden" rows="4"></textarea>
-                    </div>
-                    <div class="quiz-actions">
-                        <button id="quiz-submit" class="quiz-submit" disabled>Nộp câu trả lời</button>
-                    </div>
-                    <div id="quiz-feedback" class="quiz-feedback hidden">
-                        <div class="feedback-icon"></div>
-                        <p class="feedback-text"></p>
-                        <p class="feedback-explanation"></p>
-                        <button id="quiz-continue" class="quiz-continue">Tiếp tục</button>
-                    </div>
-                </div>
+            <!-- Game Canvas -->
+            <div id="game-wrapper">
+                <canvas id="game-canvas"></canvas>
             </div>
-        </div>
         
         <!-- Game Over Modal -->
         <div id="game-over-modal" class="hidden">
@@ -78,7 +54,6 @@
     <script src="js/game/LevelManager.js"></script>
     <script src="js/game/LivesManager.js"></script>
     <script src="js/game/ScoreManager.js"></script>
-    <script src="js/game/QuizManager.js"></script>
     <script src="js/game/Physics.js"></script>
     <script src="js/game/InputHandler.js"></script>
     <script src="js/game/GameRenderer.js"></script>

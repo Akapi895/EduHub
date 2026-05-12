@@ -15,7 +15,6 @@ class Game {
         this.checkpointManager = new CheckpointManager(this.state);
         this.livesManager = new LivesManager(3);
         this.scoreManager = new ScoreManager();
-        this.quizManager = new QuizManager(bridge);
         this.inputHandler = new InputHandler();
         this.renderer = new GameRenderer(this.canvas);
         this.physics = new Physics();
@@ -86,52 +85,57 @@ class Game {
             this.handleInit(payload);
         });
         
-        // Handle pause (show question)
+        // Handle pause (question triggered - modal handled by React)
         bridge.onHostMessage('host:pause', (payload) => {
             console.log('[GAME] Received host:pause', payload);
             this.pause();
-            
-            // Notify quiz manager we're in EduHub mode
-            this.quizManager.onHostPause();
-            
-            if (payload.question) {
-                this.quizManager.showQuestion(
-                    payload.question,
-                    payload.questionAttemptId,
-                    payload.checkpointId
-                );
-            }
+            // Modal is handled by React's GameQuestionModal
         });
         
-        // Handle resume (after answer processed by backend)
+        // Handle resume (after answer processed by backend - modal hidden by React)
         bridge.onHostMessage('host:resume', (payload) => {
-            // console.log('[GAME] === RECEIVED host:resume ===', payload);
-            // console.log('[GAME] Before resume - isPaused:', this.isPaused, 'quiz.active:', this.state.quiz.active, 'status:', this.state.status);
+            console.log('[GAME] === RECEIVED host:resume ===', payload);
             
-            // Notify quiz manager we're receiving result from backend
-            this.quizManager.onHostResume();
-            
-            // Hide quiz modal
-            this.quizManager.hide();
-            
-            // Process the result
+            // CRITICAL-3: Sync game state from backend (source of truth)
+            // Backend tracks wrong_attempts and lives, so we must sync with it
             if (payload.questionResult) {
+                // Sync lives from backend if provided
+                if (typeof payload.questionResult.lives_remaining === 'number') {
+                    const backendLives = payload.questionResult.lives_remaining;
+                    const currentLives = this.livesManager.getCurrentLives();
+                    // If lives don't match, trust backend
+                    if (backendLives !== currentLives) {
+                        console.log('[GAME] Syncing lives from backend:', currentLives, '->', backendLives);
+                        this.livesManager.current = backendLives;
+                        this.updateHUD();
+                    }
+                }
+                
+                // Sync wrong_attempts from backend
+                if (typeof payload.questionResult.wrong_attempts === 'number') {
+                    this.scoreManager.wrongAnswers = payload.questionResult.wrong_attempts;
+                }
+                
+                // Sync checkpoints passed from backend
+                if (Array.isArray(payload.questionResult.checkpoints_passed)) {
+                    payload.questionResult.checkpoints_passed.forEach(cpId => {
+                        this.checkpointManager.markPassed(cpId);
+                    });
+                }
+                
+                // Process the result
                 this.handleQuestionResult(payload.questionResult);
             }
             
-            // console.log('[GAME] After handleQuestionResult - quiz.active:', this.state.quiz.active);
-            
-            // Resume game - always call resume() to ensure game continues
+            // Resume game
             this.resume();
             
             // Double-check: ensure isPaused is false
             if (this.isPaused) {
-                // console.log('[GAME] WARNING: isPaused still true after resume(), forcing...');
+                console.log('[GAME] WARNING: isPaused still true after resume(), forcing...');
                 this.isPaused = false;
                 this.state.setStatus('playing');
             }
-            
-            // console.log('[GAME] After resume - isPaused:', this.isPaused, 'status:', this.state.status);
         });
         
         // Handle restart
@@ -173,19 +177,97 @@ class Game {
             this.state.totalLevels = session.levelCount || 3;
         }
         
-        // Load first level
+        // CRITICAL-2: Handle active question restoration on page reload
+        // If there's an active question from previous session, restore game state
+        if (payload.active_question && payload.active_question_trigger) {
+            console.log('[GAME] Restoring active question from previous session:', payload.active_question_trigger);
+            
+            // Extract checkpoint info from trigger
+            const trigger = payload.active_question_trigger;
+            const eventPayload = trigger.eventPayload || {};
+            const checkpointId = eventPayload.checkpointId || trigger.triggerValue;
+            
+            // Restore checkpoint state if checkpoint ID is known
+            if (checkpointId && checkpointId !== 'checkpoint') {
+                this.checkpointManager.markPassed(checkpointId);
+            }
+            
+            // Mark quiz as active with this question
+            this.state.quiz.active = true;
+            this.state.quiz.currentCheckpointId = checkpointId;
+            this.state.quiz.currentAttemptId = payload.active_question_attempt?.id;
+            
+            // HIGH-1: Also restore game state if available
+            if (payload.restored_game_state) {
+                this.restoreGameState(payload.restored_game_state);
+            }
+            
+            // CRITICAL-2: Don't auto-start - wait for host:pause with question
+            // The game will be in 'ready' state, and host will send host:pause with question
+            this.state.setStatus('ready');
+            bridge.ready();
+            return;
+        }
+        
+        // HIGH-1: Restore game state if available (from iframe recovery)
+        if (payload.restored_game_state) {
+            console.log('[GAME] Restoring game state from recovery:', payload.restored_game_state);
+            this.restoreGameState(payload.restored_game_state);
+        }
+        
+        // Load first level for fresh start
         this.levelManager.loadLevel(1);
         this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
-        
-        // console.log('[GAME] Level loaded, starting game...');
-        // console.log('[GAME] Platforms:', this.levelManager.getCurrentPlatforms().length);
-        // console.log('[GAME] Enemies:', this.levelManager.getCurrentEnemies().length);
-        // console.log('[GAME] Coins:', this.levelManager.getCurrentCoins().length);
-        // console.log('[GAME] Checkpoints:', this.checkpointManager.getCheckpoints().length);
         
         // Signal ready and start
         bridge.ready();
         this.start();
+    }
+    
+    // HIGH-1: Restore game state from saved snapshot
+    restoreGameState(savedState) {
+        if (!savedState) return;
+        
+        console.log('[GAME] restoreGameState:', savedState);
+        
+        // Restore score
+        if (typeof savedState.score === 'number') {
+            this.scoreManager.setScore(savedState.score);
+        }
+        
+        // Restore lives
+        if (typeof savedState.lives === 'number') {
+            this.livesManager.current = savedState.lives;
+        }
+        
+        // Restore level
+        if (typeof savedState.level === 'number') {
+            this.state.currentLevel = savedState.level;
+            if (savedState.level > 1) {
+                this.levelManager.loadLevel(savedState.level);
+                this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
+            }
+        }
+        
+        // Restore player position
+        if (typeof savedState.x === 'number' && typeof savedState.y === 'number') {
+            this.player.x = savedState.x;
+            this.player.y = savedState.y;
+        }
+        
+        // Restore checkpoints passed
+        if (Array.isArray(savedState.checkpointsPassed)) {
+            savedState.checkpointsPassed.forEach(cpId => {
+                this.checkpointManager.markPassed(cpId);
+            });
+        }
+        
+        // Restore wrong answers count
+        if (typeof savedState.wrongAnswers === 'number') {
+            this.scoreManager.wrongAnswers = savedState.wrongAnswers;
+        }
+        
+        this.updateHUD();
     }
     
     start() {
@@ -212,7 +294,10 @@ class Game {
     pause() {
         this.isPaused = true;
         this.state.setStatus('paused');
-        
+
+        // MEDIUM-1: Release all input keys to prevent stuck keys on resume
+        this.inputHandler.releaseAllKeys();
+
         // Send progress message to React to indicate game is paused (not dead)
         bridge.send('game:progress', {
             status: 'paused',
@@ -345,23 +430,36 @@ class Game {
         if (!this.state.quiz.active) {
             this.checkCollisions();
         }
-        
-        // Block player from passing checkpoint
+
+        // HIGH-4: Block player from passing unpassed checkpoints more robustly
         const blockingCheckpoint = this.checkpointManager.getBlockingCheckpoint(
             this.player.x,
-            this.player.velocityX
+            this.player.velocityX,
+            this.player.width
         );
         if (blockingCheckpoint) {
-            // If player tries to jump over checkpoint, push them down or back
-            if (this.player.y < blockingCheckpoint.y - 10 && this.player.velocityY < 0) {
-                // Player is jumping over checkpoint - force them to land
-                this.player.velocityY = 2; // Push down
-                this.player.y = blockingCheckpoint.y + 5; // Place on ground
-            } else if (this.player.x + this.player.width > blockingCheckpoint.x && 
-                       this.player.x < blockingCheckpoint.x + 20) {
-                // Player is on left side of checkpoint - block from passing
-                this.player.x = blockingCheckpoint.x - this.player.width - 1;
+            // Get checkpoint collision zone
+            const checkpointX = blockingCheckpoint.x;
+            const playerCenterX = this.player.x + this.player.width / 2;
+            
+            // If player center is to the left of checkpoint and moving right, block
+            if (playerCenterX < checkpointX && this.player.velocityX > 0) {
+                // Push player back to just before checkpoint
+                this.player.x = checkpointX - this.player.width - 5;
                 this.player.velocityX = 0;
+            }
+            
+            // If player is already past checkpoint (could happen with high speed), block
+            if (playerCenterX >= checkpointX && playerCenterX < checkpointX + 40) {
+                // Push back to before checkpoint
+                this.player.x = checkpointX - this.player.width - 5;
+                this.player.velocityX = Math.min(0, this.player.velocityX);
+            }
+            
+            // Also handle jumping over - push down if jumping over the checkpoint area
+            if (this.player.y < blockingCheckpoint.y - 10 && this.player.velocityY < 0) {
+                this.player.velocityY = 2; // Push down
+                this.player.y = blockingCheckpoint.y - this.player.height + 5;
             }
         }
         
@@ -565,8 +663,7 @@ class Game {
     }
     
     handleQuestionResult(result) {
-        // console.log('[GAME] handleQuestionResult called:', result);
-        // console.log('[GAME] Current checkpoint ID:', this.state.quiz.currentCheckpointId);
+        console.log('[GAME] handleQuestionResult called:', result);
         
         // Mark quiz as not active
         this.state.quiz.active = false;
@@ -577,7 +674,7 @@ class Game {
         if (isCorrect) {
             // Correct answer - mark checkpoint as passed
             if (this.state.quiz.currentCheckpointId) {
-                // console.log('[GAME] Marking checkpoint as passed:', this.state.quiz.currentCheckpointId);
+                console.log('[GAME] Marking checkpoint as passed:', this.state.quiz.currentCheckpointId);
                 this.checkpointManager.markPassed(this.state.quiz.currentCheckpointId);
             }
             this.scoreManager.addCheckpointBonus();
@@ -590,18 +687,24 @@ class Game {
             // Update HUD
             this.updateHUD();
             
-            // DO NOT call resume() here - it's already called in host:resume handler
-            
         } else {
-            // Wrong answer - lose life
-            this.scoreManager.wrongAnswers++;
-            const livesRemaining = this.livesManager.loseLife();
+            // CRITICAL-3: Wrong answer - DON'T increment wrongAnswers locally
+            // Trust the backend's wrong_attempts count which is the source of truth
+            // The sync in host:resume handler already updated scoreManager.wrongAnswers
+            
+            // Get lives from backend (already synced) or use current
+            const livesRemaining = this.livesManager.getCurrentLives();
             
             // Reset checkpoint state so player can try again at same checkpoint
             this.state.quiz.currentCheckpointId = null;
             this.state.quiz.currentAttemptId = null;
             
-            if (livesRemaining <= 0) {
+            // Check if game over (backend's wrong_attempts >= 3)
+            const wrongAttempts = typeof result.wrong_attempts === 'number' 
+                ? result.wrong_attempts 
+                : this.scoreManager.wrongAnswers;
+            
+            if (wrongAttempts >= 3 || livesRemaining <= 0) {
                 this.handleGameOver();
             } else {
                 // Respawn at checkpoint

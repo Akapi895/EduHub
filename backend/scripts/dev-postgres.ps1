@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $composeFile = Join-Path $repoRoot "docker-compose.yml"
 $serviceName = "db"
-$databaseUrl = "postgresql://eduhub:eduhub@localhost:5433/eduhub"
+$databaseUrl = "postgresql://eduhub:eduhub@localhost:15432/eduhub"
 
 if (!(Test-Path $composeFile)) {
     throw "Khong tim thay docker-compose.yml tai $composeFile"

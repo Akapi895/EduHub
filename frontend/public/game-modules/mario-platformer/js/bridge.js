@@ -24,7 +24,8 @@ class GameBridge {
             type,
             gameId: this.gameId,
             timestamp: new Date().toISOString(),
-            payload
+            payload,
+            _source: 'game' // Mark as game source to prevent echo filtering
         };
         // console.log('[BRIDGE] Sending message to host:', type, envelope);
         window.parent.postMessage(envelope, '*');
@@ -46,8 +47,14 @@ class GameBridge {
         const msg = event.data;
         if (!msg || msg.channel !== this.channel) return;
         
-        // Don't process our own messages
-        if (msg.gameId === this.gameId && msg.timestamp) return;
+        // CRITICAL-FIX: Only filter our own outbound messages (sent via window.parent)
+        // Messages from React/host come via event.source === window.parent
+        // Messages from this game (echo) would have different source
+        // Use a source marker to distinguish: React sends source: 'host', game sends source: 'game'
+        if (msg._source === 'game') {
+            // This is our own echoed message, ignore
+            return;
+        }
         
         // console.log('[BRIDGE] Received message from host:', msg.type, msg);
         

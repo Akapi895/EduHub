@@ -49,7 +49,7 @@
 │                                                  ▼                 │
 │                                       ┌──────────────────────┐    │
 │                                       │     PostgreSQL       │    │
-│                                       │    Port: 5433        │    │
+│                                       │    Port: 5432        │    │
 │                                       │                      │    │
 │                                       │  - Users             │    │
 │                                       │  - Classes           │    │
@@ -869,7 +869,7 @@ alembic downgrade -1
 
 **Backend** (`backend/.env`):
 ```env
-DATABASE_URL=postgresql://user:pass@localhost:5433/eduhub
+DATABASE_URL=postgresql://user:pass@localhost:5432/eduhub
 SECRET_KEY=your-secret-key
 CORS_ORIGINS=http://localhost:5173
 CLOUDINARY_CLOUD_NAME=xxx
@@ -890,7 +890,7 @@ VITE_API_BASE_URL=http://localhost:8000/api/v1
 |----------|-----------|
 | API Docs | http://localhost:8000/docs |
 | Frontend Dev | http://localhost:5173 |
-| Database | postgresql://localhost:5433/eduhub |
+| Database | postgresql://localhost:5432/eduhub |
 | Upload Folder | backend/uploads/ |
 | Game Bundles | frontend/public/game-modules/ |
 

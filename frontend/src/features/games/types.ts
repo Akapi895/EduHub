@@ -5,6 +5,7 @@ export type GameBridgeCapability =
   | 'state'
   | 'progress'
   | 'question-trigger'
+  | 'answer-submitted'
   | 'complete'
   | 'error'
   | 'pause'
@@ -59,6 +60,12 @@ export interface GameQuestionTriggerPayload {
   eventPayload?: Record<string, unknown>;
 }
 
+export interface GameAnswerSubmittedPayload {
+  attemptId: string;
+  answer: unknown;
+  questionType?: string;
+}
+
 export interface GameHostCommandPayload {
   sessionId: string;
   attemptId?: string;
@@ -78,6 +85,15 @@ export type GameHostCommandType =
   | 'host:restart'
   | 'host:ping';
 
+export type GameBridgeMessageType =
+  | 'game:ready'
+  | 'game:state'
+  | 'game:progress'
+  | 'game:question-trigger'
+  | 'game:answer-submitted'
+  | 'game:complete'
+  | 'game:error';
+
 export function isGameManifest(value: unknown): value is GameManifest {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
@@ -93,5 +109,10 @@ export function isGameManifest(value: unknown): value is GameManifest {
 export function isGameBridgeEnvelope(value: unknown): value is GameBridgeEnvelope {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
-  return candidate.channel === EDUHUB_GAME_CHANNEL && typeof candidate.type === 'string';
+  // MEDIUM-6: Improved validation - check for required fields
+  if (candidate.channel !== EDUHUB_GAME_CHANNEL) return false;
+  if (typeof candidate.type !== 'string') return false;
+  // Accept any message type - let downstream handle unknown types
+  // This is more flexible and allows future message types
+  return true;
 }
