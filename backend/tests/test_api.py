@@ -46,7 +46,7 @@ def _label(name: str) -> str:
 def record(name: str, passed: bool, note: str = ""):
     status = f"{GREEN}PASS{RESET}" if passed else f"{RED}FAIL{RESET}"
     suffix = f"  {YELLOW}{note}{RESET}" if note else ""
-    print(f"  {status}  {_label(name)}{suffix}")
+    # test result: would print status when running interactively
     results.append({"name": name, "passed": passed, "note": note})
 
 
@@ -777,31 +777,26 @@ TESTS = [
 # ─────────────────────────────────────────────────────────────────────────────
 
 def wait_for_server(base: str, timeout: int = 30) -> bool:
-    print(f"{CYAN}Waiting for server at {base} ...{RESET}", end="", flush=True)
+    # wait for server (silent)
     for _ in range(timeout):
         try:
             r = requests.get(f"{base}/api/v1/auth/me", timeout=2)
             # any response (even 401) means the server is up
-            print(f" {GREEN}ready{RESET}")
             return True
         except Exception:
             time.sleep(1)
-            print(".", end="", flush=True)
-    print(f" {RED}timed out{RESET}")
+    return False
     return False
 
 
 def run_all(base: str):
-    print(f"\n{BOLD}{CYAN}{'='*65}{RESET}")
-    print(f"{BOLD}{CYAN}  EduHub API Test Suite  —  {base}{RESET}")
-    print(f"{BOLD}{CYAN}{'='*65}{RESET}\n")
+    # Running tests (silent)
 
     for fn in TESTS:
         try:
             fn(base)
         except Exception as exc:
             name = fn.__name__.replace("test_", "").replace("_", " ")
-            print(f"  {RED}ERR {RESET} {_label(name)}  {YELLOW}{exc}{RESET}")
             results.append({"name": name, "passed": False, "note": str(exc)})
 
     # ── Summary ──────────────────────────────────────────────────────────────
@@ -809,17 +804,7 @@ def run_all(base: str):
     passed = sum(1 for r in results if r["passed"])
     failed = total - passed
 
-    print(f"\n{BOLD}{CYAN}{'='*65}{RESET}")
-    print(f"  Total: {total}  |  {GREEN}Passed: {passed}{RESET}  |  {RED}Failed: {failed}{RESET}")
-    print(f"{BOLD}{CYAN}{'='*65}{RESET}\n")
-
-    if failed:
-        print(f"{RED}Failed tests:{RESET}")
-        for r in results:
-            if not r["passed"]:
-                note = f"  → {r['note']}" if r["note"] else ""
-                print(f"  • {r['name']}{note}")
-        print()
+    # Summary: tests run complete (results available in `results` list)
 
     return failed == 0
 

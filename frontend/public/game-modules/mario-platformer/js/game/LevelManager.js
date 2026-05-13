@@ -13,15 +13,15 @@ class LevelManager {
         this.checkpointPositions = [];
     }
     
-    loadLevel(levelNumber) {
+    loadLevel(levelNumber, questionCount = 3) {
         this.currentLevel = Math.min(levelNumber, this.totalLevels);
-        this.loadLevelData();
+        this.loadLevelData(questionCount);
         return this.currentLevel;
     }
     
-    loadLevelData() {
-        // Fallback: generate dynamic level với 3 checkpoints mặc định
-        this.generateDynamicLevel(3);
+    loadLevelData(questionCount = 3) {
+        // Fallback: generate dynamic level với số checkpoints tương ứng
+        this.generateDynamicLevel(questionCount);
     }
     
     /**
@@ -109,7 +109,6 @@ class LevelManager {
         }
 
         const goalX = totalWidth - 200;
-        console.log(`[LEVEL] Generated ${checkpointCount} CPs, width=${totalWidth}px, goalX=${goalX}`);
 
         this.currentLevel = 1;
         this.totalLevels  = 1;

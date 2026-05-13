@@ -7,7 +7,7 @@ class Game {
         this.canvas = document.getElementById('game-canvas');
         this.canvas.width = 1280;
         this.canvas.height = 720;
-        
+
         // Managers and systems
         this.state = new GameState();
         this.player = new Player(this);
@@ -18,88 +18,89 @@ class Game {
         this.inputHandler = new InputHandler();
         this.renderer = new GameRenderer(this.canvas);
         // NOTE: Physics.js đã bị xóa (không sử dụng)
-        
+
         // Game state
         this.isRunning = false;
         this.isPaused = false;
         this.isInitialized = false;
         this.lastTime = 0;
         this.runtimeConfig = null;
-        
+
         // Max questions per level (cấu hình từ manifest/runtimeConfig)
         this.maxQuestionsPerLevel = 99;    // 99 = không giới hạn (mặc định)
         this.questionsAnsweredThisLevel = 0; // đếm số câu đã trả lời trong level hiện tại
-        
+
         // HUD elements
         this.hudScore = document.getElementById('score');
         this.hudLevel = document.getElementById('level');
         this.hudLives = document.getElementById('lives');
         this.hudCheckpoint = document.getElementById('checkpoint');
-        
+
         // Modals
         this.gameOverModal = document.getElementById('game-over-modal');
         this.levelCompleteModal = document.getElementById('level-complete-modal');
-        
+
         this.init();
     }
-    
+
     init() {
         // Setup jump handler only (movement handled in game loop)
         this.inputHandler.onJump(() => this.player.jump());
-        
+
         // Setup bridge handlers
         this.setupBridgeHandlers();
-        
+
         // Setup restart button
         document.getElementById('restart-btn')?.addEventListener('click', () => this.restart());
         document.getElementById('next-level-btn')?.addEventListener('click', () => this.nextLevel());
-        
+
         // Setup quiz continue handler
         window.addEventListener('quiz:continue', (e) => {
-            console.log('[GAME] Quiz continue event:', e.detail);
             this.onQuizContinue(e.detail);
         });
-        
+
         // Resize canvas
         this.resizeCanvas();
         window.addEventListener('resize', () => this.resizeCanvas());
-        
+
         // Load level data immediately for preview
-        this.levelManager.loadLevel(1);
+        this.levelManager.loadLevel(1, this.maxQuestionsPerLevel);
         this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
-        
+
         // Initial render to show game world
         this.render();
-        
+
         // Update HUD
         this.updateHUD();
-        
+
         // Signal ready
         this.state.setStatus('ready');
-        
-        console.log('[GAME] Initialization complete');
-        console.log('[GAME] Platforms:', this.levelManager.getCurrentPlatforms().length);
-        console.log('[GAME] Player position:', this.player.x, this.player.y);
+
+        // Initialization complete
     }
-    
+
     setupBridgeHandlers() {
         // Handle init from host
         bridge.onHostMessage('host:init', (payload) => {
-            console.log('[GAME] Received host:init', payload);
             this.handleInit(payload);
         });
-        
+
         // Handle pause (question triggered - modal handled by React)
         bridge.onHostMessage('host:pause', (payload) => {
-            console.log('[GAME] Received host:pause', payload);
             this.pause();
             // Modal is handled by React's GameQuestionModal
         });
-        
+
         // Handle resume (after answer processed by backend - modal hidden by React)
         bridge.onHostMessage('host:resume', (payload) => {
-            console.log('[GAME] === RECEIVED host:resume ===', payload);
             
+            // CRITICAL-FIX: Force window focus to ensure keyboard inputs work immediately
+            window.focus();
+
+            // CRITICAL-FIX: Luôn giải phóng cờ quiz để game có thể check collision tiếp,
+            // tránh trường hợp bị kẹt state "đang trả lời" khiến coin/checkpoint không hoạt động.
+            this.state.quiz.active = false;
+
             // CRITICAL-3: Sync game state from backend (source of truth)
             // Backend tracks wrong_attempts and lives, so we must sync with it
             if (payload.questionResult) {
@@ -109,45 +110,52 @@ class Game {
                     const currentLives = this.livesManager.getCurrentLives();
                     // If lives don't match, trust backend
                     if (backendLives !== currentLives) {
-                        console.log('[GAME] Syncing lives from backend:', currentLives, '->', backendLives);
+                        // Sync lives from backend
                         this.livesManager.current = backendLives;
                         this.updateHUD();
                     }
                 }
-                
+
                 // Sync wrong_attempts from backend
                 if (typeof payload.questionResult.wrong_attempts === 'number') {
                     this.scoreManager.wrongAnswers = payload.questionResult.wrong_attempts;
                 }
-                
+
                 // Sync checkpoints passed from backend
                 if (Array.isArray(payload.questionResult.checkpoints_passed)) {
                     payload.questionResult.checkpoints_passed.forEach(cpId => {
                         this.checkpointManager.markPassed(cpId);
                     });
                 }
-                
+
                 // Process the result
                 this.handleQuestionResult(payload.questionResult);
+            } else {
+                // Nếu không có questionResult (ví dụ câu hỏi tự luận pending review)
+                // Cần tự động pass checkpoint hiện tại để player đi tiếp
+                if (this.state.quiz.currentCheckpointId) {
+                    this.checkpointManager.markPassed(this.state.quiz.currentCheckpointId);
+                    this.state.quiz.currentCheckpointId = null;
+                }
+                this.state.quiz.currentAttemptId = null;
             }
-            
+
             // Resume game
             this.resume();
-            
+
             // Double-check: ensure isPaused is false
             if (this.isPaused) {
-                console.log('[GAME] WARNING: isPaused still true after resume(), forcing...');
                 this.isPaused = false;
                 this.state.setStatus('playing');
             }
         });
-        
+
         // Handle restart
         bridge.onHostMessage('host:restart', () => {
             // console.log('[GAME] Received host:restart');
             this.restart();
         });
-        
+
         // Auto-start if no host:init received within 2 seconds (for standalone testing)
         // Only auto-start if not already initialized
         this.autoStartTimer = setTimeout(() => {
@@ -157,23 +165,22 @@ class Game {
             }
         }, 1000);
     }
-    
+
     handleInit(payload) {
         // Guard: prevent double initialization
         if (this.isInitialized) {
-            // console.log('[GAME] Already initialized, ignoring duplicate host:init');
             return;
         }
         this.isInitialized = true;
-        
+
         // Clear auto-start timer if exists
         if (this.autoStartTimer) {
             clearTimeout(this.autoStartTimer);
             this.autoStartTimer = null;
         }
-        
+
         this.runtimeConfig = payload;
-        
+
         // Apply session config
         if (payload.runtimeConfig?.session) {
             const session = payload.runtimeConfig.session;
@@ -181,7 +188,7 @@ class Game {
         }
         this.state.totalLevels = 1; // Dynamic map: always 1 level
 
-        
+
         // Số câu hỏi = source of truth từ backend (attemptTotals.questions_total)
         // host:init gửi attemptTotals từ GamePlayerShell
         const totals = payload.attemptTotals;
@@ -193,114 +200,113 @@ class Game {
             || session.maxQuestionsPerLevel
             || payload.runtimeConfig?.max_questions_per_level
             || 3;
-        console.log('[GAME] questionCount:', questionCount, '(from attemptTotals.questions_total:', totals?.questions_total, ')');
+        // Determine question count
         this.maxQuestionsPerLevel = questionCount;
         this.levelManager.generateDynamicLevel(questionCount);
         this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
 
 
-        
+
         // CRITICAL-2: Handle active question restoration on page reload
         // If there's an active question from previous session, restore game state
         if (payload.active_question && payload.active_question_trigger) {
-            console.log('[GAME] Restoring active question from previous session:', payload.active_question_trigger);
-            
+            // Restoring active question from previous session
+
             // Extract checkpoint info from trigger
             const trigger = payload.active_question_trigger;
             const eventPayload = trigger.eventPayload || {};
             const checkpointId = eventPayload.checkpointId || trigger.triggerValue;
-            
+
             // Restore checkpoint state if checkpoint ID is known
             if (checkpointId && checkpointId !== 'checkpoint') {
                 this.checkpointManager.markPassed(checkpointId);
             }
-            
+
             // Mark quiz as active with this question
             this.state.quiz.active = true;
             this.state.quiz.currentCheckpointId = checkpointId;
             this.state.quiz.currentAttemptId = payload.active_question_attempt?.id;
-            
+
             // HIGH-1: Also restore game state if available
             if (payload.restored_game_state) {
                 this.restoreGameState(payload.restored_game_state);
             }
-            
+
             // CRITICAL-2: Don't auto-start - wait for host:pause with question
             // The game will be in 'ready' state, and host will send host:pause with question
             this.state.setStatus('ready');
             bridge.ready();
             return;
         }
-        
+
         // HIGH-1: Restore game state if available (from iframe recovery)
         if (payload.restored_game_state) {
-            console.log('[GAME] Restoring game state from recovery:', payload.restored_game_state);
             this.restoreGameState(payload.restored_game_state);
         }
-        
+
         // Load level cho fresh start (dynamic level đã được generate trong handleInit)
         // Nếu chưa được generate (không có session config), dùng default 3 checkpoints
         if (!this.levelManager.levelData) {
             this.levelManager.generateDynamicLevel(3);
             this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
         }
-        
+
         // Signal ready and start
         bridge.ready();
         this.start();
     }
-    
+
     // HIGH-1: Restore game state from saved snapshot
     restoreGameState(savedState) {
         if (!savedState) return;
-        
-        console.log('[GAME] restoreGameState:', savedState);
-        
+
+        // restoreGameState
+
         // Restore score
         if (typeof savedState.score === 'number') {
             this.scoreManager.setScore(savedState.score);
         }
-        
+
         // Restore lives
         if (typeof savedState.lives === 'number') {
             this.livesManager.current = savedState.lives;
         }
-        
+
         // Restore level
         if (typeof savedState.level === 'number') {
             this.state.currentLevel = savedState.level;
             if (savedState.level > 1) {
-                this.levelManager.loadLevel(savedState.level);
+                this.levelManager.loadLevel(savedState.level, this.maxQuestionsPerLevel);
                 this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
             }
         }
-        
+
         // Restore player position
         if (typeof savedState.x === 'number' && typeof savedState.y === 'number') {
             this.player.x = savedState.x;
             this.player.y = savedState.y;
         }
-        
+
         // Restore checkpoints passed
         if (Array.isArray(savedState.checkpointsPassed)) {
             savedState.checkpointsPassed.forEach(cpId => {
                 this.checkpointManager.markPassed(cpId);
             });
         }
-        
+
         // Restore wrong answers count
         if (typeof savedState.wrongAnswers === 'number') {
             this.scoreManager.wrongAnswers = savedState.wrongAnswers;
         }
-        
+
         this.updateHUD();
     }
-    
+
     start() {
         this.isRunning = true;
         this.state.setStatus('playing');
         this.lastTime = performance.now();
-        
+
         // Send progress message to React to indicate game is running
         bridge.send('game:progress', {
             status: 'running',
@@ -313,10 +319,10 @@ class Game {
             y: this.player.y,
             elapsedTime: 0
         });
-        
+
         requestAnimationFrame((t) => this.gameLoop(t));
     }
-    
+
     pause() {
         this.isPaused = true;
         this.state.setStatus('paused');
@@ -337,16 +343,16 @@ class Game {
             elapsedTime: this.state.elapsedTime
         });
     }
-    
+
     resume() {
         this.isPaused = false;
         this.state.setStatus('playing');
         // Không reset lastTime — để RAF tự cập nhật, tránh deltaTime spike
         // this.lastTime = performance.now(); ← đã xóa
-        
+
         // Reset input state khi resume để tránh stuck keys
         this.inputHandler.releaseAllKeys();
-        
+
         bridge.send('game:progress', {
             status: 'running',
             score: this.scoreManager.getScore(),
@@ -359,7 +365,7 @@ class Game {
             elapsedTime: this.state.elapsedTime
         });
     }
-    
+
     restart() {
         // Reset all managers
         this.state.reset();
@@ -367,26 +373,26 @@ class Game {
         this.livesManager.reset();
         this.scoreManager.reset();
         this.checkpointManager.reset();
-        this.levelManager.loadLevel(1);
+        this.levelManager.loadLevel(1, this.maxQuestionsPerLevel);
         this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
         this.questionsAnsweredThisLevel = 0; // reset question counter
-        
+
         // Hide modals
         this.gameOverModal?.classList.add('hidden');
         this.levelCompleteModal?.classList.add('hidden');
-        
+
         // Restart
         this.resume();
         this.updateHUD();
     }
-    
+
     nextLevel() {
         this.levelCompleteModal?.classList.add('hidden');
         this.questionsAnsweredThisLevel = 0; // reset khi sang level mới
-        
+
         const nextLevel = this.levelManager.nextLevel();
         if (nextLevel) {
-            this.levelManager.loadLevel(nextLevel);
+            this.levelManager.loadLevel(nextLevel, this.maxQuestionsPerLevel);
             this.checkpointManager.loadLevelCheckpoints(this.levelManager.levelData);
             this.player.reset();
             this.state.setLevel(nextLevel);
@@ -397,13 +403,13 @@ class Game {
             this.handleGameComplete();
         }
     }
-    
+
     gameLoop(timestamp) {
         // Clamp deltaTime — tránh spike lớn sau khi resume (do lastTime bị reset)
         const rawDelta = timestamp - this.lastTime;
         const deltaTime = Math.min(rawDelta, 50); // tối đa 50ms (~20fps) để tránh lag spike
         this.lastTime = timestamp;
-        
+
         // Always update and render, regardless of pause state
         // This ensures the game loop keeps running even when paused
         if (!this.isPaused && this.state.status === 'playing') {
@@ -415,18 +421,18 @@ class Game {
             this.state.setStatus('playing');
             this.update(deltaTime);
         }
-        
+
         this.render();
-        
+
         // Send state update periodically
         this.sendStateUpdate();
-        
+
         // Always continue the loop if game is running
         if (this.isRunning) {
             requestAnimationFrame((t) => this.gameLoop(t));
         }
     }
-    
+
     update(deltaTime) {
         // Debug: log key states periodically
         if (!this._keyDebugCounter) this._keyDebugCounter = 0;
@@ -436,27 +442,27 @@ class Game {
             const keys = this.inputHandler.getKeyStates();
             // console.log('[GAME] Key states:', keys, '| isPaused:', this.isPaused, '| status:', this.state.status);
         }
-        
+
         // Handle input in game loop for continuous movement
         this.player.setMovingLeft(this.inputHandler.isLeftPressed());
         this.player.setMovingRight(this.inputHandler.isRightPressed());
-        
+
         // Update player
         this.player.update(deltaTime, this.levelManager.getCurrentPlatforms());
-        
+
         // Update enemies
         this.levelManager.getCurrentEnemies().forEach(enemy => {
             enemy.update(deltaTime);
         });
-        
+
         // Update coins
         this.levelManager.getCurrentCoins().forEach(coin => {
             coin.update(deltaTime);
         });
-        
+
         // Update checkpoints
         this.checkpointManager.update(deltaTime);
-        
+
         // Check collisions (only when not showing quiz)
         if (!this.state.quiz.active) {
             this.checkCollisions();
@@ -464,11 +470,11 @@ class Game {
 
         // Cập nhật camera
         this.renderer.updateCamera(this.player.x, this.canvas.width);
-        
+
         // Kiểm tra Portal (chỉ khi tất cả checkpoint đã pass)
         if (this.levelManager.areAllCheckpointsPassed(this.checkpointManager)) {
             const goalX = this.levelManager.levelData?.goalX || 9999;
-            const portalLeft  = goalX - 30;
+            const portalLeft = goalX - 30;
             const portalRight = goalX + 30;
             if (this.player.x + this.player.width > portalLeft
                 && this.player.x < portalRight) {
@@ -482,24 +488,24 @@ class Game {
                 this.player.velocityX = 0;
             }
         }
-        
+
         // Check fall death
         if (this.player.y > this.canvas.height + 100) {
             this.handlePlayerDeath();
         }
-        
+
         // Update elapsed time
         this.state.elapsedTime += deltaTime;
     }
-    
+
     checkCollisions() {
         const platforms = this.levelManager.getCurrentPlatforms();
         const enemies = this.levelManager.getCurrentEnemies();
         const coins = this.levelManager.getCurrentCoins();
         const checkpoints = this.checkpointManager;
-        
+
         // Platform collisions (handled in player.update)
-        
+
         // Coin collisions
         coins.forEach((coin, index) => {
             if (coin.collidesWith(this.player)) {
@@ -507,12 +513,12 @@ class Game {
                 this.scoreManager.addCoinBonus();
                 this.state.addCoin();
                 this.updateHUD(); // Update HUD immediately after coin
-                
+
                 // Remove collected coins
                 this.levelManager.coins = this.levelManager.coins.filter((c, i) => i !== index);
             }
         });
-        
+
         // Enemy collisions
         for (let i = this.levelManager.enemies.length - 1; i >= 0; i--) {
             const enemy = this.levelManager.enemies[i];
@@ -532,7 +538,7 @@ class Game {
                         this.scoreManager.subtractEnemyPenalty();
                         this.updateHUD();
                         this.player.setInvincible(1500); // 1.5 seconds invincibility
-                        
+
                         // Bounce player back slightly
                         this.player.velocityX = -3;
                         this.player.velocityY = -5;
@@ -540,13 +546,12 @@ class Game {
                 }
             }
         }
-        
+
         // Checkpoint collisions — trigger quiz khi chạm checkpoint chưa pass
         const hitCheckpoint = checkpoints.checkCollisions(this.player, this);
         if (hitCheckpoint) {
             if (this.questionsAnsweredThisLevel >= this.maxQuestionsPerLevel) {
                 // Đã đủ số câu hỏi cho level này → auto-pass checkpoint
-                console.log('[GAME] Max questions reached, auto-passing:', hitCheckpoint.id);
                 this.checkpointManager.markPassed(hitCheckpoint.id);
                 this.scoreManager.addCheckpointBonus();
                 this.updateHUD();
@@ -557,10 +562,10 @@ class Game {
             }
         }
     }
-    
+
     handlePlayerHit() {
         const livesRemaining = this.livesManager.loseLife();
-        
+
         if (livesRemaining <= 0) {
             this.handleGameOver();
         } else {
@@ -569,31 +574,31 @@ class Game {
             this.player.respawn(respawnPos.x, respawnPos.y);
         }
     }
-    
+
     handlePlayerDeath() {
         // Khi rơi xuống — KHÔNG mất mạng, chỉ respawn tại checkpoint gần nhất
         // Mạng chỉ mất khi trả lời SAI câu hỏi
         const respawnPos = this.checkpointManager.getRespawnPosition();
         this.player.respawn(respawnPos.x, respawnPos.y - 50);
     }
-    
+
     handleLevelComplete() {
         this.scoreManager.addLevelCompleteBonus();
         this.state.setStatus('level_complete');
-        
+
         // Show level complete modal
         const modal = document.getElementById('level-complete-modal');
         const scoreEl = document.getElementById('level-complete-score');
         if (scoreEl) scoreEl.textContent = `Điểm: ${this.scoreManager.getScore()}`;
         if (modal) modal.classList.remove('hidden');
-        
+
         this.pause();
     }
-    
+
     handleGameOver() {
         this.state.setStatus('game_over');
         this.livesManager.reset();
-        
+
         // Show game over modal
         const modal = document.getElementById('game-over-modal');
         const scoreEl = document.getElementById('game-over-score');
@@ -601,7 +606,7 @@ class Game {
         if (scoreEl) scoreEl.textContent = `Điểm: ${this.scoreManager.getScore()}`;
         if (checkpointsEl) checkpointsEl.textContent = `Checkpoint đã vượt qua: ${this.checkpointManager.getPassedCount()}`;
         if (modal) modal.classList.remove('hidden');
-        
+
         // Send game complete to host
         bridge.complete({
             outcome: 'game_over',
@@ -616,19 +621,19 @@ class Game {
                 wrongAnswers: this.scoreManager.wrongAnswers
             }
         });
-        
+
         this.pause();
     }
-    
+
     handleGameComplete() {
         this.scoreManager.addGameCompleteBonus();
-        
+
         // Check for perfect clear
         if (this.livesManager.getCurrentLives() === this.livesManager.getMaxLives() &&
             this.scoreManager.wrongAnswers === 0) {
             this.scoreManager.addPerfectClearBonus();
         }
-        
+
         bridge.complete({
             outcome: 'completed',
             reason: 'game_complete',
@@ -645,7 +650,7 @@ class Game {
             }
         });
     }
-    
+
     triggerCheckpointQuestion(checkpoint) {
         // Trigger question via bridge
         bridge.triggerQuestion({
@@ -654,41 +659,41 @@ class Game {
             playerX: this.player.x,
             playerY: this.player.y
         });
-        
+
         this.state.quiz.active = true;
         this.state.quiz.currentCheckpointId = checkpoint.id;
     }
-    
+
     /**
      * Handle quiz continue event (for standalone mode)
      */
     onQuizContinue(detail) {
         // console.log('[GAME] onQuizContinue called');
-        
+
         // In standalone mode, simulate a correct answer result
         const simulatedResult = {
             is_correct: true,
             correct: true,
             isCorrect: true
         };
-        
+
         this.handleQuestionResult(simulatedResult);
         this.resume();
     }
-    
+
     handleQuestionResult(result) {
-        console.log('[GAME] handleQuestionResult called:', result);
-        
+        // handleQuestionResult called
+
         this.state.quiz.active = false;
         this.questionsAnsweredThisLevel++;
-        
+
         const isCorrect = result.is_correct || result.isCorrect || result.correct;
-        
+
         if (isCorrect) {
             if (this.state.quiz.currentCheckpointId) {
                 this.checkpointManager.markPassed(this.state.quiz.currentCheckpointId);
             }
-            
+
             // Cộng điểm theo độ khó câu hỏi (backend trả về trong result)
             const questionPoints = result.points
                 ?? result.score
@@ -696,19 +701,18 @@ class Game {
                 ?? 100; // mặc định nếu backend không gửi
             this.scoreManager.addAnswerBonus(questionPoints);
             this.scoreManager.addCheckpointBonus();
-            console.log('[GAME] Correct! +', questionPoints, 'points (question difficulty)');
-            
+
             this.state.quiz.currentCheckpointId = null;
             this.state.quiz.currentAttemptId = null;
             this.updateHUD();
-            
+
         } else {
             // Trả lời SAI → mất mạng (lives đã được sync từ backend trong host:resume)
             const livesRemaining = this.livesManager.getCurrentLives();
-            
+
             this.state.quiz.currentCheckpointId = null;
             this.state.quiz.currentAttemptId = null;
-            
+
             if (livesRemaining <= 0) {
                 this.handleGameOver();
             } else {
@@ -719,36 +723,36 @@ class Game {
             }
         }
     }
-    
+
     render() {
         const ctx = this.renderer.ctx;
-        
+
         // Clear
         this.renderer.clear();
-        
+
         // Background
         this.renderer.renderBackground();
-        
+
         // Platforms
         this.levelManager.getCurrentPlatforms().forEach(platform => {
             this.renderPlatform(ctx, platform);
         });
-        
+
         // Coins
         this.levelManager.getCurrentCoins().forEach(coin => {
             coin.render(ctx, this.renderer.cameraX);
         });
-        
+
         // Enemies
         this.levelManager.getCurrentEnemies().forEach(enemy => {
             enemy.render(ctx, this.renderer.cameraX);
         });
-        
+
         // Checkpoints
         this.checkpointManager.getCheckpoints().forEach(checkpoint => {
             checkpoint.render(ctx, this.renderer.cameraX);
         });
-        
+
         // Portal / Goal — sáng lên khi tất cả checkpoint đã pass
         if (this.levelManager.levelData) {
             const allPassed = this.levelManager.areAllCheckpointsPassed(this.checkpointManager);
@@ -759,67 +763,67 @@ class Game {
             );
         }
 
-        
+
         // Player
         this.player.render(ctx, this.renderer.cameraX);
-        
+
         // Arrow indicator — chỉ hướng đến checkpoint tiếp theo
         this.renderNextCheckpointArrow(ctx);
-        
+
         // Game over overlay
         if (this.state.status === 'game_over') {
             this.renderer.renderGameOver(this.scoreManager.getScore(), this.checkpointManager.getPassedCount());
         }
-        
+
         // Level complete overlay
         if (this.state.status === 'level_complete') {
             this.renderer.renderLevelComplete(this.state.currentLevel, this.scoreManager.getScore());
         }
     }
-    
+
     /**
      * Vẽ mũi tên chỉ hướng đến checkpoint tiếp theo chưa pass
      */
     renderNextCheckpointArrow(ctx) {
         if (this.isPaused || this.state.status !== 'playing') return;
-        
+
         const nextCp = this.checkpointManager.getNextUnpassedCheckpoint();
         if (!nextCp) return;
-        
+
         const dx = nextCp.x - this.player.x;
         if (Math.abs(dx) < 200) return; // đủ gần rồi, không cần arrow
-        
+
         const arrowX = dx > 0 ? this.canvas.width - 55 : 55;
         const arrowY = this.canvas.height / 2;
-        
+
         // Nền bán trong suốt
         ctx.save();
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
         ctx.beginPath();
         ctx.roundRect(arrowX - 30, arrowY - 30, 60, 60, 8);
         ctx.fill();
-        
+
         // Mũi tên
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 26px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(dx > 0 ? '\u25b6' : '\u25c4', arrowX, arrowY - 8);
-        
+
         // Chữ "CP"
         ctx.fillStyle = '#FFD700';
         ctx.font = 'bold 11px Arial';
         ctx.fillText('CP', arrowX, arrowY + 16);
         ctx.restore();
     }
-    
+
     renderPlatform(ctx, platform) {
         const screenX = platform.x - this.renderer.cameraX;
         const screenY = platform.y;
-        
+
         // Skip if off screen
         if (screenX + platform.width < 0 || screenX > this.renderer.width) return;
-        
+
         if (platform.isGround) {
             // Ground: dùng flag isGround thay vì so sánh y (y=540 ≠ height-60=660)
             ctx.fillStyle = '#8B4513';
@@ -845,7 +849,7 @@ class Game {
             ctx.fillRect(screenX, screenY + platform.height - 4, platform.width, 4);
         }
     }
-    
+
     sendStateUpdate() {
         // Always send a heartbeat to prevent React watchdog timeout
         // When paused, send 'paused' status but include heartbeat
@@ -864,7 +868,7 @@ class Game {
             isAlive: true
         });
     }
-    
+
     updateHUD() {
         if (this.hudScore) this.hudScore.textContent = `Điểm: ${this.scoreManager.getScore()}`;
         if (this.hudLevel) this.hudLevel.textContent = `Level ${this.state.currentLevel}`;
@@ -875,14 +879,14 @@ class Game {
             this.hudCheckpoint.textContent = `📍 ${answered}/${max} câu`;
         }
     }
-    
+
     resizeCanvas() {
         const container = document.getElementById('game-container');
-        
+
         if (container) {
             const rect = container.getBoundingClientRect();
             // console.log('[GAME] Container size:', rect.width, 'x', rect.height);
-            
+
             if (rect.width > 0 && rect.height > 0) {
                 // Set actual canvas size to match container
                 this.canvas.width = Math.floor(rect.width);

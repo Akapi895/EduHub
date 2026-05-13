@@ -21,9 +21,9 @@ class Player {
         
         // Physics constants
         this.gravity = 0.5;
-        this.jumpForce = -11;   // giảm từ -12 → nhảy vừa phải
-        this.moveSpeed = 3;     // tốc độ di chuyển mồi frame (giảm từ 5)
-        this.maxSpeed  = 3;     // giới hạn tốc độ ngang
+        this.jumpForce = -12.5;  // Nhảy cao hơn chút để dễ qua hố
+        this.moveSpeed = 2.2;    // Đi chậm lại để dễ căn chỉnh
+        this.maxSpeed  = 2.2;
         // friction đã xóa — không dùng quán tính
         
         // Animation
@@ -161,12 +161,7 @@ class Player {
         // Update animation
         this.updateAnimation(deltaTime);
         
-        // Keep player in bounds horizontally (level width tăng cho map mới)
-        const levelWidth = 2700;
         if (this.x < 0) this.x = 0;
-        if (this.x > levelWidth - this.width) {
-            this.x = levelWidth - this.width;
-        }
     }
     
     handlePlatformCollision(platform) {

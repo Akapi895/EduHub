@@ -1067,7 +1067,6 @@ def print_summary(
         "  Student player direct route: http://127.0.0.1:5173/student/interactive-books/" + material_id,
         "",
     ]
-    print("\n".join(lines))
 
 
 def main() -> int:

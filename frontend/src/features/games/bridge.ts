@@ -70,11 +70,7 @@ export function postHostCommand(
   
   try {
     frame.contentWindow.postMessage(envelope, targetOrigin);
-    console.info('[postHostCommand] SUCCESS:', type, {
-      targetOrigin,
-      payloadKeys: Object.keys(payload),
-      timestamp: new Date().toISOString(),
-    });
+    // postHostCommand success
     return true;
   } catch (error) {
     console.error('[postHostCommand] EXCEPTION while sending:', type, error);

@@ -361,9 +361,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
   const setViewportNode = useCallback((node: HTMLDivElement | null) => {
     viewportRef.current = node;
     setViewportEl(node);
-    console.info('[QFLOW] viewportRef:update', {
-      hasNode: Boolean(node),
-    });
+    // viewport updated
   }, []);
 
   const sendHostCommand = (
@@ -371,7 +369,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     reason: string,
     extraPayload: Record<string, unknown> = {},
   ) => {
-    console.info('[QFLOW] sendHostCommand called', { type, reason, hasManifest: !!manifest });
+    // sendHostCommand called
     if (!manifest) {
       console.warn('[QFLOW] sendHostCommand: manifest is null!');
       return;
@@ -424,7 +422,6 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     options: { watchdog?: boolean; force?: boolean } = {},
   ) => {
     const issuedAt = Date.now();
-    console.info('[QFLOW] resumeRuntime called', { reason, eventPayload, currentStatus: runtimeStatus, options });
 
     // HIGH-3: Resume if paused OR if force flag is set (for answer submission)
     // When force=true, we always want to resume regardless of current status
@@ -535,13 +532,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
   };
 
   const handleQuestionTrigger = async (trigger: GameQuestionTriggerPayload) => {
-    console.info('[QFLOW] trigger:received', {
-      triggerType: trigger.triggerType,
-      triggerKey: trigger.triggerKey,
-      triggerValue: trigger.triggerValue,
-      hasAttemptId: Boolean(attemptId),
-      hasViewportEl: Boolean(viewportEl),
-    });
+    // trigger received
 
     if (!attemptId) {
       resumeRuntime('question-trigger-without-attempt', { trigger });
@@ -557,19 +548,19 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       || questionFlowActiveRef.current
     ) {
       // Trigger is in flight, don't duplicate
-      console.info('[QFLOW] trigger:already-in-flight', { triggerIdentity });
+      // already-in-flight
       return;
     }
     
     // Check if this exact trigger was already handled
     if (handledTriggerIdsRef.current.has(triggerIdentity)) {
       // CRITICAL-4: Check if timeout has passed - if so, allow retry
-      if (existingTimeout && Date.now() < existingTimeout) {
-        console.info('[QFLOW] trigger:already-handled-still-valid', { triggerIdentity, remainingMs: existingTimeout - Date.now() });
+        if (existingTimeout && Date.now() < existingTimeout) {
+        // already-handled-still-valid
         return;
       }
       // Timeout passed - allow retry
-      console.info('[QFLOW] trigger:retrying-expired-handled', { triggerIdentity });
+      // retrying-expired-handled
       handledTriggerIdsRef.current.delete(triggerIdentity);
     }
 
@@ -593,11 +584,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       setAttemptTotals(data.attempt_totals ?? null);
 
       if (data.action === 'ask_question') {
-        console.info('[QFLOW] trigger:ask_question', {
-          questionId: data.question?.id,
-          questionAttemptId: data.question_attempt?.id,
-          hasViewportEl: Boolean(viewportEl),
-        });
+        // trigger:ask_question
 
         resetQuestionDraft(data.question);
         setQuestionFlow({
@@ -613,7 +600,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
 
       // Handle resume action (item already had a question, just resume game)
       if (data.action === 'resume') {
-        console.info('[QFLOW] trigger:resume', { reason: data.reason });
+        // trigger:resume
         resumeRuntime('trigger-resume', {
           trigger,
           reason: data.reason ?? 'already-handled',
@@ -623,10 +610,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       }
 
       if (data.action === 'game_over') {
-        console.info('[QFLOW] trigger:game_over', {
-          reason: data.reason,
-          wrongAttempts: data.wrong_attempts,
-        });
+        // trigger:game_over
         resumeRuntime('game-over', {
           trigger,
           reason: data.reason ?? 'max_wrong_attempts',
@@ -759,7 +743,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       return;
     }
 
-    console.info('[QFLOW] Processing native answer from game:', answerPayload);
+    // Processing native answer from game
 
     // Build the answer payload based on question type from the active question
     const payload: GameRuntimeAnswerRequest = {
@@ -799,7 +783,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       const response = await getAnswerService(previewMode)(gamePackage.id, payload);
       const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
 
-      console.info('[QFLOW] Answer result:', data);
+      // Answer result received
       // MEDIUM-2: Use server response (authoritative), preserve current if not returned
       setAttemptTotals(data.attempt_totals ?? attemptTotals ?? null);
       setLastQuestionResult(data);
@@ -982,7 +966,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     let initSent = false;
     const sendInitOnce = (reason: string, extraPayload: Record<string, unknown> = {}) => {
       if (initSent) {
-        console.info('[QFLOW] sendInit: already sent, skipping duplicate:', reason);
+        // sendInit: already sent
         return;
       }
       initSent = true;
@@ -1071,10 +1055,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     const activeAttempt = playBundle?.active_question_attempt;
 
     if (activeQuestion && activeAttempt) {
-      console.info('[QFLOW] Restoring active question on mount:', {
-        questionId: activeQuestion.id,
-        attemptId: activeAttempt.id,
-      });
+      // Restoring active question on mount
       restoreActiveQuestion(activeQuestion, activeAttempt);
     } else {
       // Mark as restored even if no active question (normal fresh start)
@@ -1137,12 +1118,12 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
         const answerPayload = message.payload as GameAnswerSubmittedPayload | undefined;
         if (!answerPayload) return;
 
-        console.info('[QFLOW] game:answer-submitted received:', answerPayload);
+        // game:answer-submitted received
 
         // If we already have a questionFlow, the React modal will handle it
         // This handler is for when game sends answer from its own modal
         if (questionFlow) {
-          console.info('[QFLOW] Answer from game modal, but React modal is active - ignoring game modal answer');
+          // Answer from game modal ignored because React modal is active
           return;
         }
 
@@ -1236,6 +1217,19 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
   }, [questionFlowActive, runtimeStatus]);
+
+  // CRITICAL-FIX: Focus the game iframe when returning to running state to restore keyboard controls
+  useEffect(() => {
+    if (runtimeStatus === 'running' && frameRef.current) {
+      const timer = setTimeout(() => {
+        if (frameRef.current && frameRef.current.contentWindow) {
+          frameRef.current.focus();
+          frameRef.current.contentWindow.focus();
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [runtimeStatus]);
 
   // Handle page unload / back navigation - ask user before leaving
   useEffect(() => {
@@ -1642,6 +1636,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
                   title={gamePackage.title}
                   src={gameEntry}
                   className="h-full w-full border-0"
+                  tabIndex={0}
                   sandbox={sandboxPolicy}
                   allow={allowPolicy}
                   onLoad={() => {

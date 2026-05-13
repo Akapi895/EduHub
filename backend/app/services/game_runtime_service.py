@@ -791,12 +791,11 @@ def get_play_data(db: Session, *, package_id: str, student: User) -> dict:
 
 def get_teacher_preview_data(db: Session, *, package_id: str, teacher: User) -> dict:
     """Get preview data for a teacher to test-play their game without student access restrictions."""
-    print(f"[PREVIEW SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # preview service called
     ensure_default_game_modules(db)
     
     package = game_crud.get_game_package(db, package_id)
     if not package:
-        print(f"[PREVIEW SERVICE] Package not found: {package_id}")
         raise HTTPException(status_code=404, detail="Game package not found")
     
     # Verify teacher owns this package or has access
@@ -805,10 +804,9 @@ def get_teacher_preview_data(db: Session, *, package_id: str, teacher: User) -> 
         assignment.class_ and assignment.class_.teacher_id == teacher.id
         for assignment in package.assignments
     )
-    print(f"[PREVIEW SERVICE] is_owner: {is_owner}, is_assigned: {is_assigned}")
+    # access check result
     
     if not is_owner and not is_assigned:
-        print(f"[PREVIEW SERVICE] Access denied for teacher {teacher.id}")
         raise HTTPException(status_code=403, detail="You don't have access to this game package")
     
     module = package.game_config.game_module if package.game_config else None
@@ -833,7 +831,7 @@ def get_teacher_preview_data(db: Session, *, package_id: str, teacher: User) -> 
 
 def start_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User) -> dict:
     """Start a preview attempt for teacher to test-play the game."""
-    print(f"[PREVIEW START SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # start preview attempt
     ensure_default_game_modules(db)
     
     package = game_crud.get_game_package(db, package_id)
@@ -887,7 +885,7 @@ def start_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User
 
 def complete_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User) -> dict:
     """Complete a preview attempt for teacher."""
-    print(f"[PREVIEW COMPLETE SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # complete preview attempt
     attempt = (
         db.query(PackageAttempt)
         .filter(
@@ -915,7 +913,7 @@ def complete_teacher_preview_attempt(db: Session, *, package_id: str, teacher: U
 
 def abandon_teacher_preview_attempt(db: Session, *, package_id: str, teacher: User) -> None:
     """Abandon a preview attempt for teacher."""
-    print(f"[PREVIEW ABANDON SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # abandon teacher preview attempt
     attempt = (
         db.query(PackageAttempt)
         .filter(
@@ -946,7 +944,7 @@ def _get_preview_attempt(db: Session, package_id: str, teacher_id: str) -> Packa
 
 def handle_trigger_preview(db: Session, *, package_id: str, teacher: User, data: GameRuntimeTriggerRequest) -> dict:
     """Handle trigger for preview mode."""
-    print(f"[PREVIEW TRIGGER SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # handle trigger preview
     attempt = _get_preview_attempt(db, package_id, teacher.id)
     if not attempt:
         raise HTTPException(status_code=404, detail="No active preview attempt")
@@ -955,7 +953,7 @@ def handle_trigger_preview(db: Session, *, package_id: str, teacher: User, data:
 
 def submit_runtime_answer_preview(db: Session, *, package_id: str, teacher: User, data: GameRuntimeAnswerRequest) -> dict:
     """Submit answer for preview mode."""
-    print(f"[PREVIEW ANSWER SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # submit runtime answer (preview)
     attempt = _get_preview_attempt(db, package_id, teacher.id)
     if not attempt:
         raise HTTPException(status_code=404, detail="No active preview attempt")
@@ -972,7 +970,7 @@ def log_runtime_event_preview(db: Session, *, package_id: str, teacher: User, da
 
 def complete_attempt_preview(db: Session, *, package_id: str, teacher: User) -> dict:
     """Complete attempt for preview mode - simplified version without game payload."""
-    print(f"[PREVIEW COMPLETE ATTEMPT SERVICE] teacher_id: {teacher.id}, package_id: {package_id}")
+    # complete attempt preview
     attempt = _get_preview_attempt(db, package_id, teacher.id)
     if not attempt:
         raise HTTPException(status_code=404, detail="No active preview attempt")
@@ -992,7 +990,7 @@ def complete_attempt_preview(db: Session, *, package_id: str, teacher: User) -> 
 
 def abandon_attempt_preview(db: Session, *, package_id: str, user: User) -> None:
     """Abandon attempt for preview mode."""
-    print(f"[PREVIEW ABANDON ATTEMPT SERVICE] user_id: {user.id}, package_id: {package_id}")
+    # abandon attempt preview
     attempt = db.query(PackageAttempt).filter(
         PackageAttempt.package_id == package_id,
         PackageAttempt.user_id == user.id,
@@ -1095,6 +1093,15 @@ def _select_question_for_difficulty(attempt: PackageAttempt, *, difficulty_band:
         for item in package.question_bank.items
         if item.is_active and item.difficulty_band == difficulty_band and item.id not in presented_question_ids
     ]
+    
+    # CRITICAL FIX: If no questions match the specific difficulty band, fallback to ANY unpresented question!
+    if not eligible:
+        eligible = [
+            item
+            for item in package.question_bank.items
+            if item.is_active and item.id not in presented_question_ids
+        ]
+
     eligible = sorted(
         eligible,
         key=lambda item: (

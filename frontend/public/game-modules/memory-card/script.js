@@ -12,12 +12,11 @@
 
   // ── Logging ─────────────────────────────────────────────────────────────────
   const LOG_PREFIX = '[MemoryCard]';
-  function log(...args) { console.log(LOG_PREFIX, ...args); }
+  function log(..._args) { /* no-op debug log removed for clean output */ }
   function warn(...args) { console.warn(LOG_PREFIX, ...args); }
   function error(...args) { console.error(LOG_PREFIX, ...args); }
 
   const bridge = globalScope.EduHubGameBridge;
-  log('Bridge detected:', Boolean(bridge));
 
   // ── Utilities ──────────────────────────────────────────────────────────────
 

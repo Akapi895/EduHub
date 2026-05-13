@@ -146,12 +146,9 @@ def get_game_preview_data(
     db: Session = Depends(get_db),
     teacher: User = Depends(require_teacher),
 ):
-    print(f"[PREVIEW] Teacher: {teacher.id}, package_id: {package_id}")
     package = game_crud.get_game_package(db, package_id)
     if not package:
-        print(f"[PREVIEW] Package not found: {package_id}")
         raise HTTPException(status_code=404, detail="Game package not found")
-    print(f"[PREVIEW] Package found: {package.id}, created_by: {package.created_by}")
     return ok(data=game_runtime_service.get_teacher_preview_data(db, package_id=package_id, teacher=teacher))
 
 
@@ -161,7 +158,6 @@ def start_game_preview_attempt(
     db: Session = Depends(get_db),
     teacher: User = Depends(require_teacher),
 ):
-    print(f"[PREVIEW START] Teacher: {teacher.id}, package_id: {package_id}")
     return ok(data=game_runtime_service.start_teacher_preview_attempt(db, package_id=package_id, teacher=teacher))
 
 

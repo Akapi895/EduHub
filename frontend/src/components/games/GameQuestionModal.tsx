@@ -137,14 +137,7 @@ export default function GameQuestionModal({
   useEffect(() => {
     if (!isRenderable || !question || !questionAttempt) return;
 
-    console.info('[QFLOW] modal:mount', {
-      questionId: question.id,
-      questionAttemptId: questionAttempt.id,
-      hasPortalContainer: Boolean(portalContainer),
-      portalTag: portalTarget.tagName,
-      fullscreenTag: document.fullscreenElement?.tagName ?? null,
-      overlayMode: portalContainer ? 'fixed-in-viewport-portal' : 'fixed-in-body-portal',
-    });
+    // modal mounted
 
     // MEDIUM-5: Auto-focus first focusable element when modal opens
     // This improves keyboard accessibility
@@ -159,10 +152,7 @@ export default function GameQuestionModal({
     }
 
     return () => {
-      console.info('[QFLOW] modal:unmount', {
-        questionId: question.id,
-        questionAttemptId: questionAttempt.id,
-      });
+      // modal unmounted
     };
   }, [isRenderable, portalContainer, portalTarget, question, questionAttempt]);
 
