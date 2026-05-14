@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import MaterialCard from '@/components/library/MaterialCard';
 import { libraryService } from '@/services/library.service';
 import { useDebounce } from '@/hooks/useDebounce';
-import { SUBJECTS } from '@/utils/constants';
+import { SUBJECTS, GRADES } from '@/utils/constants';
 import type { Material } from '@/types';
 import { getMaterialRoute } from '@/utils/materialRoutes';
 
@@ -15,7 +15,7 @@ const TYPES = [
   { value: 'video', label: 'Video' },
   { value: 'reference', label: 'Tham khảo' },
   { value: 'document', label: 'Tài liệu' },
-  { value: 'interactive_book', label: 'Sach tuong tac' },
+  { value: 'interactive_book', label: 'Sách tương tác' },
 ];
 
 export default function StudentLibrary() {
