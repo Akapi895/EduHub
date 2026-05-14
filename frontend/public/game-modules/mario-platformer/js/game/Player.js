@@ -4,8 +4,8 @@
 class Player {
     constructor(game) {
         this.game = game;
-        this.width = 32;
-        this.height = 32; // Reduced height for better proportions
+        this.width = 48;
+        this.height = 48; // Increased height for larger player size
         this.x = 100;
         this.y = 100; // Will be set to ground level on first update
         this.velocityX = 0;
@@ -22,8 +22,8 @@ class Player {
         // Physics constants
         this.gravity = 0.5;
         this.jumpForce = -12.5;  // Nhảy cao hơn chút để dễ qua hố
-        this.moveSpeed = 2.2;    // Đi chậm lại để dễ căn chỉnh
-        this.maxSpeed  = 2.2;
+        this.moveSpeed = 2;    // Đi chậm lại để dễ căn chỉnh
+        this.maxSpeed  = 2;
         // friction đã xóa — không dùng quán tính
         
         // Animation
@@ -237,27 +237,34 @@ class Player {
             ctx.scale(-1, 1);
             ctx.translate(-(screenX + this.width / 2), 0);
         }
+
+        // Add dynamic scaling based on width and height
+        const scaleX = this.width / 32;
+        const scaleY = this.height / 32;
+        
+        ctx.translate(screenX, screenY);
+        ctx.scale(scaleX, scaleY);
         
         // Draw Mario (simplified pixel art style)
         // Hat
         ctx.fillStyle = this.colors.hat;
-        ctx.fillRect(screenX + 2, screenY, 28, 8);
+        ctx.fillRect(2, 0, 28, 8);
         
         // Head
         ctx.fillStyle = this.colors.head;
-        ctx.fillRect(screenX + 4, screenY + 8, 24, 14);
+        ctx.fillRect(4, 8, 24, 14);
         
         // Eyes
         ctx.fillStyle = '#000';
-        ctx.fillRect(screenX + 22, screenY + 10, 4, 4);
+        ctx.fillRect(22, 10, 4, 4);
         
         // Body (shirt)
         ctx.fillStyle = this.colors.body;
-        ctx.fillRect(screenX + 4, screenY + 22, 24, 6);
+        ctx.fillRect(4, 22, 24, 6);
         
         // Pants
         ctx.fillStyle = this.colors.pants;
-        ctx.fillRect(screenX + 4, screenY + 26, 24, 6);
+        ctx.fillRect(4, 26, 24, 6);
         
         ctx.restore();
     }

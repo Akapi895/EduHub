@@ -42,3 +42,4 @@ Thumbs.db
 backend/uploads/
 backend/.postgres-dev/
 ./start.bat
+backend/eduhub_backup.sql

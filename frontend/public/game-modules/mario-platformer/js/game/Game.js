@@ -687,7 +687,10 @@ class Game {
         this.state.quiz.active = false;
         this.questionsAnsweredThisLevel++;
 
-        const isCorrect = result.is_correct || result.isCorrect || result.correct;
+        const isCorrect = result.question_result?.is_correct 
+            ?? result.is_correct 
+            ?? result.isCorrect 
+            ?? result.correct;
 
         if (isCorrect) {
             if (this.state.quiz.currentCheckpointId) {

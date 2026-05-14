@@ -426,7 +426,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     // HIGH-3: Resume if paused OR if force flag is set (for answer submission)
     // When force=true, we always want to resume regardless of current status
     const shouldResume = options.force || runtimeStatus === 'paused';
-    
+
     if (!shouldResume) {
       console.warn('[QFLOW] resumeRuntime: Not resuming - game is not paused (status:', runtimeStatus, '), forcing...');
     }
@@ -551,11 +551,11 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       // already-in-flight
       return;
     }
-    
+
     // Check if this exact trigger was already handled
     if (handledTriggerIdsRef.current.has(triggerIdentity)) {
       // CRITICAL-4: Check if timeout has passed - if so, allow retry
-        if (existingTimeout && Date.now() < existingTimeout) {
+      if (existingTimeout && Date.now() < existingTimeout) {
         // already-handled-still-valid
         return;
       }
@@ -671,18 +671,18 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
     try {
       const response = await getAnswerService(previewMode)(gamePackage.id, payload);
       const data = unwrapApiData<GameRuntimeAnswerResponse>(response);
-      
+
       // MEDIUM-2: Optimistic update for immediate feedback
       const currentTotals = attemptTotals as Record<string, unknown> | null;
       const optimisticTotals = currentTotals
         ? {
-            ...currentTotals,
-            total_attempts: ((currentTotals.total_attempts as number) ?? 0) + 1,
-            total_correct: data.is_correct === true ? ((currentTotals.total_correct as number) ?? 0) + 1 : (currentTotals.total_correct as number) ?? 0,
-            total_incorrect: data.is_correct === false ? ((currentTotals.total_incorrect as number) ?? 0) + 1 : (currentTotals.total_incorrect as number) ?? 0,
-          }
+          ...currentTotals,
+          total_attempts: ((currentTotals.total_attempts as number) ?? 0) + 1,
+          total_correct: data.is_correct === true ? ((currentTotals.total_correct as number) ?? 0) + 1 : (currentTotals.total_correct as number) ?? 0,
+          total_incorrect: data.is_correct === false ? ((currentTotals.total_incorrect as number) ?? 0) + 1 : (currentTotals.total_incorrect as number) ?? 0,
+        }
         : null;
-      
+
       // MEDIUM-2: Use server response if available, otherwise optimistic
       setAttemptTotals(data.attempt_totals ?? optimisticTotals ?? null);
       setLastQuestionResult(data);
@@ -1210,7 +1210,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
       // This prevents sending redundant resume commands
       if (questionFlowActive) return;
       if (runtimeStatus !== 'paused') return;
-      
+
       resumeRuntime('document-visible');
     };
 
@@ -1657,48 +1657,48 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
                 </div>
 
                 {questionPlanPreview && (
-                <div className="mt-4 grid gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Kiểu phân bổ</p>
-                    <p className="mt-1 font-semibold text-slate-900">
-                      {getDistributionModeLabel(questionPlanPreview.distribution_mode)}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Số màn</p>
-                    <p className="mt-1 font-semibold text-slate-900">{questionPlanPreview.level_count ?? 1}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Tổng câu hỏi</p>
-                    <p className="mt-1 font-semibold text-slate-900">{questionPlanPreview.total_questions ?? 0}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Câu hỏi mỗi màn</p>
-                    <p className="mt-1 font-semibold text-slate-900">{levelDistributionLabel}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {GAME_DIFFICULTY_BANDS.map((band) => {
-                  const meta = getBandMeta(band);
-                  const count = gamePackage.question_stats?.by_difficulty_band?.[band] ?? 0;
-
-                  return (
-                    <div
-                      key={band}
-                      className={`rounded-2xl border bg-gradient-to-r px-4 py-3 text-sm ${meta.accentClass} ${meta.softClass}`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-semibold">{meta.label}</span>
-                        <strong>{count}</strong>
-                      </div>
-                      <p className="mt-1 text-xs leading-5 opacity-80">{meta.description}</p>
+                  <div className="mt-4 grid gap-3 md:grid-cols-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Kiểu phân bổ</p>
+                      <p className="mt-1 font-semibold text-slate-900">
+                        {getDistributionModeLabel(questionPlanPreview.distribution_mode)}
+                      </p>
                     </div>
-                  );
-                })}
-              </div>
-            </section>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Số màn</p>
+                      <p className="mt-1 font-semibold text-slate-900">{questionPlanPreview.level_count ?? 1}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Tổng câu hỏi</p>
+                      <p className="mt-1 font-semibold text-slate-900">{questionPlanPreview.total_questions ?? 0}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Câu hỏi mỗi màn</p>
+                      <p className="mt-1 font-semibold text-slate-900">{levelDistributionLabel}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  {GAME_DIFFICULTY_BANDS.map((band) => {
+                    const meta = getBandMeta(band);
+                    const count = gamePackage.question_stats?.by_difficulty_band?.[band] ?? 0;
+
+                    return (
+                      <div
+                        key={band}
+                        className={`rounded-2xl border bg-gradient-to-r px-4 py-3 text-sm ${meta.accentClass} ${meta.softClass}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{meta.label}</span>
+                          <strong>{count}</strong>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 opacity-80">{meta.description}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             )}
 
             {(manifest.instructions?.length ?? 0) > 0 && (
@@ -1727,7 +1727,7 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
 
               <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
-                    <span>Câu đã trả lời</span>
+                  <span>Câu đã trả lời</span>
                   <strong className="text-slate-900">
                     {questionAnswered}/{questionTotal || '-'}
                   </strong>
@@ -1769,11 +1769,10 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
                   {leaderboard.entries.slice(0, 5).map((entry) => (
                     <div
                       key={entry.user_id}
-                      className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm ${
-                        entry.is_current_user
+                      className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm ${entry.is_current_user
                           ? 'border-amber-200 bg-amber-50 text-amber-800'
                           : 'border-slate-200 bg-slate-50 text-slate-700'
-                      }`}
+                        }`}
                     >
                       <span className="truncate font-medium">#{entry.rank} {entry.student_name || 'Học sinh'}</span>
                       <strong className="text-slate-900">{formatScalarValue(entry.best_score_total ?? 0)}</strong>
@@ -1796,11 +1795,10 @@ export default function GamePlayerShell({ playBundle, initialManifest = null, pr
                 {runtimeFacts.map((fact, index) => (
                   <div
                     key={fact.label}
-                    className={`rounded-2xl border px-4 py-3 text-sm ${
-                      index === 0
+                    className={`rounded-2xl border px-4 py-3 text-sm ${index === 0
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
                         : 'border-slate-200 bg-slate-50 text-slate-700'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className={index === 0 ? 'text-emerald-700' : 'text-slate-500'}>
