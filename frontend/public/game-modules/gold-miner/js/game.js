@@ -1190,8 +1190,8 @@ class game {
       this.canvas.height = document.documentElement.clientHeight;
       game_W = this.canvas.width;
       game_H = this.canvas.height;
-      XXX = game_W / 2;
-      YYY = game_H * 0.21; // Lower pivot so rope starts from the seated character hand area
+      XXX = game_W / 2.12;
+      YYY = game_H * 0.35; // Lower pivot so rope starts from the seated character hand area
       resized = true;
     }
     // Always recalculate to apply changes immediately
