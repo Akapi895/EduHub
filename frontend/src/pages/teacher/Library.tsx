@@ -17,12 +17,12 @@ import { cn } from '@/utils/helpers';
 
 const TYPES = [
   { value: '', label: 'Tất cả', icon: FileText },
+  { value: 'interactive_book', label: 'Sách tương tác', icon: Sparkles },
+  { value: 'video', label: 'Video', icon: Video },
   { value: 'book', label: 'Sách', icon: BookOpen },
   { value: 'exam', label: 'Đề thi', icon: HelpCircle },
-  { value: 'video', label: 'Video', icon: Video },
-  { value: 'reference', label: 'Tham khảo', icon: File },
   { value: 'document', label: 'Tài liệu', icon: FileText },
-  { value: 'interactive_book', label: 'Sách tương tác', icon: Sparkles },
+  { value: 'reference', label: 'Tham khảo', icon: File },
 ];
 
 interface Props {
